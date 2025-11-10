@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import lightImage from "@/assets/aa-light.png";
+import cardImage from "@/assets/aa-card.png";
 
 const Index = () => {
   return (
@@ -12,8 +12,8 @@ const Index = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-glow/20 to-cyan-glow/20 blur-3xl rounded-full" />
             <div className="relative bg-card border border-border rounded-2xl p-8 backdrop-blur-sm">
               <img 
-                src={lightImage} 
-                alt="Astute Automation Light Painting" 
+                src={cardImage} 
+                alt="Astute Automation Business Card" 
                 className="w-full h-auto rounded-lg shadow-2xl"
               />
             </div>
@@ -36,9 +36,9 @@ const Index = () => {
             </h1>
             
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Long-exposure light-painting artistry capturing hand-drawn monograms. 
-              Authentic LED light trails with controlled violet-blue glow and 
-              natural wobble for a premium, artistic presentation.
+              Premium matte-black business cards with violet foil-stamped monograms. 
+              Authentic 35mm film aesthetic featuring anisotropic reflections and 
+              precise PCB-trace details for sophisticated branding.
             </p>
 
             <div className="flex gap-4 pt-4">
@@ -72,7 +72,7 @@ const Index = () => {
               </div>
               <h3 className="text-xl font-semibold text-foreground">Precision Engineering</h3>
               <p className="text-muted-foreground">
-                Hand-drawn light trails with authentic wobble and LED hotspot details.
+                Foil-stamped monograms with hairline PCB traces and anisotropic reflections.
               </p>
             </div>
 
@@ -82,9 +82,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Long-Exposure Artistry</h3>
+              <h3 className="text-xl font-semibold text-foreground">Film Aesthetic</h3>
               <p className="text-muted-foreground">
-                Professional light-painting techniques capturing motion and luminosity.
+                Authentic 35mm film grain with natural lens characteristics and contact shadows.
               </p>
             </div>
 
@@ -94,9 +94,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Studio Quality</h3>
+              <h3 className="text-xl font-semibold text-foreground">Premium Materials</h3>
               <p className="text-muted-foreground">
-                Controlled glow and crisp details with realistic LED light behavior.
+                Matte-black cards with micro edge wear and subtle violet-blue edge lighting.
               </p>
             </div>
           </div>
