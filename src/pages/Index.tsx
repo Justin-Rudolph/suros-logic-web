@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import cubeImage from "@/assets/aa-cube.png";
+import lightImage from "@/assets/aa-light.png";
 
 const Index = () => {
   return (
@@ -12,8 +12,8 @@ const Index = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-glow/20 to-cyan-glow/20 blur-3xl rounded-full" />
             <div className="relative bg-card border border-border rounded-2xl p-8 backdrop-blur-sm">
               <img 
-                src={cubeImage} 
-                alt="Astute Automation Glass Cube" 
+                src={lightImage} 
+                alt="Astute Automation Light Painting" 
                 className="w-full h-auto rounded-lg shadow-2xl"
               />
             </div>
@@ -36,9 +36,9 @@ const Index = () => {
             </h1>
             
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Hand-crafted obsidian glass cubes with etched PCB-trace monograms. 
-              Precise refraction and controlled violet-blue lighting effects 
-              for an authentic, premium presentation.
+              Long-exposure light-painting artistry capturing hand-drawn monograms. 
+              Authentic LED light trails with controlled violet-blue glow and 
+              natural wobble for a premium, artistic presentation.
             </p>
 
             <div className="flex gap-4 pt-4">
@@ -72,7 +72,7 @@ const Index = () => {
               </div>
               <h3 className="text-xl font-semibold text-foreground">Precision Engineering</h3>
               <p className="text-muted-foreground">
-                Crafted with micro-level detail and chamfered edges for a premium feel.
+                Hand-drawn light trails with authentic wobble and LED hotspot details.
               </p>
             </div>
 
@@ -82,9 +82,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Circuit Aesthetics</h3>
+              <h3 className="text-xl font-semibold text-foreground">Long-Exposure Artistry</h3>
               <p className="text-muted-foreground">
-                Subtle circuit-trace geometry merges technology with elegant design.
+                Professional light-painting techniques capturing motion and luminosity.
               </p>
             </div>
 
@@ -94,9 +94,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Premium Materials</h3>
+              <h3 className="text-xl font-semibold text-foreground">Studio Quality</h3>
               <p className="text-muted-foreground">
-                Obsidian glass with realistic refraction and authentic surface details.
+                Controlled glow and crisp details with realistic LED light behavior.
               </p>
             </div>
           </div>
