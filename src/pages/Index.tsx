@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import letterpressImage from "@/assets/aa-letterpress.png";
+import aluminumImage from "@/assets/aa-aluminum.png";
 
 const Index = () => {
   return (
@@ -12,8 +12,8 @@ const Index = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-glow/20 to-cyan-glow/20 blur-3xl rounded-full" />
             <div className="relative bg-card border border-border rounded-2xl p-8 backdrop-blur-sm">
               <img 
-                src={letterpressImage} 
-                alt="Astute Automation Letterpress Card" 
+                src={aluminumImage} 
+                alt="Astute Automation Aluminum Badge" 
                 className="w-full h-auto rounded-lg shadow-2xl"
               />
             </div>
@@ -36,9 +36,9 @@ const Index = () => {
             </h1>
             
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Artisan letterpress cards on premium black cotton paper. 
-              Hand-crafted impression depth with visible fibers and authentic 
-              registration characteristics for timeless, tactile branding.
+              Precision-machined brushed aluminum badges with engraved monograms. 
+              Authentic linear grain, soft chamfers, and subtle violet-blue rim lighting 
+              for industrial elegance and lasting durability.
             </p>
 
             <div className="flex gap-4 pt-4">
@@ -70,9 +70,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Artisan Craftsmanship</h3>
+              <h3 className="text-xl font-semibold text-foreground">Precision Machining</h3>
               <p className="text-muted-foreground">
-                Letterpress impressions with authentic paper fibers and tactile depth.
+                CNC-engraved monograms with visible linear grain and soft chamfered edges.
               </p>
             </div>
 
@@ -82,9 +82,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Analog Authenticity</h3>
+              <h3 className="text-xl font-semibold text-foreground">Studio Photography</h3>
               <p className="text-muted-foreground">
-                Film-scanned aesthetic with natural registration wobble and color noise.
+                Macro detail capture with natural sensor noise and accurate shadows.
               </p>
             </div>
 
@@ -94,9 +94,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Premium Paper Stock</h3>
+              <h3 className="text-xl font-semibold text-foreground">Industrial Durability</h3>
               <p className="text-muted-foreground">
-                Black cotton paper with soft side lighting and visible texture details.
+                Brushed black aluminum with authentic wear and subtle rim reflections.
               </p>
             </div>
           </div>
