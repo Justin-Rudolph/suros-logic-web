@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import cardImage from "@/assets/aa-card.png";
+import letterpressImage from "@/assets/aa-letterpress.png";
 
 const Index = () => {
   return (
@@ -12,8 +12,8 @@ const Index = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-glow/20 to-cyan-glow/20 blur-3xl rounded-full" />
             <div className="relative bg-card border border-border rounded-2xl p-8 backdrop-blur-sm">
               <img 
-                src={cardImage} 
-                alt="Astute Automation Business Card" 
+                src={letterpressImage} 
+                alt="Astute Automation Letterpress Card" 
                 className="w-full h-auto rounded-lg shadow-2xl"
               />
             </div>
@@ -36,9 +36,9 @@ const Index = () => {
             </h1>
             
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Premium matte-black business cards with violet foil-stamped monograms. 
-              Authentic 35mm film aesthetic featuring anisotropic reflections and 
-              precise PCB-trace details for sophisticated branding.
+              Artisan letterpress cards on premium black cotton paper. 
+              Hand-crafted impression depth with visible fibers and authentic 
+              registration characteristics for timeless, tactile branding.
             </p>
 
             <div className="flex gap-4 pt-4">
@@ -70,9 +70,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Precision Engineering</h3>
+              <h3 className="text-xl font-semibold text-foreground">Artisan Craftsmanship</h3>
               <p className="text-muted-foreground">
-                Foil-stamped monograms with hairline PCB traces and anisotropic reflections.
+                Letterpress impressions with authentic paper fibers and tactile depth.
               </p>
             </div>
 
@@ -82,9 +82,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Film Aesthetic</h3>
+              <h3 className="text-xl font-semibold text-foreground">Analog Authenticity</h3>
               <p className="text-muted-foreground">
-                Authentic 35mm film grain with natural lens characteristics and contact shadows.
+                Film-scanned aesthetic with natural registration wobble and color noise.
               </p>
             </div>
 
@@ -94,9 +94,9 @@ const Index = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-foreground">Premium Materials</h3>
+              <h3 className="text-xl font-semibold text-foreground">Premium Paper Stock</h3>
               <p className="text-muted-foreground">
-                Matte-black cards with micro edge wear and subtle violet-blue edge lighting.
+                Black cotton paper with soft side lighting and visible texture details.
               </p>
             </div>
           </div>
