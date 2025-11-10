@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import badgeImage from "@/assets/aa-badge.png";
+import cubeImage from "@/assets/aa-cube.png";
 
 const Index = () => {
   return (
@@ -12,8 +12,8 @@ const Index = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-glow/20 to-cyan-glow/20 blur-3xl rounded-full" />
             <div className="relative bg-card border border-border rounded-2xl p-8 backdrop-blur-sm">
               <img 
-                src={badgeImage} 
-                alt="Astute Automation Badge" 
+                src={cubeImage} 
+                alt="Astute Automation Glass Cube" 
                 className="w-full h-auto rounded-lg shadow-2xl"
               />
             </div>
@@ -36,9 +36,9 @@ const Index = () => {
             </h1>
             
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Precision-crafted metal badges featuring circuit-trace geometry. 
-              Anodized aluminum with controlled violet and electric-blue rim lighting 
-              for a premium, professional finish.
+              Hand-crafted obsidian glass cubes with etched PCB-trace monograms. 
+              Precise refraction and controlled violet-blue lighting effects 
+              for an authentic, premium presentation.
             </p>
 
             <div className="flex gap-4 pt-4">
@@ -96,7 +96,7 @@ const Index = () => {
               </div>
               <h3 className="text-xl font-semibold text-foreground">Premium Materials</h3>
               <p className="text-muted-foreground">
-                Anodized aluminum with realistic wear and controlled lighting effects.
+                Obsidian glass with realistic refraction and authentic surface details.
               </p>
             </div>
           </div>
