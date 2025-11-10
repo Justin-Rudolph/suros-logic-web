@@ -14,23 +14,24 @@ import slide4 from "@/assets/slide-4-cta.jpg";
 const slides = [
   {
     image: slide1,
-    headline: "You're losing 30% of leads after 5pm.",
-    subtitle: "We capture, text, and book them—automatically.",
+    headline: "You're losing leads after 5pm.",
+    subtitle: "We capture, text & book them—automatically.",
+    swipe: true,
   },
   {
     image: slide2,
-    headline: "Plug-in workflows.",
-    bullets: ["Lead capture", "SMS/Email follow-up", "Calendars", "Reviews"],
+    headline: "Plug-in workflows",
+    bullets: ["Lead capture", "SMS/email follow-ups", "Calendars", "Reviews"],
   },
   {
     image: slide3,
-    headline: "Tailored quoting systems.",
+    headline: "Tailored quoting systems",
     subtitle: "Your bid structure—just faster.",
   },
   {
     image: slide4,
-    headline: "Get a Free Demo",
-    subtitle: "Contractors & local service businesses",
+    headline: "Free Demo",
+    subtitle: "Contractors & local service businesses (Tampa Bay)",
     cta: true,
   },
 ];
@@ -66,6 +67,11 @@ export const SlidesCarousel = () => {
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {slide.swipe && (
+                    <p className="text-lg md:text-xl text-white/80 mt-6 drop-shadow-lg">
+                      Swipe →
+                    </p>
                   )}
                   {slide.cta && (
                     <div className="space-y-3 mt-6">
