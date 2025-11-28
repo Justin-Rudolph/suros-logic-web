@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer } from "lucide-react";
 import { useState } from "react";
-import surosLogo from "@/assets/suros-logo.png";
+import surosLogo from "@/assets/suros-logo-new.png";
 
 const Index = () => {
   const [formData, setFormData] = useState({
@@ -27,7 +27,7 @@ const Index = () => {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-background border-b border-border z-50 shadow-lg">
         <div className="container mx-auto px-6 py-2 flex justify-between items-center">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-40 md:h-48" />
+          <img src={surosLogo} alt="Suros Logic Systems" className="h-12 md:h-16" />
           <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
             <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
               Book a Free Demo
@@ -446,7 +446,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto text-center space-y-4">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-32 md:h-40 mx-auto" />
+          <img src={surosLogo} alt="Suros Logic Systems" className="h-10 mx-auto opacity-70" />
           <p className="text-muted-foreground">© 2024 Suros Logic Systems. All rights reserved.</p>
         </div>
       </footer>
