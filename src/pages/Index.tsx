@@ -264,8 +264,8 @@ const Index = () => {
               <CardContent className="p-8 space-y-6">
                 <h3 className="text-2xl font-bold text-primary">QuickStart Bid Templates</h3>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">$300<span className="text-lg text-muted-foreground">/month</span></div>
-                  <p className="text-muted-foreground">One-time setup: $300–$500</p>
+                  <div className="text-3xl font-bold">$150<span className="text-lg text-muted-foreground">/month</span></div>
+                  <p className="text-muted-foreground">One-time setup: $300</p>
                 </div>
                 <ul className="space-y-3">
                   {[
