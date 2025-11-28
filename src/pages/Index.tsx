@@ -29,8 +29,10 @@ const Index = () => {
           <div className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Suros Logic Systems
           </div>
-          <Button size="lg" className="bg-primary hover:bg-primary/90">
-            Book a Free Demo
+          <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
+            <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
+              Book a Free Demo
+            </a>
           </Button>
         </div>
       </nav>
@@ -51,8 +53,10 @@ const Index = () => {
                 professional bid document – in minutes, not hours.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg">
-                  Book a Free 15-Min Demo <ArrowRight className="ml-2" />
+                <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg" asChild>
+                  <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
+                    Book a Free 15-Min Demo <ArrowRight className="ml-2" />
+                  </a>
                 </Button>
                 <Button size="lg" variant="outline" className="text-lg">
                   See Sample Bid
@@ -426,8 +430,10 @@ const Index = () => {
                   onChange={(e) => setFormData({...formData, bidsPerMonth: e.target.value})}
                   required
                 />
-                <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg">
-                  Book My Demo <ArrowRight className="ml-2" />
+                <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
+                  <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
+                    Book My Demo <ArrowRight className="ml-2" />
+                  </a>
                 </Button>
               </form>
               <p className="mt-6 text-sm text-muted-foreground">
