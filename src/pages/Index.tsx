@@ -43,7 +43,7 @@ const Index = () => {
             <div className="space-y-8 animate-fade-in">
               <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
                 AI that writes your{" "}
-                <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-red-accent via-primary to-secondary bg-clip-text text-transparent">
                   bids for you
                 </span>
               </h1>
@@ -63,21 +63,21 @@ const Index = () => {
               </div>
             </div>
             <div className="relative animate-fade-in" style={{ animationDelay: "0.2s" }}>
-              <Card className="bg-card/50 backdrop-blur border-primary/20">
+              <Card className="bg-card/50 backdrop-blur border-red-accent/20">
                 <CardContent className="p-8 space-y-6">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-primary">Bid Input Form</h3>
+                    <h3 className="text-lg font-semibold text-red-accent">Bid Input Form</h3>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-red-accent"></div>
                         Company Name, Client Name
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-red-accent"></div>
                         Scope of Work, Plumbing, Drywall
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-red-accent"></div>
                         Payment Terms
                       </div>
                     </div>
@@ -119,7 +119,7 @@ const Index = () => {
               "Some bids never even get sent because you run out of time.",
               "Every revision means more hours fighting with formatting."
             ].map((pain, idx) => (
-              <Card key={idx} className="bg-card border-destructive/20 hover:border-destructive/40 transition-colors">
+              <Card key={idx} className="bg-card border-red-accent/20 hover:border-red-accent/40 transition-colors">
                 <CardContent className="p-6">
                   <p className="text-muted-foreground">{pain}</p>
                 </CardContent>
@@ -263,7 +263,7 @@ const Index = () => {
             <h2 className="text-4xl font-bold mb-4">Simple pricing that pays for itself</h2>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            <Card className="bg-card border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all">
+            <Card className="bg-card border-primary/50 hover:shadow-lg hover:shadow-red-accent/20 transition-all">
               <CardContent className="p-8 space-y-6">
                 <h3 className="text-2xl font-bold text-primary">QuickStart Bid Templates</h3>
                 <div className="space-y-2">
@@ -354,7 +354,7 @@ const Index = () => {
               }
             ].map((result, idx) => (
               <div key={idx} className="space-y-4">
-                <div className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                <div className="text-5xl font-bold bg-gradient-to-r from-red-accent via-primary to-secondary bg-clip-text text-transparent">
                   {idx + 1}
                 </div>
                 <h3 className="text-2xl font-semibold">{result.title}</h3>

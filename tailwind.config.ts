@@ -63,6 +63,10 @@ export default {
         cyan: {
           glow: "hsl(var(--cyan-glow))",
         },
+        red: {
+          accent: "hsl(var(--red-accent))",
+          glow: "hsl(var(--red-glow))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
