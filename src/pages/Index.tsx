@@ -66,18 +66,18 @@ const Index = () => {
               <Card className="bg-card/80 backdrop-blur border-primary/30 shadow-lg shadow-primary/10">
                 <CardContent className="p-8 space-y-6">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-primary">Bid Input Form</h3>
+                    <h3 className="text-lg font-semibold text-secondary">Bid Input Form</h3>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
                         Company Name, Client Name
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
                         Scope of Work, Plumbing, Drywall
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
                         Payment Terms
                       </div>
                     </div>
