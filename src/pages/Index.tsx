@@ -26,7 +26,7 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground">
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="container mx-auto px-6 py-2 flex justify-between items-center">
           <img src={surosLogo} alt="Suros Logic Systems" className="h-40 md:h-48" />
           <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
             <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
