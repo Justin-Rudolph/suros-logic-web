@@ -27,7 +27,7 @@ const Index = () => {
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-20 md:h-24" />
+          <img src={surosLogo} alt="Suros Logic Systems" className="h-40 md:h-48" />
           <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
             <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
               Book a Free Demo
@@ -446,7 +446,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto text-center space-y-4">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-16 md:h-20 mx-auto" />
+          <img src={surosLogo} alt="Suros Logic Systems" className="h-32 md:h-40 mx-auto" />
           <p className="text-muted-foreground">© 2024 Suros Logic Systems. All rights reserved.</p>
         </div>
       </footer>
