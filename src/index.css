@@ -38,10 +38,14 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
 
+    --red-accent: 4 86% 58%;
+    --red-glow: 4 86% 58%;
     --violet-glow: 262 83% 58%;
     --cyan-glow: 191 100% 72%;
     
     --gradient-primary: linear-gradient(135deg, hsl(262 83% 58% / 0.2), hsl(191 100% 72% / 0.2));
+    --gradient-red-accent: linear-gradient(135deg, hsl(4 86% 58% / 0.15), hsl(262 83% 58% / 0.15));
+    --glow-red: 0 0 40px hsl(4 86% 58% / 0.3);
     --glow-violet: 0 0 40px hsl(262 83% 58% / 0.4);
     --glow-cyan: 0 0 40px hsl(191 100% 72% / 0.4);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
