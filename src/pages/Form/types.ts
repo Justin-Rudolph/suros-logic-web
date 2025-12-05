@@ -5,7 +5,7 @@ export interface LineItem {
   line_total: string | number;
 }
 
-export interface InvoiceFormState {
+export interface BidFormState {
   company_address: string;
   company_phone: string;
   company_email: string;

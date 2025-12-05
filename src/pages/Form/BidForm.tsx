@@ -5,11 +5,11 @@ import React, {
     FormEvent,
     FocusEvent,
 } from "react";
-import "./InvoiceForm.css";
+import "./BidForm.css";
 import surosLogo from "@/assets/suros-logo-new.png";
-import { LineItem, InvoiceFormState } from "./types";
+import { LineItem, BidFormState } from "./types";
 
-const initialFormState: InvoiceFormState = {
+const initialFormState: BidFormState = {
     company_address: "",
     company_phone: "",
     company_email: "",
@@ -39,7 +39,7 @@ const emptyLineItem: LineItem = {
     line_total: "",
 };
 
-const InvoiceForm: React.FC = () => {
+const BidForm: React.FC = () => {
     const [form, setForm] = useState(initialFormState);
     const [numLineItems, setNumLineItems] = useState("");
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
@@ -243,7 +243,7 @@ const InvoiceForm: React.FC = () => {
     };
 
     return (
-        <div className="invoice-form-page">
+        <div className="bid-form-page">
             <div className="page-bg">
                 <div className="container">
                     <div className="logo">
@@ -534,4 +534,4 @@ const InvoiceForm: React.FC = () => {
     );
 };
 
-export default InvoiceForm;
+export default BidForm;

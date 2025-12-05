@@ -4,7 +4,7 @@ import React, {
   KeyboardEvent,
   FormEvent,
 } from "react";
-import "./InvoiceForm.css";
+import "./BidForm.css";
 import surosLogo from "@/assets/suros-logo-new.png";
 
 // ------------------------------------
@@ -17,7 +17,7 @@ interface LineItem {
   line_total: string;
 }
 
-interface InvoiceFormState {
+interface BidFormState {
   company_address: string;
   company_phone: string;
   company_email: string;
@@ -41,7 +41,7 @@ interface InvoiceFormState {
 // ------------------------------------
 // INITIAL FILLED TEST DATA
 // ------------------------------------
-const initialTestState: InvoiceFormState = {
+const initialTestState: BidFormState = {
   company_address: "4829 Rolling Brook Dr, Tampa, FL 33625",
   company_phone: "(813) 555-9082",
   company_email: "office@lastcallhomesolutions.com",
@@ -204,8 +204,8 @@ const testLineItemSets: Record<number, LineItem[]> = {
 // ------------------------------------
 // COMPONENT
 // ------------------------------------
-const TestInvoiceForm: React.FC = () => {
-  const [form, setForm] = useState<InvoiceFormState>(initialTestState);
+const TestBidForm: React.FC = () => {
+  const [form, setForm] = useState<BidFormState>(initialTestState);
   const [numLineItems, setNumLineItems] = useState<string>("2");
   const [lineItems, setLineItems] = useState<LineItem[]>(testLineItemSets[2]);
 
@@ -317,7 +317,7 @@ const TestInvoiceForm: React.FC = () => {
   // RENDER
   // ------------------------------------
   return (
-    <div className="page-bg invoice-form-page">
+    <div className="page-bg bid-form-page">
       <div className="container">
         {/* LOGO */}
         <div className="logo">
@@ -563,4 +563,4 @@ const TestInvoiceForm: React.FC = () => {
   );
 };
 
-export default TestInvoiceForm;
+export default TestBidForm;

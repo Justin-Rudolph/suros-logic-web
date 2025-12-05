@@ -3,10 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://suroslogic.com/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "postbuild": "cp dist/index.html dist/404.html",
     "lint": "eslint .",
     "preview": "vite preview"
   },
