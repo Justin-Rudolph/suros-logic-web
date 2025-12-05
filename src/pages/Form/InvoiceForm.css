@@ -1,0 +1,166 @@
+.invoice-form-page .page-bg {
+  font-family: "Montserrat", sans-serif;
+  background: linear-gradient(105deg, #0064C2 0%, #DEE2FF 100%);
+  min-height: 100vh;
+  padding: 90px 0;
+}
+
+.invoice-form-page .container {
+  max-width: 950px;
+  margin: 0 auto;
+  background: #ffffff;
+  padding: 35px 45px;
+  border-radius: 14px;
+  box-shadow: 0 6px 25px rgba(0,0,0,0.10);
+  border: 1px solid #e1e4e8;
+}
+
+.invoice-form-page .logo {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.invoice-form-page .logo img {
+  width: 150px;
+  height: auto;
+}
+
+.invoice-form-page h1 {
+  text-align: center;
+  font-size: 32px;
+  color: #1e1e1e;
+  margin-bottom: 30px;
+  margin-top: -15px;
+  font-weight: 700;
+}
+
+.invoice-form-page h2 {
+  margin-top: 35px;
+  margin-bottom: 10px;
+  font-size: 22px;
+  border-bottom: 2px solid #d0d7de;
+  padding-bottom: 5px;
+  color: #1e3a5f;
+}
+
+.invoice-form-page h3 {
+  margin-top: 15px;
+  margin-bottom: 8px;
+  font-size: 18px;
+  color: #374151;
+}
+
+.invoice-form-page label {
+  font-weight: 600;
+  color: #28303f;
+}
+
+/* ALL INPUT TEXT BLACK + FIX PLACEHOLDER COLOR */
+.invoice-form-page input,
+.invoice-form-page textarea,
+.invoice-form-page select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 15px;
+  background: #f9fafb;
+  font-family: "Montserrat", sans-serif;
+  color: #000000 !important;
+}
+
+.invoice-form-page input::placeholder,
+.invoice-form-page textarea::placeholder {
+  color: #9ca3af !important; /* soft light gray */
+  opacity: 1; /* ensures consistent color across browsers */
+}
+
+/* FOCUS STYLING */
+.invoice-form-page input:focus,
+.invoice-form-page textarea:focus,
+.invoice-form-page select:focus {
+  outline: none;
+  border-color: #1e73be;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(30,115,190,0.15);
+}
+
+/* LINE ITEM BOX */
+.invoice-form-page .line-item {
+  background: #fefefe;
+  border: 1px solid #d1d5db;
+  padding: 18px;
+  margin-top: 12px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.03);
+}
+
+.invoice-form-page .scope-input {
+  min-height: 150px;
+  line-height: 1.5;
+}
+
+/* BUTTON */
+.invoice-form-page button {
+  background: #1e73be;
+  color: white;
+  border: none;
+  padding: 12px 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  transition: 0.2s;
+  font-family: "Montserrat", sans-serif;
+}
+
+.invoice-form-page button:hover {
+  background: #155b91;
+}
+
+/* SLOGAN */
+.invoice-form-page .slogan {
+  text-align: center;
+  margin-top: 10px;
+  color: #000000 !important;
+  font-style: italic;
+}
+
+/* CONTINGENCY WARNING */
+.invoice-form-page .contingency-warning {
+  color: #000000 !important;
+  font-weight: bold;
+}
+
+/* FOOTER */
+.invoice-form-page .submit-area {
+  text-align: center;
+  margin-top: 35px;
+}
+
+.invoice-form-page .powered {
+  text-align: center;
+  font-size: 11px;
+  color: #687280;
+  margin-top: 12px;
+  letter-spacing: 0.5px;
+}
+
+/* MOBILE FIXES */
+@media (max-width: 600px) {
+  .invoice-form-page .logo {
+    justify-content: center;
+    margin-bottom: 25px;
+  }
+
+  .invoice-form-page h1 {
+    margin-top: 0px;
+    font-size: 26px;
+  }
+}
