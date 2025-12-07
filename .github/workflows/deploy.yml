@@ -4,6 +4,9 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,12 +26,11 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # ⭐ Create 404.html so React Router works on deep links
-      - name: Create 404.html
+      - name: Create 404.html for React Router
         run: cp dist/index.html dist/404.html
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages       # Target branch
-          folder: dist           # Build output folder
+          branch: gh-pages
+          folder: dist
