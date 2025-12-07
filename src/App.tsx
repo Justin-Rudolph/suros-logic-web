@@ -16,7 +16,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       {/*FOR GITHUB PAGES*/}
-      <BrowserRouter basename="/">
+      <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/form/bid_form" element={<BidForm />} />
