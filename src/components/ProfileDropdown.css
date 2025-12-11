@@ -1,0 +1,46 @@
+.profile-dropdown-wrapper {
+  position: relative;
+}
+
+.profile-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.profile-icon {
+  height: 42px;
+  width: 42px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  right: 0;
+  margin-top: 14px;
+  width: 180px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-item {
+  padding: 10px 14px;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.dropdown-item:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.logout {
+  color: #ff4a3d !important;
+}

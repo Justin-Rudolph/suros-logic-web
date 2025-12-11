@@ -1,4 +1,3 @@
-// src/context/AuthContext.tsx
 import {
   createContext,
   useContext,
@@ -11,15 +10,20 @@ import {
   onAuthStateChanged,
   signOut,
   signInWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth, firestore } from "@/lib/firebase";
 
 type UserProfile = {
   uid: string;
   email: string | null;
   displayName: string | null;
   phone?: string | null;
+  companyName?: string;
+  companyAddress?: string;
+  slogan?: string;
 };
 
 type AuthContextValue = {
@@ -38,11 +42,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Ensure login persists even after closing browser
+    setPersistence(auth, browserLocalPersistence);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
 
       if (firebaseUser) {
-        const ref = doc(db, "users", firebaseUser.uid);
+        const ref = doc(firestore, "users", firebaseUser.uid);
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
@@ -70,7 +77,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, login, logout }}>
-      {children}
+      {!loading && children}
+      {/* ⬆ Prevents app from rendering until Firebase restores session */}
     </AuthContext.Provider>
   );
 };

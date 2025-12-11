@@ -1,5 +1,5 @@
 // src/services/authService.ts
-import { auth, db } from "@/lib/firebase";
+import { auth, firestore } from "@/lib/firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -21,7 +21,7 @@ export async function signup(
   const user = userCred.user;
 
   // Create Firestore profile
-  await setDoc(doc(db, "users", user.uid), {
+  await setDoc(doc(firestore, "users", user.uid), {
     email,
     ...profileData,
     createdAt: Date.now(),
@@ -48,7 +48,7 @@ export async function logout() {
 // GET USER PROFILE
 // ------------------------
 export async function getUserProfile(user: User) {
-  const ref = doc(db, "users", user.uid);
+  const ref = doc(firestore, "users", user.uid);
   const snap = await getDoc(ref);
 
   return snap.exists() ? snap.data() : null;

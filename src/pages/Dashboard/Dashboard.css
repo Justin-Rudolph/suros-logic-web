@@ -1,0 +1,83 @@
+/* ==== PAGE WRAPPER ==== */
+.dashboard-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(
+    135deg,
+    rgba(65, 29, 33, 1) 0%,
+    rgba(19, 20, 27, 1) 45%,
+    rgba(20, 46, 79, 1) 100%
+  );
+  color: #FFFFFF;
+  font-family: "Montserrat", sans-serif;
+}
+
+
+/* ==== CENTERED CONTENT ==== */
+.dashboard-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+/* ==== TITLES ==== */
+.dashboard-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #FFFFFF;
+}
+
+.dashboard-subtitle {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 40px;
+}
+
+/* ==== CARD WRAPPER ==== */
+.dashboard-card-wrapper {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ==== CARD ==== */
+.dashboard-card {
+  width: 360px;
+  padding: 28px;
+  border-radius: 16px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: 0.25s ease;
+  color: #FFFFFF;
+}
+
+.dashboard-card:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ==== CARD TEXT ==== */
+.dashboard-card-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #FFFFFF;
+}
+
+.dashboard-card-description {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ==== CTA BUTTON INSIDE CARD ==== */
+.dashboard-card-button {
+  margin-top: 20px;
+  padding: 12px;
+  background: #FF4A3D;
+  border-radius: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: white;
+}

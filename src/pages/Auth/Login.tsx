@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import surosLogo from "@/assets/suros-logo-new.png";
+import "@/styles/gradients.css";
 
 export default function Login() {
   const { login } = useAuth();
@@ -22,7 +24,7 @@ export default function Login() {
     try {
       setLoading(true);
       await login(email, password);
-      navigate("/form/bid_form");
+      navigate("/dashboard");
     } catch (err) {
       setError("Invalid email or password.");
     } finally {
@@ -31,111 +33,64 @@ export default function Login() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(105deg, #0064C2 0%, #DEE2FF 100%)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: "20px",
-        fontFamily: "Montserrat",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "420px",
-          background: "#fff",
-          borderRadius: "16px",
-          padding: "32px",
-          boxShadow: "0 8px 28px rgba(0,0,0,0.15)",
-        }}
-      >
-        <h2
-          style={{
-            fontSize: "28px",
-            fontWeight: 700,
-            textAlign: "center",
-            marginBottom: "20px",
-            color: "#1e1e1e",
-          }}
-        >
-          Welcome Back
-        </h2>
+    <div className="suros-gradient flex justify-center items-center px-4 relative font-[Montserrat]">
 
-        <p
-          style={{
-            textAlign: "center",
-            marginBottom: "28px",
-            color: "#4A4A4A",
-          }}
-        >
-          Login to access your Suros Logic account.
-        </p>
+      <div className="w-full max-w-[420px] flex flex-col items-center">
 
-        {error && (
-          <p style={{ color: "red", textAlign: "center", marginBottom: "10px" }}>
-            {error}
+        {/* LOGO */}
+        <img
+          src={surosLogo}
+          alt="Suros Logic Systems"
+          className="h-20 mb-6 drop-shadow-lg"
+        />
+
+        {/* FORM CARD */}
+        <div className="w-full bg-white rounded-2xl p-8 shadow-xl">
+          <h2 className="text-2xl font-bold text-center mb-4">Welcome Back</h2>
+
+          <p className="text-center text-gray-600 mb-8">
+            Login to access your Suros Logic account.
           </p>
-        )}
 
-        {/* LABELS BLACK */}
-        <label style={{ color: "#000", fontWeight: 600 }}>Email</label>
-        <input
-          type="email"
-          value={email}
-          placeholder="you@example.com"
-          onChange={(e) => setEmail(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "12px",
-            marginBottom: "16px",
-            borderRadius: "8px",
-            border: "1px solid #C8D1E0",
-            fontSize: "14px",
-            color: "#000", // TEXT BLACK
-            backgroundColor: "#fff",
-          }}
-        />
+          {error && (
+            <p className="text-red-500 text-center mb-3">{error}</p>
+          )}
 
-        <label style={{ color: "#000", fontWeight: 600 }}>Password</label>
-        <input
-          type="password"
-          value={password}
-          placeholder="Enter your password"
-          onChange={(e) => setPassword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "12px",
-            marginBottom: "20px",
-            borderRadius: "8px",
-            border: "1px solid #C8D1E0",
-            fontSize: "14px",
-            color: "#000", // TEXT BLACK
-            backgroundColor: "#fff",
-          }}
-        />
+          <label className="font-semibold text-black">Email</label>
+          <input
+            type="email"
+            value={email}
+            placeholder="you@example.com"
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-3 mb-4 border border-gray-300 rounded-lg text-black"
+          />
 
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "14px",
-            borderRadius: "10px",
-            backgroundColor: "#0064C2",
-            color: "white",
-            border: "none",
-            fontSize: "16px",
-            fontWeight: 600,
-            cursor: "pointer",
-            transition: "0.2s",
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? "Signing in..." : "Login"}
-        </button>
+          <label className="font-semibold text-black">Password</label>
+          <input
+            type="password"
+            value={password}
+            placeholder="Enter your password"
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-3 mb-6 border border-gray-300 rounded-lg text-black"
+          />
+
+          {/* LOGIN BUTTON */}
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition disabled:opacity-70"
+          >
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+          {/* RETURN HOME BUTTON */}
+          <button
+            onClick={() => navigate("/")}
+            className="w-full mt-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-100 transition"
+          >
+            Return Home
+          </button>
+        </div>
       </div>
     </div>
   );

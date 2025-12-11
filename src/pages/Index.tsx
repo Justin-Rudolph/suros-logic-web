@@ -26,15 +26,40 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-background border-b border-border z-50 shadow-lg">
-        <div className="container mx-auto px-6 py-2 flex justify-between items-center">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-12 md:h-16" />
-          <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
-            <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
-              Book a Free Demo
-            </a>
-          </Button>
+        <div className="container mx-auto px-6 py-2 flex items-center justify-between">
+
+          {/* LEFT: Logo */}
+          <img
+            src={surosLogo}
+            alt="Suros Logic Systems"
+            className="h-12 md:h-16"
+          />
+
+          {/* RIGHT: Buttons */}
+          <div className="flex items-center gap-4 ml-auto">
+            <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
+              <a
+                href="https://calendly.com/astutemarketing-agency/new-meeting"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Book a Free Demo
+              </a>
+            </Button>
+
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-white/40 text-white hover:bg-white/10"
+              asChild
+            >
+              <a href="/auth">Login</a>
+            </Button>
+          </div>
+
         </div>
       </nav>
+
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-6">
@@ -48,7 +73,7 @@ const Index = () => {
                 </span>
               </h1>
               <p className="text-xl text-muted-foreground">
-                Suros Logic Systems turns a simple project form into a fully formatted, 
+                Suros Logic Systems turns a simple project form into a fully formatted,
                 professional bid document – in minutes, not hours.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
@@ -326,7 +351,7 @@ const Index = () => {
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-4xl font-bold mb-6">Beyond bids: full quoting and automation systems</h2>
           <p className="text-xl text-muted-foreground mb-8">
-            Suros Logic Systems can also build tailored quoting systems that mirror your existing Excel/Word bids, 
+            Suros Logic Systems can also build tailored quoting systems that mirror your existing Excel/Word bids,
             and automated workflows that push bid data into CRMs, email follow-ups, and project management tools.
           </p>
           <Button size="lg" variant="outline" className="border-primary/50 hover:bg-primary/10">
@@ -370,9 +395,9 @@ const Index = () => {
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-4xl font-bold mb-6">Our Vision</h2>
           <p className="text-xl text-muted-foreground leading-relaxed">
-            Suros Logic Systems was created by people who live in the contracting world. We know how much time 
-            goes into every quote, every bid, every revision. Our vision is an AI-driven document automation suite 
-            that handles not just bids, but contracts, change orders, and more – across industries like construction, 
+            Suros Logic Systems was created by people who live in the contracting world. We know how much time
+            goes into every quote, every bid, every revision. Our vision is an AI-driven document automation suite
+            that handles not just bids, but contracts, change orders, and more – across industries like construction,
             legal, and real estate.
           </p>
         </div>
@@ -385,48 +410,48 @@ const Index = () => {
           <p className="text-xl text-muted-foreground">
             Book a free 15-minute demo and see how Suros Logic Systems can automate your next bid.
           </p>
-          
+
           <Card className="bg-card/80 backdrop-blur">
             <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
-                  <Input 
-                    placeholder="Name" 
+                  <Input
+                    placeholder="Name"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                   />
-                  <Input 
-                    placeholder="Company" 
+                  <Input
+                    placeholder="Company"
                     value={formData.company}
-                    onChange={(e) => setFormData({...formData, company: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                     required
                   />
-                  <Input 
-                    type="email" 
-                    placeholder="Email" 
+                  <Input
+                    type="email"
+                    placeholder="Email"
                     value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
-                  <Input 
-                    type="tel" 
-                    placeholder="Phone" 
+                  <Input
+                    type="tel"
+                    placeholder="Phone"
                     value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     required
                   />
                 </div>
-                <Input 
-                  placeholder="What trades do you do?" 
+                <Input
+                  placeholder="What trades do you do?"
                   value={formData.trades}
-                  onChange={(e) => setFormData({...formData, trades: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, trades: e.target.value })}
                   required
                 />
-                <Input 
-                  placeholder="Approx. bids per month" 
+                <Input
+                  placeholder="Approx. bids per month"
                   value={formData.bidsPerMonth}
-                  onChange={(e) => setFormData({...formData, bidsPerMonth: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, bidsPerMonth: e.target.value })}
                   required
                 />
                 <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
