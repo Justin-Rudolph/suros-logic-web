@@ -6,26 +6,34 @@ import {
   signOut,
   User,
 } from "firebase/auth";
-
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
+import { UserProfile } from "@/models/UserProfile";
 
 // ------------------------
-// SIGN UP
+// SIGN UP (if you need it later)
 // ------------------------
 export async function signup(
   email: string,
   password: string,
-  profileData: { name: string; phone: string; company?: string }
+  profileOverrides?: Partial<UserProfile>
 ) {
   const userCred = await createUserWithEmailAndPassword(auth, email, password);
   const user = userCred.user;
 
-  // Create Firestore profile
-  await setDoc(doc(firestore, "users", user.uid), {
+  const baseProfile: UserProfile = {
+    uid: user.uid, // <-- FIXED
+    displayName: profileOverrides?.displayName ?? "",
+    companyName: profileOverrides?.companyName ?? "",
+    companyAddress: profileOverrides?.companyAddress ?? "",
+    slogan: profileOverrides?.slogan ?? "",
+    phone: profileOverrides?.phone ?? "",
     email,
-    ...profileData,
-    createdAt: Date.now(),
-  });
+    profileComplete: false,
+    timeOfCreation: Timestamp.now(),
+  };
+
+
+  await setDoc(doc(firestore, "users", user.uid), baseProfile);
 
   return user;
 }
@@ -50,6 +58,5 @@ export async function logout() {
 export async function getUserProfile(user: User) {
   const ref = doc(firestore, "users", user.uid);
   const snap = await getDoc(ref);
-
-  return snap.exists() ? snap.data() : null;
+  return snap.exists() ? (snap.data() as UserProfile) : null;
 }

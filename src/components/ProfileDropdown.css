@@ -18,7 +18,7 @@
 .profile-dropdown-menu {
   position: absolute;
   right: 0;
-  margin-top: 14px;
+  margin-top: 22px;
   width: 180px;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(16px);

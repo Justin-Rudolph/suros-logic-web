@@ -124,7 +124,37 @@
   animation: fadeIn 0.3s ease-out;
 }
 
+/* ------------------------------- */
+/* PROFESSIONAL VALIDATION BANNER */
+/* ------------------------------- */
+
+.validation-banner {
+  background: #fee2e2;                 /* soft red */
+  border: 1px solid #fca5a5;           /* stronger red border */
+  color: #b91c1c;                      /* dark red text */
+  padding: 12px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.validation-banner .icon {
+  font-size: 18px;
+}
+
+.validation-banner .text {
+  flex: 1;
+}
+
+/* smooth fade animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
 }
+

@@ -18,6 +18,8 @@ interface LineItem {
 }
 
 interface BidFormState {
+  company_name: string;
+  company_slogan: string;
   company_address: string;
   company_phone: string;
   company_email: string;
@@ -42,6 +44,9 @@ interface BidFormState {
 // INITIAL FILLED TEST DATA
 // ------------------------------------
 const initialTestState: BidFormState = {
+  company_name: "Last Call Home Solutions LLC",
+  company_slogan:
+    "Last call you’ll make for all your contracting and remodeling needs.",
   company_address: "4829 Rolling Brook Dr, Tampa, FL 33625",
   company_phone: "(813) 555-9082",
   company_email: "office@lastcallhomesolutions.com",
@@ -124,7 +129,6 @@ const testLineItemSets: Record<number, LineItem[]> = {
     },
   ],
 
-  // ⭐ NEW OPTION 4
   4: [
     {
       trade: "Demolition",
@@ -160,7 +164,6 @@ const testLineItemSets: Record<number, LineItem[]> = {
     },
   ],
 
-  // ⭐ NEW OPTION 5
   5: [
     {
       trade: "Appliance Installation",
@@ -210,6 +213,15 @@ const TestBidForm: React.FC = () => {
   const [lineItems, setLineItems] = useState<LineItem[]>(testLineItemSets[2]);
 
   // -------------------------
+  // GENERATE PRE-FILLED TEST ITEMS
+  // -------------------------
+  const generateTestItems = () => {
+    const count = parseInt(numLineItems);
+    const chosen = testLineItemSets[count] || testLineItemSets[2];
+    setLineItems(chosen);
+  };
+
+  // -------------------------
   // FORM CHANGE
   // -------------------------
   const handleFormChange = (
@@ -220,7 +232,7 @@ const TestBidForm: React.FC = () => {
   };
 
   // -------------------------
-  // UPDATE A LINE ITEM
+  // LINE ITEM CHANGE
   // -------------------------
   const handleLineItemChange = (
     index: number,
@@ -259,16 +271,7 @@ const TestBidForm: React.FC = () => {
   };
 
   // -------------------------
-  // GENERATE PRE-FILLED TEST ITEMS
-  // -------------------------
-  const generateTestItems = () => {
-    const count = parseInt(numLineItems);
-    const chosen = testLineItemSets[count] || testLineItemSets[2];
-    setLineItems(chosen);
-  };
-
-  // -------------------------
-  // SUBMIT HANDLER (WEBHOOK)
+  // SUBMIT HANDLER
   // -------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -295,7 +298,7 @@ const TestBidForm: React.FC = () => {
 
     try {
       const res = await fetch(
-        "https://astutearc7.app.n8n.cloud/webhook/lastcall-bid",
+        "https://astutearc7.app.n8n.cloud/webhook-test/lastcall-bid",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -324,9 +327,23 @@ const TestBidForm: React.FC = () => {
           <img src={surosLogo} alt="Suros Logic Systems Logo" />
         </div>
 
+        {/* COMPANY NAME (HARD-CODED FROM FORM) */}
         <h1>
-          <b>Last Call Home Solutions LLC</b>
+          <b>{form.company_name}</b>
         </h1>
+
+        {/* COMPANY SLOGAN (HARD-CODED FROM FORM) */}
+        <p
+          style={{
+            textAlign: "center",
+            marginTop: 10,
+            color: "#000",
+            fontStyle: "italic"
+          }}
+        >
+          {form.company_slogan}
+        </p>
+
 
         {/* HEADER INFO */}
         <label>Address:</label>
@@ -351,13 +368,6 @@ const TestBidForm: React.FC = () => {
           onChange={handleFormChange}
         />
 
-        <p style={{ textAlign: "center", marginTop: 10 }}>
-          <em>
-            “Last call you’ll make for all your contracting and remodeling
-            needs.”
-          </em>
-        </p>
-
         {/* FORM */}
         <form onSubmit={handleSubmit}>
           {/* INVOICE INFO */}
@@ -378,7 +388,7 @@ const TestBidForm: React.FC = () => {
             onChange={handleFormChange}
           />
 
-          {/* PROJECT INFO */}
+          {/* PROJECT & PAYMENT INFO */}
           <h2>Project & Payment Info</h2>
 
           <label>Salesperson Name:</label>
@@ -482,11 +492,12 @@ const TestBidForm: React.FC = () => {
             value={form.contingency_coverage}
             onChange={handleFormChange}
           />
-          <p>
+          <p style={{ color: "#000" }}>
             <strong>
               CONTINGENCY FUNDS NOT UTILIZED WILL BE RETURNED TO THE CUSTOMER.
             </strong>
           </p>
+
 
           {/* TOTALS */}
           <h2>Totals & Payment</h2>

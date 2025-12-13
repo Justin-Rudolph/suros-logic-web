@@ -5,6 +5,7 @@ import {
   useState,
   ReactNode,
 } from "react";
+
 import {
   User,
   onAuthStateChanged,
@@ -12,25 +13,18 @@ import {
   signInWithEmailAndPassword,
   setPersistence,
   browserLocalPersistence,
+  UserCredential,
 } from "firebase/auth";
+
 import { doc, getDoc } from "firebase/firestore";
 import { auth, firestore } from "@/lib/firebase";
-
-type UserProfile = {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  phone?: string | null;
-  companyName?: string;
-  companyAddress?: string;
-  slogan?: string;
-};
+import { UserProfile } from "@/models/UserProfile";
 
 type AuthContextValue = {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
 };
 
@@ -42,7 +36,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ensure login persists even after closing browser
     setPersistence(auth, browserLocalPersistence);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -67,8 +60,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return unsubscribe;
   }, []);
 
-  const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+  const login = async (
+    email: string,
+    password: string
+  ): Promise<UserCredential> => {
+    return await signInWithEmailAndPassword(auth, email, password);
   };
 
   const logout = async () => {
@@ -78,7 +74,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AuthContext.Provider value={{ user, profile, loading, login, logout }}>
       {!loading && children}
-      {/* ⬆ Prevents app from rendering until Firebase restores session */}
     </AuthContext.Provider>
   );
 };

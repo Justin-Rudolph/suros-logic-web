@@ -6,9 +6,11 @@ export interface LineItem {
 }
 
 export interface BidFormState {
+  company_name: string;
   company_address: string;
   company_phone: string;
   company_email: string;
+  company_slogan: string;
   invoice_date: string;
   invoice_number: string;
   salesperson: string;

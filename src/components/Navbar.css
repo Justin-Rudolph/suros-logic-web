@@ -1,17 +1,19 @@
 .suros-navbar {
   width: 100%;
-  padding: 14px 32px;
+  padding: 14px 32px; /* original padding restored */
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: center; /* keeps logo vertically centered */
   background: rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .navbar-logo {
-  height: 60px;
+  height: 60px; /* close to your h-14 (56px) while preserving layout */
   width: auto;
+  /* optional: add a subtle shadow similar to the legal page logo */
+  filter: drop-shadow(0px 2px 6px rgba(0, 0, 0, 0.35));
 }
 
 .logo-link {

@@ -1,12 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import surosLogo from "@/assets/suros-logo-new.png";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 const Index = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // AUTO-REDIRECT IF LOGGED IN
+  useEffect(() => {
+    if (!loading && user) {
+      navigate("/dashboard");
+    }
+  }, [user, loading, navigate]);
   const [formData, setFormData] = useState({
     name: "",
     company: "",
@@ -14,6 +24,7 @@ const Index = () => {
     phone: "",
     trades: "",
     bidsPerMonth: "",
+
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -87,41 +98,102 @@ const Index = () => {
                 </Button>
               </div>
             </div>
-            <div className="relative animate-fade-in" style={{ animationDelay: "0.2s" }}>
-              <Card className="bg-card/80 backdrop-blur border-primary/30 shadow-lg shadow-primary/10">
-                <CardContent className="p-8 space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-secondary">Bid Input Form</h3>
-                    <div className="space-y-2 text-sm text-muted-foreground">
+            <div
+              className="relative animate-fade-in"
+              style={{ animationDelay: "0.2s" }}
+            >
+              <Card className="bg-card/80 backdrop-blur border-primary/30 shadow-xl shadow-primary/10 rounded-2xl">
+                <CardContent className="p-6 space-y-6">
+
+                  {/* HEADER */}
+                  <div className="space-y-2 text-center">
+                    <h2 className="text-2xl font-bold text-secondary tracking-tight">
+                      Create a Professional Bid in Minutes
+                    </h2>
+                  </div>
+
+                  {/* STEP 1 – INPUT FORM */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-secondary/15 p-2.5 rounded-full border border-secondary/20">
+                        <FileText className="text-secondary" size={24} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-secondary">
+                        Step 1: Fill Out Your Bid Information
+                      </h3>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Company Name, Client Name
+                        Company & Client Information
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Scope of Work, Plumbing, Drywall
+                        Scope of Work for Each Trade (Plumbing, Drywall, etc.)
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Payment Terms
+                        Payment Terms & Timeline
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center justify-center py-4">
-                    <ArrowRight className="text-secondary" size={32} />
-                  </div>
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-secondary">Professional Bid Document</h3>
-                    <div className="bg-background/50 p-4 rounded-lg border border-secondary/20">
-                      <FileText className="text-secondary mb-2" size={24} />
-                      <p className="text-xs text-muted-foreground">
-                        Fully formatted Word document ready to send
-                      </p>
+
+                  {/* STEP 2 – OUTPUT DOCUMENT */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-secondary/15 p-2.5 rounded-full border border-secondary/20">
+                        <FileText className="text-secondary" size={24} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-secondary">
+                        Step 2: Receive a Professional Bid Document
+                      </h3>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        A fully formatted Word document
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Clean layout with your personalized information
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Editable line items & payment summary
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Professional, industry-standard structure
+                      </div>
                     </div>
                   </div>
+
+                  {/* STEP 3 – ENJOY */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-secondary/15 p-2.5 rounded-full border border-secondary/20">
+                        <FileText className="text-secondary" size={24} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-secondary">
+                        Step 3: Sit Back and Pretend You Did All the Work
+                      </h3>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Don’t worry, we won’t tell anyone our software did 90% of it.
+                      </div>
+                    </div>
+                  </div>
+
                 </CardContent>
               </Card>
             </div>
+
+
           </div>
           <div className="mt-12 text-center">
             <p className="text-muted-foreground max-w-3xl mx-auto">
