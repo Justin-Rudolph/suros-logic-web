@@ -3,15 +3,21 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import "./ProfileDropdown.css";
 
+// ✅ Import avatar correctly
+import defaultAvatar from "@/assets/default-avatar.png";
+
 export default function ProfileDropdown() {
   const [open, setOpen] = useState(false);
   const { logout } = useAuth();
 
   return (
     <div className="profile-dropdown-wrapper">
-      <button className="profile-button" onClick={() => setOpen(!open)}>
+      <button
+        className="profile-button"
+        onClick={() => setOpen(!open)}
+      >
         <img
-          src="/src/assets/default-avatar.png"
+          src={defaultAvatar}
           className="profile-icon"
           alt="profile"
         />
