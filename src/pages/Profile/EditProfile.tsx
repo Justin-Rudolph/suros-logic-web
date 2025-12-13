@@ -6,7 +6,6 @@ import { UserProfile } from "@/models/UserProfile";
 import "./EditProfile.css";
 import "@/styles/gradients.css";
 import { useNavigate } from "react-router-dom";
-import surosLogo from "@/assets/suros-logo-new.png";
 
 export default function EditProfile() {
   const { user } = useAuth();
@@ -138,13 +137,25 @@ export default function EditProfile() {
 
       {/* FLOATING LOGO BACK BUTTON (ONLY AFTER FIRST COMPLETION) */}
       {form.profileComplete && (
-        <img
-          src={surosLogo}
-          alt="Suros Logic Systems"
-          className="fixed top-4 left-8 w-auto cursor-pointer drop-shadow-lg z-50"
-          style={{ height: "60px" }}
-          onClick={() => navigate("/dashboard")}
-        />
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            position: "fixed",
+            top: "20px",
+            left: "20px",
+            background: "#1e73be",
+            color: "#fff",
+            padding: "10px 18px",
+            fontSize: "15px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontWeight: 600,
+            border: "none",
+            zIndex: 10
+          }}
+        >
+          ← Back
+        </button>
       )}
 
       {/* LOADING OVERLAY — stays visible even after success */}

@@ -7,7 +7,8 @@ export default defineConfig(({ mode }) => ({
   base: "/",  // For custom domain
   server: {
     host: "::",
-    port: 8080,
+    port: 5173,
+    strictPort: true,
   },
   build: {
     outDir: "dist",

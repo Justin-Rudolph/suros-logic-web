@@ -26,10 +26,10 @@ export default function Dashboard() {
           </Link>
 
           {/* CARD 2 */}
-          <Link to="/submitted-forms" className="dashboard-card">
-            <h2 className="dashboard-card-title">View Submitted Bids</h2>
+          <Link to="/view-bids" className="dashboard-card">
+            <h2 className="dashboard-card-title">My Bids</h2>
             <p className="dashboard-card-description">
-              Review all generated bids and track your monthly job volume.
+              A centralized place to store, organize, and access all of your bids.
             </p>
 
             <div className="dashboard-card-button">View Bids →</div>

@@ -18,6 +18,11 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import EditProfile from "./pages/Profile/EditProfile";
 
+import PrivacyPolicy from "./pages/Legal/PrivacyPolicy";
+import TermsConditions from "./pages/Legal/TermsConditions";
+
+import ViewBids from "./pages/Bids/ViewBids";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -32,6 +37,10 @@ const App = () => (
             {/* PUBLIC ROUTES */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Login />} />
+
+            {/* PUBLIC LEGAL ROUTES */}
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsConditions />} />
 
             {/* PROTECTED ROUTES */}
             <Route
@@ -66,6 +75,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <TestBidForm />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/view-bids"
+              element={
+                <ProtectedRoute>
+                  <ViewBids />
                 </ProtectedRoute>
               }
             />
