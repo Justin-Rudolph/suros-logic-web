@@ -298,7 +298,7 @@ const TestBidForm: React.FC = () => {
 
     try {
       const res = await fetch(
-        "https://astutearc7.app.n8n.cloud/webhook-test/lastcall-bid",
+        "https://astutearc7.app.n8n.cloud/webhook/lastcall-bid",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
