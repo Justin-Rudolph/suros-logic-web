@@ -66,7 +66,7 @@ export default function Login() {
         />
 
         <div className="w-full bg-white rounded-2xl p-8 shadow-xl">
-          <h2 className="text-2xl font-bold text-center mb-4">Welcome Back</h2>
+          <h2 className="text-2xl font-bold text-center mb-4 text-black">Welcome Back</h2>
 
           <p className="text-center text-gray-600 mb-8">
             Login to access your Suros Logic account.
