@@ -85,23 +85,23 @@ const BidForm: React.FC = () => {
     };
 
     /** -------------------------------
-     * FORMAT MONEY
-     --------------------------------*/
-    const formatMoney = (value: string) => {
-        const raw = value.replace(/[^0-9.]/g, "");
-        if (!raw) return "";
+     * FORMAT DOLLAR INPUT
+    --------------------------------*/
+    const formatDollarWithCommas = (value: string) => {
+        // Remove non-numeric characters
+        const digits = value.replace(/\D/g, "");
 
-        const num = Number(raw);
-        if (isNaN(num)) return "";
+        if (!digits) return "";
 
-        return num.toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-        });
+        // Convert to number and format with commas
+        const number = Number(digits);
+
+        return `$${number.toLocaleString("en-US")}`;
     };
 
+
     const handleMoneyChange = (id: string, value: string) => {
-        const formatted = formatMoney(value);
+        const formatted = formatDollarWithCommas(value);
         setForm((prev) => ({ ...prev, [id]: formatted }));
     };
 
@@ -455,9 +455,14 @@ const BidForm: React.FC = () => {
                                                 placeholder="$"
                                                 value={item.line_total}
                                                 onChange={(e) =>
-                                                    handleLineItemChange(index, "line_total", e.target.value)
+                                                    handleLineItemChange(
+                                                        index,
+                                                        "line_total",
+                                                        formatDollarWithCommas(e.target.value)
+                                                    )
                                                 }
                                             />
+
                                         </div>
                                     );
                                 })}
