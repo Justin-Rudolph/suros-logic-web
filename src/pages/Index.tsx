@@ -37,41 +37,44 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-background border-b border-border z-50 shadow-lg">
-        <div className="container mx-auto px-6 py-2 flex items-center justify-between">
+        <div className="container mx-auto px-3 sm:px-6 py-2 flex items-center justify-between">
 
           {/* LEFT: Logo */}
           <img
             src={surosLogo}
             alt="Suros Logic Systems"
-            className="h-12 md:h-16"
+            className="h-10 sm:h-12 md:h-16"
           />
 
           {/* RIGHT: Buttons */}
-          <div className="flex items-center gap-4 ml-auto">
-            <Button size="lg" className="bg-primary hover:bg-primary/90" asChild>
+          <div className="flex items-center gap-2 sm:gap-4 ml-auto">
+
+            <Button
+              size="sm"
+              className="md:h-12 md:px-6 bg-primary hover:bg-primary/90"
+              asChild
+            >
               <a
                 href="https://calendly.com/astutemarketing-agency/new-meeting"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Book a Free Demo
+                Book Free Demo
               </a>
             </Button>
 
             <Button
-              size="lg"
+              size="sm"
               variant="outline"
-              className="border-white/40 text-white hover:bg-white/10"
+              className="md:h-12 md:px-6 border-white/40 text-white hover:bg-white/10"
               asChild
             >
               <a href="/auth">Login</a>
             </Button>
-          </div>
 
+          </div>
         </div>
       </nav>
-
-
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-6">
         <div className="container mx-auto">
@@ -93,7 +96,7 @@ const Index = () => {
                     Book a Free 15-Min Demo <ArrowRight className="ml-2" />
                   </a>
                 </Button>
-                <Button size="lg" variant="outline" className="text-lg">
+                <Button onClick={() => window.open("/sample_bid.pdf", "_blank")} size="lg" variant="outline" className="text-lg">
                   See Sample Bid
                 </Button>
               </div>
@@ -407,7 +410,9 @@ const Index = () => {
                   ))}
                 </ul>
                 <Button className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" size="lg">
-                  Contact Sales
+                  <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
+                    Schedule a Meeting
+                  </a>
                 </Button>
               </CardContent>
             </Card>
@@ -427,7 +432,9 @@ const Index = () => {
             and automated workflows that push bid data into CRMs, email follow-ups, and project management tools.
           </p>
           <Button size="lg" variant="outline" className="border-primary/50 hover:bg-primary/10">
-            Talk to us about custom automation <ArrowRight className="ml-2" />
+            <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
+              Talk to us about custom automation
+            </a>
           </Button>
         </div>
       </section>
@@ -486,7 +493,7 @@ const Index = () => {
           <Card className="bg-card/80 backdrop-blur">
             <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
+                {/* <div className="grid md:grid-cols-2 gap-4">
                   <Input
                     placeholder="Name"
                     value={formData.name}
@@ -525,7 +532,7 @@ const Index = () => {
                   value={formData.bidsPerMonth}
                   onChange={(e) => setFormData({ ...formData, bidsPerMonth: e.target.value })}
                   required
-                />
+                /> */}
                 <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
                   <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
                     Book My Demo <ArrowRight className="ml-2" />
@@ -533,7 +540,7 @@ const Index = () => {
                 </Button>
               </form>
               <p className="mt-6 text-sm text-muted-foreground">
-                <a href="#" className="underline hover:text-primary">Request a Sample Bid</a>
+                <a onClick={() => window.open("/sample_bid.pdf", "_blank")} className="underline hover:text-primary">See Sample Bid</a>
               </p>
             </CardContent>
           </Card>
