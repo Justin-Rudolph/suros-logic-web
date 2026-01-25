@@ -739,7 +739,7 @@ const TestBidForm: React.FC = () => {
       contingency_percentage: contingencyPct,
       tax_amount: taxAmount,
       contingency_amount: contingencyAmount,
-      approx_weeks: Number(form.approx_weeks),
+      approx_weeks: form.approx_weeks,
 
       // computed totals
       subtotal: subtotal,
@@ -975,11 +975,11 @@ const TestBidForm: React.FC = () => {
 
               <label>Approximate Working Weeks:</label>
               <input
-                type="number"
+                type="text"
                 id="approx_weeks"
                 value={form.approx_weeks}
                 onChange={handleFormChange}
-                placeholder="5"
+                placeholder="4 - 6"
                 className={isInvalid("approx_weeks") ? "input-error" : ""}
               />
 

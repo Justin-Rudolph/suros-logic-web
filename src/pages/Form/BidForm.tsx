@@ -57,7 +57,7 @@ const emptyLineItem: LineItem = {
 
 const BidForm: React.FC = () => {
     const navigate = useNavigate();
-    const { profile } = useAuth();
+    const { profile, loading } = useAuth();
 
     const [form, setForm] = useState<ExtendedBidFormState>(initialFormState);
     const [numLineItems, setNumLineItems] = useState("");
@@ -432,7 +432,7 @@ const BidForm: React.FC = () => {
             contingency_percentage: contingencyPct,
             tax_amount: taxAmount,
             contingency_amount: contingencyAmount,
-            approx_weeks: Number(form.approx_weeks),
+            approx_weeks: form.approx_weeks,
             total_costs: convertMoney(form.total_costs),
             deposit_required: convertMoney(form.deposit_required),
             weekly_payments: weeklyCount,
@@ -483,463 +483,496 @@ const BidForm: React.FC = () => {
     };
 
     return (
-        <div className="suros-gradient">
-            <div className="bid-form-page">
-                {/* 🔙 BACK BUTTON */}
-                <button
-                    onClick={() => navigate("/dashboard")}
-                    style={{
-                        position: "fixed",
-                        top: "20px",
-                        left: "20px",
-                        background: "#1e73be",
-                        color: "#fff",
-                        padding: "10px 18px",
-                        fontSize: "15px",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        border: "none",
-                        zIndex: 10
-                    }}
-                >
-                    ← Back
-                </button>
-
-                <div className="page-bg">
-                    <div className="container">
-
-                        <div className="logo">
-                            <img src={surosLogo} alt="Suros Logic Systems Logo" />
-                        </div>
-
-                        <h1>
-                            <b>{form.company_name}</b>
-                        </h1>
-
-                        {/* HEADER INFO */}
-                        <div className="header-info">
-                            <label>Address:</label>
-                            <input
-                                type="text"
-                                id="company_address"
-                                value={form.company_address}
-                                onChange={handleFormChange}
-                                className={isInvalid("company_address") ? "input-error" : ""}
-                            />
-
-                            <label>Phone:</label>
-                            <input
-                                type="text"
-                                id="company_phone"
-                                value={form.company_phone}
-                                onChange={handleFormChange}
-                                className={isInvalid("company_phone") ? "input-error" : ""}
-                            />
-
-                            <label>Email:</label>
-                            <input
-                                type="email"
-                                id="company_email"
-                                value={form.company_email}
-                                onChange={handleFormChange}
-                                onBlur={validateEmail}
-                                className={isInvalid("company_email") ? "input-error" : ""}
-                            />
-
-                            <p className="slogan">{form.company_slogan}</p>
-
-                            {/* company_slogan is required but displayed as text */}
-                            {isInvalid("company_slogan") && (
-                                <div className="field-error-text">Company slogan is required.</div>
-                            )}
-                            {isInvalid("company_name") && (
-                                <div className="field-error-text">Company name is required.</div>
-                            )}
-                        </div>
-
-                        {/* FULL FORM */}
-                        <form onSubmit={handleSubmit}>
-                            {/* INVOICE INFO */}
-                            <h2>Invoice Information</h2>
-
-                            <label>Invoice Date:</label>
-                            <input
-                                type="date"
-                                id="invoice_date"
-                                value={form.invoice_date}
-                                onChange={handleFormChange}
-                                className={isInvalid("invoice_date") ? "input-error" : ""}
-                            />
-
-                            <label>Invoice #:</label>
-                            <input
-                                type="text"
-                                id="invoice_number"
-                                placeholder="SLS-2026-1178"
-                                value={form.invoice_number}
-                                onChange={handleFormChange}
-                                className={isInvalid("invoice_number") ? "input-error" : ""}
-                            />
-
-                            {/* CUSTOMER INFO */}
-                            <h2>Customer Info</h2>
-
-                            <label>Customer Name:</label>
-                            <input
-                                type="text"
-                                id="customer_name"
-                                value={form.customer_name}
-                                onChange={handleFormChange}
-                                placeholder="John Doe"
-                                className={isInvalid("customer_name") ? "input-error" : ""}
-                            />
-
-                            <label>Customer Address:</label>
-                            <input
-                                type="text"
-                                id="customer_address"
-                                value={form.customer_address}
-                                onChange={handleFormChange}
-                                placeholder="1234 Main St, Tampa FL"
-                                className={isInvalid("customer_address") ? "input-error" : ""}
-                            />
-
-                            <label>Customer Phone:</label>
-                            <input
-                                type="text"
-                                id="customer_phone"
-                                value={form.customer_phone}
-                                onChange={handleFormChange}
-                                placeholder="(000) 000-0000"
-                                className={isInvalid("customer_phone") ? "input-error" : ""}
-                            />
-
-                            <label>Customer Email:</label>
-                            <input
-                                type="email"
-                                id="customer_email"
-                                value={form.customer_email}
-                                onChange={handleFormChange}
-                                onBlur={validateEmail}
-                                placeholder="example@email.com"
-                                className={isInvalid("customer_email") ? "input-error" : ""}
-                            />
-
-                            {/* PROJECT */}
-                            <h2>Project & Payment Info</h2>
-
-                            <label>Salesperson Name:</label>
-                            <input
-                                type="text"
-                                id="salesperson"
-                                placeholder="John Doe"
-                                value={form.salesperson}
-                                onChange={handleFormChange}
-                                className={isInvalid("salesperson") ? "input-error" : ""}
-                            />
-
-                            <label>Job Name or Address:</label>
-                            <input
-                                type="text"
-                                id="job"
-                                placeholder="Kitchen Remodel, Tampa FL"
-                                value={form.job}
-                                onChange={handleFormChange}
-                                className={isInvalid("job") ? "input-error" : ""}
-                            />
-
-                            <label><strong>Payment Terms:</strong></label>
-                            <textarea
-                                id="payment_terms"
-                                rows={2}
-                                value={form.payment_terms}
-                                onChange={handleFormChange}
-                                placeholder="Deposit of 50% prior to work commencing and weekly progress payments."
-                                className={isInvalid("payment_terms") ? "input-error" : ""}
-                            ></textarea>
-
-                            <label>Approximate Working Weeks:</label>
-                            <input
-                                type="number"
-                                id="approx_weeks"
-                                value={form.approx_weeks}
-                                onChange={handleFormChange}
-                                placeholder="5"
-                                className={isInvalid("approx_weeks") ? "input-error" : ""}
-                            />
-
-                            {/* LINE ITEMS */}
-                            <h2>Line Items</h2>
-
-                            <label>How many line items (trades)?</label>
-                            <input
-                                type="number"
-                                id="num_line_items"
-                                min={1}
-                                max={20}
-                                value={numLineItems}
-                                onChange={(e) => {
-                                    setNumLineItems(e.target.value);
-                                    setErrors((prev) => ({ ...prev, line_items_missing: false }));
-                                }}
-                                className={isInvalid("line_items_missing") ? "input-error" : ""}
-                            />
-
-                            <button type="button" onClick={handleGenerateLineItems}>
-                                Generate Line Item Sections
-                            </button>
-
-                            {isInvalid("line_items_missing") && (
-                                <div className="field-error-text">
-                                    Please generate at least one line item.
-                                </div>
-                            )}
-
-                            <div id="lineItemsContainer">
-                                {lineItems.map((item, index) => {
-                                    const placeholderTrade =
-                                        placeholderTrades[index % placeholderTrades.length];
-
-                                    return (
-                                        <div key={index} className="line-item">
-                                            <h3>{index + 1} LINE ITEM</h3>
-
-                                            <label>Trade Name:</label>
-                                            <input
-                                                type="text"
-                                                placeholder={placeholderTrade}
-                                                value={item.trade}
-                                                onChange={(e) =>
-                                                    handleLineItemChange(index, "trade", e.target.value)
-                                                }
-                                                className={isInvalid(`line_trade_${index}`) ? "input-error" : ""}
-                                            />
-
-                                            <label>Scope of Work (one per line):</label>
-                                            <textarea
-                                                className={
-                                                    `scope-input ${isInvalid(`line_scope_${index}`) ? "input-error" : ""}`
-                                                }
-                                                placeholder="- Enter one task per line"
-                                                value={item.scope}
-                                                onChange={(e) => handleScopeChange(index, e)}
-                                                onKeyDown={(e) => handleScopeKeyDown(index, e)}
-                                            ></textarea>
-
-                                            <label>Material and Labor Included?</label>
-                                            <select
-                                                value={item.material_labor_included}
-                                                onChange={(e) =>
-                                                    handleLineItemChange(
-                                                        index,
-                                                        "material_labor_included",
-                                                        e.target.value
-                                                    )
-                                                }
-                                                className={
-                                                    isInvalid(`line_material_labor_included_${index}`)
-                                                        ? "input-error"
-                                                        : ""
-                                                }
-                                            >
-                                                <option value="Yes">Yes</option>
-                                                <option value="No">No</option>
-                                            </select>
-
-                                            <label>Line Total ($):</label>
-                                            <input
-                                                type="text"
-                                                placeholder="$"
-                                                value={item.line_total}
-                                                onChange={(e) =>
-                                                    handleLineItemChange(
-                                                        index,
-                                                        "line_total",
-                                                        formatDollarWithCommas(e.target.value)
-                                                    )
-                                                }
-                                                className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* CONTINGENCY */}
-                            <h2>Contingency</h2>
-
-                            <label>Contingency (%):</label>
-                            <div className="tax-row">
-                                <div className="percent-input-wrapper">
-                                    <input
-                                        type="text"
-                                        id="contingency_percentage"
-                                        value={form.contingency_percentage}
-                                        onChange={handleFormChange}
-                                        placeholder="10"
-                                        className={isInvalid("contingency_percentage") ? "input-error" : ""}
-                                    />
-                                    <span className="percent-suffix">%</span>
-                                </div>
-
-                                <div className="tax-amount text-black">
-                                    {subtotal > 0 && contingencyPct > 0
-                                        ? `${formatDollarWithCommas(
-                                            Math.round(contingencyAmount)
-                                        )} contingency`
-                                        : ""}
-                                </div>
-                            </div>
-
-                            <textarea
-                                id="contingency_coverage"
-                                rows={3}
-                                value={form.contingency_coverage}
-                                onChange={handleFormChange}
-                                placeholder="Covers miscellaneous materials and unexpected repairs..."
-                                className={isInvalid("contingency_coverage") ? "input-error" : ""}
-                            ></textarea>
-
-                            <p className="contingency-warning">
-                                <strong>
-                                    CONTINGENCY FUNDS NOT UTILIZED WILL BE RETURNED TO THE CUSTOMER.
-                                </strong>
-                            </p>
-
-                            {/* TOTALS */}
-                            <h2>Totals & Payment</h2>
-
-                            {/* TAX (%) FIELD */}
-                            <label>Tax (%):</label>
-                            <div className="tax-row">
-                                <div className="percent-input-wrapper">
-                                    <input
-                                        type="text"
-                                        id="tax_percentage"
-                                        value={form.tax_percentage}
-                                        readOnly
-                                        placeholder="6"
-                                        className={`${isInvalid("tax_percentage") ? "input-error" : ""} input-readonly`}
-                                    />
-                                    <span className="percent-suffix">%</span>
-                                </div>
-
-                                <div className="tax-amount text-black">
-                                    {subtotal > 0 && taxPct > 0
-                                        ? `${formatDollarWithCommas(Math.round(taxAmount))} in taxes`
-                                        : ""}
-                                </div>
-                            </div>
-
-                            <label>Total Costs (Line Items + Contingency + Tax):</label>
-                            <input
-                                type="text"
-                                id="total_costs"
-                                value={form.total_costs}
-                                readOnly
-                                className={`${isInvalid("total_costs") ? "input-error" : ""} input-readonly`}
-                                placeholder="$"
-                            />
-
-                            <label>Deposit Required:</label>
-                            <input
-                                type="text"
-                                id="deposit_required"
-                                value={form.deposit_required}
-                                onChange={handleFormChange}
-                                placeholder="$"
-                                className={isInvalid("deposit_required") ? "input-error" : ""}
-                            />
-
-                            <label>Weekly Progress Payments:</label>
-                            <div className="tax-row">
-                                <input
-                                    type="text"
-                                    id="weekly_payments"
-                                    value={form.weekly_payments}
-                                    onChange={handleFormChange}
-                                    placeholder="3"
-                                    className={isInvalid("weekly_payments") ? "input-error" : ""}
-                                />
-
-                                <div className="tax-amount text-black">
-                                    {weeklyAmount > 0
-                                        ? `${formatDollarWithCommas(Math.round(weeklyAmount))}/week`
-                                        : ""}
-                                </div>
-                            </div>
-
-                            {/* SUBMIT */}
-                            <div className="submit-area">
-                                <button type="submit">Generate My Bid</button>
-                                <p className="powered">POWERED by Suros Logic Systems, LLC</p>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            {/* ✅ GLOBAL MODAL */}
-            {modal.open && (
+        (loading || !profile) ?
+            < div className="suros-gradient" >
                 <div
                     style={{
-                        position: "fixed",
-                        inset: 0,
-                        backgroundColor: "rgba(0,0,0,0.55)",
+                        padding: "40px",
+                        color: "#fff",
+                        textAlign: "center",
                         display: "flex",
+                        flexDirection: "column",
                         alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 9999,
+                        gap: "16px",
                     }}
                 >
-                    <div
+                    <div>Loading company profile info for your form…</div>
+
+                    <button
+                        onClick={() => window.location.reload()}
                         style={{
-                            background: "#fff",
-                            borderRadius: "10px",
-                            width: "100%",
-                            maxWidth: "480px",
-                            padding: "28px",
-                            boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
-                            textAlign: "center",
+                            background: "#1e73be",
+                            color: "#fff",
+                            padding: "10px 22px",
+                            borderRadius: "6px",
+                            border: "none",
+                            fontSize: "15px",
+                            fontWeight: 600,
+                            cursor: "pointer",
                         }}
                     >
-                        <h2 style={{ marginBottom: "12px", color: "#000", fontWeight: "bold" }}>
-                            {modal.type === "success" && "✅ "}
-                            {modal.type === "error" && "❌ "}
-                            {modal.type === "warning" && "⚠️ "}
-                            {modal.type === "info" && "ℹ️ "}
-                            {modal.title}
-                        </h2>
+                        Refresh
+                    </button>
+                </div>
+            </div >
+            :
+            <div className="suros-gradient">
+                <div className="bid-form-page">
+                    {/* 🔙 BACK BUTTON */}
+                    <button
+                        onClick={() => navigate("/dashboard")}
+                        style={{
+                            position: "fixed",
+                            top: "20px",
+                            left: "20px",
+                            background: "#1e73be",
+                            color: "#fff",
+                            padding: "10px 18px",
+                            fontSize: "15px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            border: "none",
+                            zIndex: 10
+                        }}
+                    >
+                        ← Back
+                    </button>
 
-                        <p
-                            style={{ color: "#000", lineHeight: 1.6, marginBottom: "22px" }}
-                            dangerouslySetInnerHTML={{ __html: modal.message }}
-                        />
+                    <div className="page-bg">
+                        <div className="container">
 
-                        <button
-                            onClick={() => setModal((m) => ({ ...m, open: false }))}
-                            style={{
-                                background:
-                                    modal.type === "success"
-                                        ? "#1e73be"
-                                        : modal.type === "error"
-                                            ? "#c0392b"
-                                            : "#1e73be",
-                                color: "#fff",
-                                padding: "10px 22px",
-                                borderRadius: "6px",
-                                border: "none",
-                                fontSize: "15px",
-                                fontWeight: 600,
-                                cursor: "pointer",
-                            }}
-                        >
-                            Got it
-                        </button>
+                            <div className="logo">
+                                <img src={surosLogo} alt="Suros Logic Systems Logo" />
+                            </div>
+
+                            <h1>
+                                <b>{form.company_name}</b>
+                            </h1>
+
+                            {/* HEADER INFO */}
+                            <div className="header-info">
+                                <label>Address:</label>
+                                <input
+                                    type="text"
+                                    id="company_address"
+                                    value={form.company_address}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("company_address") ? "input-error" : ""}
+                                />
+
+                                <label>Phone:</label>
+                                <input
+                                    type="text"
+                                    id="company_phone"
+                                    value={form.company_phone}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("company_phone") ? "input-error" : ""}
+                                />
+
+                                <label>Email:</label>
+                                <input
+                                    type="email"
+                                    id="company_email"
+                                    value={form.company_email}
+                                    onChange={handleFormChange}
+                                    onBlur={validateEmail}
+                                    className={isInvalid("company_email") ? "input-error" : ""}
+                                />
+
+                                <p className="slogan">{form.company_slogan}</p>
+
+                                {/* company_slogan is required but displayed as text */}
+                                {isInvalid("company_slogan") && (
+                                    <div className="field-error-text">Company slogan is required.</div>
+                                )}
+                                {isInvalid("company_name") && (
+                                    <div className="field-error-text">Company name is required.</div>
+                                )}
+                            </div>
+
+                            {/* FULL FORM */}
+                            <form onSubmit={handleSubmit}>
+                                {/* INVOICE INFO */}
+                                <h2>Invoice Information</h2>
+
+                                <label>Invoice Date:</label>
+                                <input
+                                    type="date"
+                                    id="invoice_date"
+                                    value={form.invoice_date}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("invoice_date") ? "input-error" : ""}
+                                />
+
+                                <label>Invoice #:</label>
+                                <input
+                                    type="text"
+                                    id="invoice_number"
+                                    placeholder="SLS-2026-1178"
+                                    value={form.invoice_number}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("invoice_number") ? "input-error" : ""}
+                                />
+
+                                {/* CUSTOMER INFO */}
+                                <h2>Customer Info</h2>
+
+                                <label>Customer Name:</label>
+                                <input
+                                    type="text"
+                                    id="customer_name"
+                                    value={form.customer_name}
+                                    onChange={handleFormChange}
+                                    placeholder="John Doe"
+                                    className={isInvalid("customer_name") ? "input-error" : ""}
+                                />
+
+                                <label>Customer Address:</label>
+                                <input
+                                    type="text"
+                                    id="customer_address"
+                                    value={form.customer_address}
+                                    onChange={handleFormChange}
+                                    placeholder="1234 Main St, Tampa FL"
+                                    className={isInvalid("customer_address") ? "input-error" : ""}
+                                />
+
+                                <label>Customer Phone:</label>
+                                <input
+                                    type="text"
+                                    id="customer_phone"
+                                    value={form.customer_phone}
+                                    onChange={handleFormChange}
+                                    placeholder="(000) 000-0000"
+                                    className={isInvalid("customer_phone") ? "input-error" : ""}
+                                />
+
+                                <label>Customer Email:</label>
+                                <input
+                                    type="email"
+                                    id="customer_email"
+                                    value={form.customer_email}
+                                    onChange={handleFormChange}
+                                    onBlur={validateEmail}
+                                    placeholder="example@email.com"
+                                    className={isInvalid("customer_email") ? "input-error" : ""}
+                                />
+
+                                {/* PROJECT */}
+                                <h2>Project & Payment Info</h2>
+
+                                <label>Salesperson Name:</label>
+                                <input
+                                    type="text"
+                                    id="salesperson"
+                                    placeholder="John Doe"
+                                    value={form.salesperson}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("salesperson") ? "input-error" : ""}
+                                />
+
+                                <label>Job Name or Address:</label>
+                                <input
+                                    type="text"
+                                    id="job"
+                                    placeholder="Kitchen Remodel, Tampa FL"
+                                    value={form.job}
+                                    onChange={handleFormChange}
+                                    className={isInvalid("job") ? "input-error" : ""}
+                                />
+
+                                <label><strong>Payment Terms:</strong></label>
+                                <textarea
+                                    id="payment_terms"
+                                    rows={2}
+                                    value={form.payment_terms}
+                                    onChange={handleFormChange}
+                                    placeholder="Deposit of 50% prior to work commencing and weekly progress payments."
+                                    className={isInvalid("payment_terms") ? "input-error" : ""}
+                                ></textarea>
+
+                                <label>Approximate Working Weeks:</label>
+                                <input
+                                    type="text"
+                                    id="approx_weeks"
+                                    value={form.approx_weeks}
+                                    onChange={handleFormChange}
+                                    placeholder="4 - 6"
+                                    className={isInvalid("approx_weeks") ? "input-error" : ""}
+                                />
+
+                                {/* LINE ITEMS */}
+                                <h2>Line Items</h2>
+
+                                <label>How many line items (trades)?</label>
+                                <input
+                                    type="number"
+                                    id="num_line_items"
+                                    min={1}
+                                    max={20}
+                                    value={numLineItems}
+                                    onChange={(e) => {
+                                        setNumLineItems(e.target.value);
+                                        setErrors((prev) => ({ ...prev, line_items_missing: false }));
+                                    }}
+                                    className={isInvalid("line_items_missing") ? "input-error" : ""}
+                                />
+
+                                <button type="button" onClick={handleGenerateLineItems}>
+                                    Generate Line Item Sections
+                                </button>
+
+                                {isInvalid("line_items_missing") && (
+                                    <div className="field-error-text">
+                                        Please generate at least one line item.
+                                    </div>
+                                )}
+
+                                <div id="lineItemsContainer">
+                                    {lineItems.map((item, index) => {
+                                        const placeholderTrade =
+                                            placeholderTrades[index % placeholderTrades.length];
+
+                                        return (
+                                            <div key={index} className="line-item">
+                                                <h3>{index + 1} LINE ITEM</h3>
+
+                                                <label>Trade Name:</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={placeholderTrade}
+                                                    value={item.trade}
+                                                    onChange={(e) =>
+                                                        handleLineItemChange(index, "trade", e.target.value)
+                                                    }
+                                                    className={isInvalid(`line_trade_${index}`) ? "input-error" : ""}
+                                                />
+
+                                                <label>Scope of Work (one per line):</label>
+                                                <textarea
+                                                    className={
+                                                        `scope-input ${isInvalid(`line_scope_${index}`) ? "input-error" : ""}`
+                                                    }
+                                                    placeholder="- Enter one task per line"
+                                                    value={item.scope}
+                                                    onChange={(e) => handleScopeChange(index, e)}
+                                                    onKeyDown={(e) => handleScopeKeyDown(index, e)}
+                                                ></textarea>
+
+                                                <label>Material and Labor Included?</label>
+                                                <select
+                                                    value={item.material_labor_included}
+                                                    onChange={(e) =>
+                                                        handleLineItemChange(
+                                                            index,
+                                                            "material_labor_included",
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    className={
+                                                        isInvalid(`line_material_labor_included_${index}`)
+                                                            ? "input-error"
+                                                            : ""
+                                                    }
+                                                >
+                                                    <option value="Yes">Yes</option>
+                                                    <option value="No">No</option>
+                                                </select>
+
+                                                <label>Line Total ($):</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="$"
+                                                    value={item.line_total}
+                                                    onChange={(e) =>
+                                                        handleLineItemChange(
+                                                            index,
+                                                            "line_total",
+                                                            formatDollarWithCommas(e.target.value)
+                                                        )
+                                                    }
+                                                    className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* CONTINGENCY */}
+                                <h2>Contingency</h2>
+
+                                <label>Contingency (%):</label>
+                                <div className="tax-row">
+                                    <div className="percent-input-wrapper">
+                                        <input
+                                            type="text"
+                                            id="contingency_percentage"
+                                            value={form.contingency_percentage}
+                                            onChange={handleFormChange}
+                                            placeholder="10"
+                                            className={isInvalid("contingency_percentage") ? "input-error" : ""}
+                                        />
+                                        <span className="percent-suffix">%</span>
+                                    </div>
+
+                                    <div className="tax-amount text-black">
+                                        {subtotal > 0 && contingencyPct > 0
+                                            ? `${formatDollarWithCommas(
+                                                Math.round(contingencyAmount)
+                                            )} contingency`
+                                            : ""}
+                                    </div>
+                                </div>
+
+                                <textarea
+                                    id="contingency_coverage"
+                                    rows={3}
+                                    value={form.contingency_coverage}
+                                    onChange={handleFormChange}
+                                    placeholder="Covers miscellaneous materials and unexpected repairs..."
+                                    className={isInvalid("contingency_coverage") ? "input-error" : ""}
+                                ></textarea>
+
+                                <p className="contingency-warning">
+                                    <strong>
+                                        CONTINGENCY FUNDS NOT UTILIZED WILL BE RETURNED TO THE CUSTOMER.
+                                    </strong>
+                                </p>
+
+                                {/* TOTALS */}
+                                <h2>Totals & Payment</h2>
+
+                                {/* TAX (%) FIELD */}
+                                <label>Tax (%):</label>
+                                <div className="tax-row">
+                                    <div className="percent-input-wrapper">
+                                        <input
+                                            type="text"
+                                            id="tax_percentage"
+                                            value={form.tax_percentage}
+                                            readOnly
+                                            placeholder="6"
+                                            className={`${isInvalid("tax_percentage") ? "input-error" : ""} input-readonly`}
+                                        />
+                                        <span className="percent-suffix">%</span>
+                                    </div>
+
+                                    <div className="tax-amount text-black">
+                                        {subtotal > 0 && taxPct > 0
+                                            ? `${formatDollarWithCommas(Math.round(taxAmount))} in taxes`
+                                            : ""}
+                                    </div>
+                                </div>
+
+                                <label>Total Costs (Line Items + Contingency + Tax):</label>
+                                <input
+                                    type="text"
+                                    id="total_costs"
+                                    value={form.total_costs}
+                                    readOnly
+                                    className={`${isInvalid("total_costs") ? "input-error" : ""} input-readonly`}
+                                    placeholder="$"
+                                />
+
+                                <label>Deposit Required:</label>
+                                <input
+                                    type="text"
+                                    id="deposit_required"
+                                    value={form.deposit_required}
+                                    onChange={handleFormChange}
+                                    placeholder="$"
+                                    className={isInvalid("deposit_required") ? "input-error" : ""}
+                                />
+
+                                <label>Weekly Progress Payments:</label>
+                                <div className="tax-row">
+                                    <input
+                                        type="text"
+                                        id="weekly_payments"
+                                        value={form.weekly_payments}
+                                        onChange={handleFormChange}
+                                        placeholder="3"
+                                        className={isInvalid("weekly_payments") ? "input-error" : ""}
+                                    />
+
+                                    <div className="tax-amount text-black">
+                                        {weeklyAmount > 0
+                                            ? `${formatDollarWithCommas(Math.round(weeklyAmount))}/week`
+                                            : ""}
+                                    </div>
+                                </div>
+
+                                {/* SUBMIT */}
+                                <div className="submit-area">
+                                    <button type="submit">Generate My Bid</button>
+                                    <p className="powered">POWERED by Suros Logic Systems, LLC</p>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
-            )}
-        </div>
+                {/* ✅ GLOBAL MODAL */}
+                {modal.open && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            inset: 0,
+                            backgroundColor: "rgba(0,0,0,0.55)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 9999,
+                        }}
+                    >
+                        <div
+                            style={{
+                                background: "#fff",
+                                borderRadius: "10px",
+                                width: "100%",
+                                maxWidth: "480px",
+                                padding: "28px",
+                                boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+                                textAlign: "center",
+                            }}
+                        >
+                            <h2 style={{ marginBottom: "12px", color: "#000", fontWeight: "bold" }}>
+                                {modal.type === "success" && "✅ "}
+                                {modal.type === "error" && "❌ "}
+                                {modal.type === "warning" && "⚠️ "}
+                                {modal.type === "info" && "ℹ️ "}
+                                {modal.title}
+                            </h2>
+
+                            <p
+                                style={{ color: "#000", lineHeight: 1.6, marginBottom: "22px" }}
+                                dangerouslySetInnerHTML={{ __html: modal.message }}
+                            />
+
+                            <button
+                                onClick={() => setModal((m) => ({ ...m, open: false }))}
+                                style={{
+                                    background:
+                                        modal.type === "success"
+                                            ? "#1e73be"
+                                            : modal.type === "error"
+                                                ? "#c0392b"
+                                                : "#1e73be",
+                                    color: "#fff",
+                                    padding: "10px 22px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    fontSize: "15px",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Got it
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
     );
 };
 

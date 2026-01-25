@@ -8,7 +8,7 @@ import "@/styles/gradients.css";
 import { useNavigate } from "react-router-dom";
 
 export default function EditProfile() {
-  const { user } = useAuth();
+  const { user, setProfile } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState<UserProfile | null>(null);
@@ -118,6 +118,9 @@ export default function EditProfile() {
       };
 
       await setDoc(ref, safeUpdate, { merge: true });
+
+      // Update profile upon login
+      setProfile(safeUpdate);
 
       // Show success banner but KEEP loading overlay visible
       setSuccess(true);
