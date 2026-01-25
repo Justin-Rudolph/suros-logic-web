@@ -21,7 +21,6 @@ export interface BidFormState {
   total_costs: string | number;
   deposit_required: string | number;
   weekly_payments: string | number;
-  final_amount_due: string | number;
   customer_name: string;
   customer_address: string;
   customer_phone: string;

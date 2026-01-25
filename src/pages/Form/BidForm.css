@@ -10,7 +10,7 @@
   background: #ffffff;
   padding: 35px 45px;
   border-radius: 14px;
-  box-shadow: 0 6px 25px rgba(0,0,0,0.10);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.1);
   border: 1px solid #e1e4e8;
 }
 
@@ -86,7 +86,7 @@
   outline: none;
   border-color: #1e73be;
   background: #ffffff;
-  box-shadow: 0 0 0 2px rgba(30,115,190,0.15);
+  box-shadow: 0 0 0 2px rgba(30, 115, 190, 0.15);
 }
 
 /* LINE ITEM BOX */
@@ -96,7 +96,7 @@
   padding: 18px;
   margin-top: 12px;
   border-radius: 10px;
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.03);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
 }
 
 .bid-form-page .scope-input {
@@ -114,7 +114,7 @@
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: .3px;
+  letter-spacing: 0.3px;
   transition: 0.2s;
   font-family: "Montserrat", sans-serif;
 }
@@ -163,3 +163,56 @@
     font-size: 26px;
   }
 }
+
+.input-error {
+  border: 2px solid #dc2626 !important;
+  background-color: #fef2f2 !important;
+  outline: none;
+}
+
+.field-error-text {
+  color: #dc2626;
+  font-size: 13px;
+  margin: 6px 0 10px;
+}
+
+/* Tax row: input on left, computed tax amount on right */
+.tax-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tax-row input {
+  width: 110px;
+}
+
+.tax-amount {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Readonly total styling */
+.input-readonly {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.percent-input-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.percent-input-wrapper input {
+  padding-right: 22px;
+}
+
+.percent-suffix {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #555;
+  pointer-events: none;
+}
+
