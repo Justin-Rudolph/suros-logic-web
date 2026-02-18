@@ -11,6 +11,13 @@ const Index = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
+  const [modal, setModal] = useState<{
+    open: boolean;
+  }>({
+    open: false,
+  });
+
+
   // AUTO-REDIRECT IF LOGGED IN
   useEffect(() => {
     if (!loading && user) {
@@ -81,7 +88,7 @@ const Index = () => {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8 animate-fade-in">
               <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
-                AI that writes your{" "}
+                AI that writes {" "}<br />
                 <span className="bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent animate-pulse">
                   bids for you
                 </span>
@@ -245,7 +252,7 @@ const Index = () => {
               {
                 step: "1",
                 title: "Fill Out Simple Form",
-                description: "Contractor fills out a simple online form with project details and line items."
+                description: "You fill out a simple online form with project details and line items."
               },
               {
                 step: "2",
@@ -276,13 +283,13 @@ const Index = () => {
       {/* Features Section */}
       <section className="py-20 px-6 bg-card/30">
         <div className="container mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">Built for real-world contracting</h2>
+          <h2 className="text-4xl font-bold text-center mb-16">Built for real-world applications</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
                 icon: <Zap className="text-primary" size={32} />,
-                title: "Contractor-Tuned AI Prompts",
-                description: "AI workflows specifically optimized for contracting bids, not generic text."
+                title: "Industry-Tuned AI Prompts",
+                description: "AI workflows specifically optimized for trade specific bids, not generic text."
               },
               {
                 icon: <FileText className="text-secondary" size={32} />,
@@ -367,15 +374,15 @@ const Index = () => {
               <CardContent className="p-8 space-y-6">
                 <h3 className="text-2xl font-bold text-primary">QuickStart Bid Templates</h3>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">$150<span className="text-lg text-muted-foreground">/month</span></div>
-                  <p className="text-muted-foreground">One-time setup: $300</p>
+                  <div className="text-3xl font-bold">$100<span className="text-lg text-muted-foreground">/month</span></div>
+                  <p className="text-muted-foreground">All your basic needs</p>
                 </div>
                 <ul className="space-y-3">
                   {[
                     "Access to prebuilt, optimized bid templates",
-                    "Standard form with common contractor fields",
+                    "Includes the key fields typically needed to produce a complete proposal",
                     "AI-tuned prompts for clean, detailed bids",
-                    "Ideal for ready-to-use system"
+                    "Perfect for Immediate Use"
                   ].map((item, idx) => (
                     <li key={idx} className="flex items-start gap-3">
                       <Check className="text-primary mt-1 flex-shrink-0" size={20} />
@@ -383,7 +390,11 @@ const Index = () => {
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full bg-primary hover:bg-primary/90" size="lg">
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90"
+                  size="lg"
+                  onClick={() => setModal({ open: true })}
+                >
                   Get Started
                 </Button>
               </CardContent>
@@ -398,6 +409,7 @@ const Index = () => {
                 </div>
                 <ul className="space-y-3">
                   {[
+                    "Everything from QuickStart subscription",
                     "Customized form matching your exact bid structure",
                     "Tailored prompts for your trades & regions",
                     "Multiple document types (bids, change orders)",
@@ -476,8 +488,8 @@ const Index = () => {
           <p className="text-xl text-muted-foreground leading-relaxed">
             Suros Logic Systems was created by people who live in the contracting world. We know how much time
             goes into every quote, every bid, every revision. Our vision is an AI-driven document automation suite
-            that handles not just bids, but contracts, change orders, and more – across industries like construction,
-            legal, and real estate.
+            that handles not just bid creation, pricing estimates, file storage, and more – across industries like construction,
+            trades, and other service based industries.
           </p>
         </div>
       </section>
@@ -554,6 +566,100 @@ const Index = () => {
           <p className="text-muted-foreground">© 2024 Suros Logic Systems. All rights reserved.</p>
         </div>
       </footer>
+
+      {modal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "10px",
+              width: "100%",
+              maxWidth: "480px",
+              padding: "28px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+              textAlign: "center",
+            }}
+          >
+            <h2
+              style={{
+                marginBottom: "12px",
+                color: "#000",
+                fontWeight: "bold",
+              }}
+            >
+              ℹ️ Payments Coming Soon
+            </h2>
+
+            <p
+              style={{
+                color: "#000",
+                lineHeight: 1.6,
+                marginBottom: "26px",
+              }}
+            >
+              We are still setting up payments. If you are interested in purchasing our
+              services, please set up a meeting with us and we’ll take care of the rest.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "center",
+              }}
+            >
+              {/* CANCEL */}
+              <button
+                onClick={() => setModal({ open: false })}
+                style={{
+                  background: "#e0e0e0",
+                  color: "#000",
+                  padding: "10px 20px",
+                  borderRadius: "6px",
+                  border: "none",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+
+              {/* BOOK MEETING */}
+              <a
+                href="https://calendly.com/astutemarketing-agency/new-meeting"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <button
+                  style={{
+                    background: "#1e73be",
+                    color: "#fff",
+                    padding: "10px 22px",
+                    borderRadius: "6px",
+                    border: "none",
+                    fontSize: "15px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Book Meeting
+                </button>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

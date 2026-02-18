@@ -1,3 +1,5 @@
+import LineItemAIHelper from "@/components/LineItemAIHelper";
+
 import React, {
     useState,
     ChangeEvent,
@@ -38,7 +40,7 @@ const initialFormState: ExtendedBidFormState = {
     contingency_coverage: "",
     tax_percentage: "7",
     total_costs: "",
-    deposit_required: "",
+    deposit_percentage: "",
     weekly_payments: "",
     customer_name: "",
     customer_address: "",
@@ -165,7 +167,9 @@ const BidForm: React.FC = () => {
 
     const totalWithExtras = subtotal + taxAmount + contingencyAmount;
 
-    const depositAmount = parseMoney(form.deposit_required);
+    const depositPct = parsePercent(form.deposit_percentage)
+    const depositAmount = totalWithExtras * (depositPct / 100);
+
     const weeklyCount = Number(String(form.weekly_payments).replace(/[^0-9]/g, "")) || 0;
 
     const remainingAfterDeposit = totalWithExtras - depositAmount;
@@ -212,10 +216,9 @@ const BidForm: React.FC = () => {
             return;
         }
 
-
-        // money fields ($ + commas)
-        if (id === "deposit_required") {
-            setForm((prev) => ({ ...prev, [id]: formatDollarWithCommas(value) }));
+        if (id === "deposit_percentage") {
+            const cleaned = value.replace(/[^0-9.]/g, "");
+            setForm((prev) => ({ ...prev, [id]: cleaned }));
             return;
         }
 
@@ -376,7 +379,7 @@ const BidForm: React.FC = () => {
         // total_costs is required but computed; still enforce existence
         req("total_costs");
 
-        req("deposit_required");
+        req("deposit_percentage");
         req("weekly_payments");
         req("customer_name");
         req("customer_address");
@@ -398,6 +401,14 @@ const BidForm: React.FC = () => {
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    /** -------------------------------
+    * EXTRACT ZIPCODE FROM CUSTOMER ADDRESS
+    --------------------------------*/
+    const extractZipCode = (address: string): string | null => {
+        const match = address.match(/\b\d{5}\b/);
+        return match ? match[0] : null;
     };
 
     /** -------------------------------
@@ -434,7 +445,8 @@ const BidForm: React.FC = () => {
             contingency_amount: contingencyAmount,
             approx_weeks: form.approx_weeks,
             total_costs: convertMoney(form.total_costs),
-            deposit_required: convertMoney(form.deposit_required),
+            deposit_percentage: depositPct,
+            deposit_amount: convertMoney(depositAmount),
             weekly_payments: weeklyCount,
             weekly_amount: weeklyAmount,
             line_items: preparedLineItems,
@@ -735,7 +747,15 @@ const BidForm: React.FC = () => {
                                             placeholderTrades[index % placeholderTrades.length];
 
                                         return (
-                                            <div key={index} className="line-item">
+                                            <div
+                                                key={index}
+                                                className="line-item"
+                                                style={{
+                                                    position: "relative",
+                                                    marginBottom: "40px",
+                                                }}
+                                            >
+
                                                 <h3>{index + 1} LINE ITEM</h3>
 
                                                 <label>Trade Name:</label>
@@ -781,19 +801,41 @@ const BidForm: React.FC = () => {
                                                 </select>
 
                                                 <label>Line Total ($):</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="$"
-                                                    value={item.line_total}
-                                                    onChange={(e) =>
-                                                        handleLineItemChange(
-                                                            index,
-                                                            "line_total",
-                                                            formatDollarWithCommas(e.target.value)
-                                                        )
-                                                    }
-                                                    className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
-                                                />
+
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        position: "relative", // ✅ anchor bubble here
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="text"
+                                                        placeholder="$"
+                                                        value={item.line_total}
+                                                        onChange={(e) =>
+                                                            handleLineItemChange(
+                                                                index,
+                                                                "line_total",
+                                                                formatDollarWithCommas(e.target.value)
+                                                            )
+                                                        }
+                                                        className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
+                                                    />
+
+                                                    <LineItemAIHelper
+                                                        scope={item.scope}
+                                                        zipCode={extractZipCode(form.company_address)}
+                                                        onApplyTotal={(amount) =>
+                                                            handleLineItemChange(
+                                                                index,
+                                                                "line_total",
+                                                                formatDollarWithCommas(amount)
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+
                                             </div>
                                         );
                                     })}
@@ -852,7 +894,7 @@ const BidForm: React.FC = () => {
                                             id="tax_percentage"
                                             value={form.tax_percentage}
                                             readOnly
-                                            placeholder="6"
+                                            placeholder="7"
                                             className={`${isInvalid("tax_percentage") ? "input-error" : ""} input-readonly`}
                                         />
                                         <span className="percent-suffix">%</span>
@@ -875,15 +917,26 @@ const BidForm: React.FC = () => {
                                     placeholder="$"
                                 />
 
-                                <label>Deposit Required:</label>
-                                <input
-                                    type="text"
-                                    id="deposit_required"
-                                    value={form.deposit_required}
-                                    onChange={handleFormChange}
-                                    placeholder="$"
-                                    className={isInvalid("deposit_required") ? "input-error" : ""}
-                                />
+                                <label>Deposit Required (%):</label>
+                                <div className="tax-row">
+                                    <div className="percent-input-wrapper">
+                                        <input
+                                            type="text"
+                                            id="deposit_percentage"
+                                            onChange={handleFormChange}
+                                            value={form.deposit_percentage}
+                                            placeholder="50"
+                                            className={isInvalid("deposit_percentage") ? "input-error" : ""}
+                                        />
+                                        <span className="percent-suffix">%</span>
+                                    </div>
+
+                                    <div className="tax-amount text-black">
+                                        {totalWithExtras > 0 && depositPct > 0
+                                            ? `${formatDollarWithCommas(Math.round(depositAmount))}`
+                                            : ""}
+                                    </div>
+                                </div>
 
                                 <label>Weekly Progress Payments:</label>
                                 <div className="tax-row">
@@ -950,7 +1003,13 @@ const BidForm: React.FC = () => {
                             />
 
                             <button
-                                onClick={() => setModal((m) => ({ ...m, open: false }))}
+                                onClick={() => {
+                                    if (modal.type === "success") {
+                                        navigate("/dashboard");
+                                    } else {
+                                        setModal((m) => ({ ...m, open: false }));
+                                    }
+                                }}
                                 style={{
                                     background:
                                         modal.type === "success"
@@ -967,7 +1026,7 @@ const BidForm: React.FC = () => {
                                     cursor: "pointer",
                                 }}
                             >
-                                Got it
+                                {modal.type === "success" ? "Finish" : "Got it"}
                             </button>
                         </div>
                     </div>

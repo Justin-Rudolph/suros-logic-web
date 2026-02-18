@@ -19,7 +19,7 @@ export interface BidFormState {
   approx_weeks: string | number;
   contingency_coverage: string;
   total_costs: string | number;
-  deposit_required: string | number;
+  deposit_percentage: string;
   weekly_payments: string | number;
   customer_name: string;
   customer_address: string;

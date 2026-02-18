@@ -22,6 +22,7 @@ import PrivacyPolicy from "./pages/Legal/PrivacyPolicy";
 import TermsConditions from "./pages/Legal/TermsConditions";
 
 import ViewBids from "./pages/Bids/ViewBids";
+import PriceEstimator from "./components/PriceEstimator";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
             {/* PUBLIC ROUTES */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Login />} />
+            <Route path="/estimate" element={<PriceEstimator />} />
 
             {/* PUBLIC LEGAL ROUTES */}
             <Route path="/privacy" element={<PrivacyPolicy />} />
