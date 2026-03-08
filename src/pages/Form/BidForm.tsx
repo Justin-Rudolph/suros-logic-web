@@ -132,24 +132,47 @@ const BidForm: React.FC = () => {
      * FORMAT DOLLAR INPUT ($ + commas only)
     --------------------------------*/
     const formatDollarWithCommas = (value: string | number) => {
-        const digits = String(value).replace(/\D/g, "");
-        if (!digits) return "";
-        const number = Number(digits);
-        return `$${number.toLocaleString("en-US")}`;
+        const cleaned = String(value).replace(/[^0-9.]/g, "");
+        if (!cleaned) return "";
+        const number = Number(cleaned);
+        if (isNaN(number)) return "";
+        return `$${number.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        })}`;
+    };
+
+    const formatDollarInput = (value: string) => {
+        let cleaned = value.replace(/[^0-9.]/g, "");
+
+        const parts = cleaned.split(".");
+        if (parts.length > 2) {
+            cleaned = parts[0] + "." + parts.slice(1).join("");
+        }
+
+        const [integerPart, decimalPart] = cleaned.split(".");
+
+        const formattedInteger = integerPart
+            ? Number(integerPart).toLocaleString("en-US")
+            : "";
+
+        if (decimalPart !== undefined) {
+            return `$${formattedInteger}.${decimalPart.slice(0, 2)}`;
+        }
+
+        return `$${formattedInteger}`;
     };
 
     const parseMoney = (value: string | number) =>
-        Number(String(value).replace(/[^0-9]/g, "")) || 0;
+        Number(String(value).replace(/[^0-9.]/g, "")) || 0;
 
     const parsePercent = (value: string) =>
         Number(value.replace(/[^0-9.]/g, "")) || 0;
 
+    const parseFormattedMoney = (value: string | number) =>
+        Number(String(value).replace(/[^0-9.]/g, "")) || 0;
 
-    const formatPercent = (raw: string) => {
-        const cleaned = raw.replace(/[^0-9.]/g, "");
-        if (!cleaned) return "";
-        return `${cleaned}%`;
-    };
+    const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
     /** -------------------------------
      * AUTO CALCULATE TOTAL COSTS (subtotal + contingency + tax)
@@ -162,28 +185,31 @@ const BidForm: React.FC = () => {
     const taxPct = parsePercent(form.tax_percentage);
     const contingencyPct = parsePercent(form.contingency_percentage);
 
-    const taxAmount = subtotal * (taxPct / 100);
-    const contingencyAmount = subtotal * (contingencyPct / 100);
+    const taxAmount = roundMoney(subtotal * (taxPct / 100));
 
-    const totalWithExtras = subtotal + taxAmount + contingencyAmount;
+    const contingencyAmount = roundMoney(subtotal * (contingencyPct / 100));
 
-    const depositPct = parsePercent(form.deposit_percentage)
-    const depositAmount = totalWithExtras * (depositPct / 100);
+    const totalWithExtras = roundMoney(subtotal + taxAmount + contingencyAmount);
 
-    const weeklyCount = Number(String(form.weekly_payments).replace(/[^0-9]/g, "")) || 0;
+    const depositPct = parsePercent(form.deposit_percentage);
 
-    const remainingAfterDeposit = totalWithExtras - depositAmount;
+    const depositAmount = roundMoney(totalWithExtras * (depositPct / 100));
+
+    const weeklyCount =
+        Number(String(form.weekly_payments).replace(/[^0-9]/g, "")) || 0;
+
+    const remainingAfterDeposit = roundMoney(totalWithExtras - depositAmount);
 
     const weeklyAmount =
         weeklyCount > 0 && remainingAfterDeposit > 0
-            ? remainingAfterDeposit / weeklyCount
+            ? roundMoney(remainingAfterDeposit / weeklyCount)
             : 0;
 
     useEffect(() => {
         // keep total_costs always in sync with line items + contingency + tax
         setForm((prev) => ({
             ...prev,
-            total_costs: totalWithExtras > 0 ? formatDollarWithCommas(Math.round(totalWithExtras)) : "",
+            total_costs: totalWithExtras > 0 ? formatDollarWithCommas(totalWithExtras) : "",
         }));
 
         // clear "total_costs" error once it becomes computed
@@ -428,7 +454,7 @@ const BidForm: React.FC = () => {
         }
 
         const convertMoney = (v: string | number) =>
-            Number(String(v).replace(/[^0-9]/g, "")) || 0;
+            Number(String(v).replace(/[^0-9.]/g, "")) || 0;
 
         const preparedLineItems = lineItems.map((item) => ({
             trade: item.trade,
@@ -444,9 +470,9 @@ const BidForm: React.FC = () => {
             tax_amount: taxAmount,
             contingency_amount: contingencyAmount,
             approx_weeks: form.approx_weeks,
-            total_costs: convertMoney(form.total_costs),
+            total_costs: parseFormattedMoney(form.total_costs),
             deposit_percentage: depositPct,
-            deposit_amount: convertMoney(depositAmount),
+            deposit_amount: depositAmount,
             weekly_payments: weeklyCount,
             weekly_amount: weeklyAmount,
             line_items: preparedLineItems,
@@ -817,7 +843,7 @@ const BidForm: React.FC = () => {
                                                             handleLineItemChange(
                                                                 index,
                                                                 "line_total",
-                                                                formatDollarWithCommas(e.target.value)
+                                                                formatDollarInput(e.target.value)
                                                             )
                                                         }
                                                         className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
@@ -861,7 +887,7 @@ const BidForm: React.FC = () => {
                                     <div className="tax-amount text-black">
                                         {subtotal > 0 && contingencyPct > 0
                                             ? `${formatDollarWithCommas(
-                                                Math.round(contingencyAmount)
+                                                contingencyAmount
                                             )} contingency`
                                             : ""}
                                     </div>
@@ -902,7 +928,7 @@ const BidForm: React.FC = () => {
 
                                     <div className="tax-amount text-black">
                                         {subtotal > 0 && taxPct > 0
-                                            ? `${formatDollarWithCommas(Math.round(taxAmount))} in taxes`
+                                            ? `${formatDollarWithCommas(taxAmount)} in taxes`
                                             : ""}
                                     </div>
                                 </div>
@@ -933,7 +959,7 @@ const BidForm: React.FC = () => {
 
                                     <div className="tax-amount text-black">
                                         {totalWithExtras > 0 && depositPct > 0
-                                            ? `${formatDollarWithCommas(Math.round(depositAmount))}`
+                                            ? `${formatDollarWithCommas(depositAmount)}`
                                             : ""}
                                     </div>
                                 </div>
@@ -951,7 +977,7 @@ const BidForm: React.FC = () => {
 
                                     <div className="tax-amount text-black">
                                         {weeklyAmount > 0
-                                            ? `${formatDollarWithCommas(Math.round(weeklyAmount))}/week`
+                                            ? `${formatDollarWithCommas(weeklyAmount)}/week`
                                             : ""}
                                     </div>
                                 </div>

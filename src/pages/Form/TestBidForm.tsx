@@ -1,3 +1,5 @@
+import LineItemAIHelper from "@/components/LineItemAIHelper";
+
 import React, {
   useState,
   ChangeEvent,
@@ -39,17 +41,12 @@ interface BidFormState {
   approx_weeks: number | string;
   contingency_coverage: string;
   total_costs: string;
-  deposit_required: string;
+  deposit_percentage: string;
   weekly_payments: number | string;
   customer_name: string;
   customer_address: string;
   customer_phone: string;
   customer_email: string;
-
-  // This existed in your original test state.
-  // We keep it in state/payload to preserve mock data,
-  // but the UI mirrors the FIRST (prod) snippet (no final due input).
-  final_amount_due?: string;
 }
 
 // Extend like prod (tax/contingency %)
@@ -88,11 +85,8 @@ const initialTestState: ExtendedBidFormState = {
   // but it will auto-sync once line items render.
   total_costs: "$18,750",
 
-  deposit_required: "$9,375",
+  deposit_percentage: "50",
   weekly_payments: 4,
-
-  // Kept (not shown in UI, but stays in payload)
-  final_amount_due: "$1,875",
 
   customer_name: "Michael Thompson",
   customer_address: "2290 Maple Ridge Ct, Tampa FL 33625",
@@ -376,7 +370,6 @@ const testLineItemSets: Record<number, LineItem[]> = {
   ],
 };
 
-
 const placeholderTrades = ["Plumbing", "Drywall", "Electrical", "Flooring"];
 
 const emptyLineItem: LineItem = {
@@ -439,17 +432,47 @@ const TestBidForm: React.FC = () => {
    * FORMAT DOLLAR INPUT ($ + commas only)
    --------------------------------*/
   const formatDollarWithCommas = (value: string | number) => {
-    const digits = String(value).replace(/\D/g, "");
-    if (!digits) return "";
-    const number = Number(digits);
-    return `$${number.toLocaleString("en-US")}`;
+    const cleaned = String(value).replace(/[^0-9.]/g, "");
+    if (!cleaned) return "";
+    const number = Number(cleaned);
+    if (isNaN(number)) return "";
+    return `$${number.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatDollarInput = (value: string) => {
+    let cleaned = value.replace(/[^0-9.]/g, "");
+
+    const parts = cleaned.split(".");
+    if (parts.length > 2) {
+      cleaned = parts[0] + "." + parts.slice(1).join("");
+    }
+
+    const [integerPart, decimalPart] = cleaned.split(".");
+
+    const formattedInteger = integerPart
+      ? Number(integerPart).toLocaleString("en-US")
+      : "";
+
+    if (decimalPart !== undefined) {
+      return `$${formattedInteger}.${decimalPart.slice(0, 2)}`;
+    }
+
+    return `$${formattedInteger}`;
   };
 
   const parseMoney = (value: string | number) =>
-    Number(String(value).replace(/[^0-9]/g, "")) || 0;
+    Number(String(value).replace(/[^0-9.]/g, "")) || 0;
 
   const parsePercent = (value: string) =>
     Number(value.replace(/[^0-9.]/g, "")) || 0;
+
+  const parseFormattedMoney = (value: string | number) =>
+    Number(String(value).replace(/[^0-9.]/g, "")) || 0;
+
+  const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
   /** --------------------------------------------------
    * AUTO CALCULATE TOTAL COSTS (subtotal + contingency + tax)
@@ -462,20 +485,24 @@ const TestBidForm: React.FC = () => {
   const taxPct = parsePercent(form.tax_percentage);
   const contingencyPct = parsePercent(form.contingency_percentage);
 
-  const taxAmount = subtotal * (taxPct / 100);
-  const contingencyAmount = subtotal * (contingencyPct / 100);
+  const taxAmount = roundMoney(subtotal * (taxPct / 100));
 
-  const totalWithExtras = subtotal + taxAmount + contingencyAmount;
+  const contingencyAmount = roundMoney(subtotal * (contingencyPct / 100));
 
-  const depositAmount = parseMoney(form.deposit_required);
+  const totalWithExtras = roundMoney(subtotal + taxAmount + contingencyAmount);
+
+  const depositPct = parsePercent(form.deposit_percentage);
+
+  const depositAmount = roundMoney(totalWithExtras * (depositPct / 100));
+
   const weeklyCount =
     Number(String(form.weekly_payments).replace(/[^0-9]/g, "")) || 0;
 
-  const remainingAfterDeposit = totalWithExtras - depositAmount;
+  const remainingAfterDeposit = roundMoney(totalWithExtras - depositAmount);
 
   const weeklyAmount =
     weeklyCount > 0 && remainingAfterDeposit > 0
-      ? remainingAfterDeposit / weeklyCount
+      ? roundMoney(remainingAfterDeposit / weeklyCount)
       : 0;
 
   useEffect(() => {
@@ -484,7 +511,7 @@ const TestBidForm: React.FC = () => {
       ...prev,
       total_costs:
         totalWithExtras > 0
-          ? formatDollarWithCommas(Math.round(totalWithExtras))
+          ? formatDollarWithCommas(totalWithExtras)
           : "",
     }));
 
@@ -519,9 +546,9 @@ const TestBidForm: React.FC = () => {
       return;
     }
 
-    // money fields ($ + commas)
-    if (id === "deposit_required") {
-      setForm((prev) => ({ ...prev, [id]: formatDollarWithCommas(value) }));
+    if (id === "deposit_percentage") {
+      const cleaned = value.replace(/[^0-9.]/g, "");
+      setForm((prev) => ({ ...prev, [id]: cleaned }));
       return;
     }
 
@@ -682,7 +709,7 @@ const TestBidForm: React.FC = () => {
     // total_costs required but computed
     req("total_costs");
 
-    req("deposit_required");
+    req("deposit_percentage");
     req("weekly_payments");
     req("customer_name");
     req("customer_address");
@@ -707,6 +734,14 @@ const TestBidForm: React.FC = () => {
   };
 
   /** -------------------------------
+   * EXTRACT ZIPCODE FROM CUSTOMER ADDRESS
+   --------------------------------*/
+  const extractZipCode = (address: string): string | null => {
+    const match = address.match(/\b\d{5}\b/);
+    return match ? match[0] : null;
+  };
+
+  /** -------------------------------
    * SUBMIT FORM (prod payload pattern + keeps your test fields)
    --------------------------------*/
   const handleSubmit = async (e: FormEvent) => {
@@ -722,7 +757,7 @@ const TestBidForm: React.FC = () => {
     }
 
     const convertMoney = (v: string | number) =>
-      Number(String(v).replace(/[^0-9]/g, "")) || 0;
+      Number(String(v).replace(/[^0-9.]/g, "")) || 0;
 
     const preparedLineItems = lineItems.map((item) => ({
       trade: item.trade,
@@ -743,16 +778,11 @@ const TestBidForm: React.FC = () => {
 
       // computed totals
       subtotal: subtotal,
-      total_costs: convertMoney(form.total_costs),
-      deposit_required: convertMoney(form.deposit_required),
+      total_costs: parseFormattedMoney(form.total_costs),
+      deposit_percentage: depositPct,
+      deposit_amount: depositAmount,
       weekly_payments: weeklyCount,
       weekly_amount: weeklyAmount,
-
-      // keep your test-only field in payload if present
-      final_amount_due: form.final_amount_due
-        ? convertMoney(form.final_amount_due)
-        : undefined,
-
       line_items: preparedLineItems,
     };
 
@@ -765,6 +795,8 @@ const TestBidForm: React.FC = () => {
           body: JSON.stringify(payload),
         }
       );
+
+      console.log(payload);
 
       if (res.ok) {
         showModal(
@@ -1016,7 +1048,14 @@ const TestBidForm: React.FC = () => {
                     placeholderTrades[index % placeholderTrades.length];
 
                   return (
-                    <div key={index} className="line-item">
+                    <div
+                      key={index}
+                      className="line-item"
+                      style={{
+                        position: "relative",
+                        marginBottom: "40px",
+                      }}
+                    >
                       <h3>{index + 1} LINE ITEM</h3>
 
                       <label>Trade Name:</label>
@@ -1063,23 +1102,44 @@ const TestBidForm: React.FC = () => {
                       </select>
 
                       <label>Line Total ($):</label>
-                      <input
-                        type="text"
-                        placeholder="$"
-                        value={item.line_total}
-                        onChange={(e) =>
-                          handleLineItemChange(
-                            index,
-                            "line_total",
-                            formatDollarWithCommas(e.target.value)
-                          )
-                        }
-                        className={
-                          isInvalid(`line_line_total_${index}`)
-                            ? "input-error"
-                            : ""
-                        }
-                      />
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          position: "relative",
+                        }}
+                      >
+                        <input
+                          type="text"
+                          placeholder="$"
+                          value={item.line_total}
+                          onChange={(e) =>
+                            handleLineItemChange(
+                              index,
+                              "line_total",
+                              formatDollarInput(e.target.value)
+                            )
+                          }
+                          className={
+                            isInvalid(`line_line_total_${index}`)
+                              ? "input-error"
+                              : ""
+                          }
+                        />
+
+                        <LineItemAIHelper
+                          scope={item.scope}
+                          zipCode={extractZipCode(form.company_address)}
+                          onApplyTotal={(amount) =>
+                            handleLineItemChange(
+                              index,
+                              "line_total",
+                              formatDollarWithCommas(amount)
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -1107,7 +1167,7 @@ const TestBidForm: React.FC = () => {
                 <div className="tax-amount text-black">
                   {subtotal > 0 && contingencyPct > 0
                     ? `${formatDollarWithCommas(
-                      Math.round(contingencyAmount)
+                      contingencyAmount
                     )} contingency`
                     : ""}
                 </div>
@@ -1150,7 +1210,7 @@ const TestBidForm: React.FC = () => {
                 <div className="tax-amount text-black">
                   {subtotal > 0 && taxPct > 0
                     ? `${formatDollarWithCommas(
-                      Math.round(taxAmount)
+                      taxAmount
                     )} in taxes`
                     : ""}
                 </div>
@@ -1167,15 +1227,26 @@ const TestBidForm: React.FC = () => {
                 placeholder="$"
               />
 
-              <label>Deposit Required:</label>
-              <input
-                type="text"
-                id="deposit_required"
-                value={form.deposit_required}
-                onChange={handleFormChange}
-                placeholder="$"
-                className={isInvalid("deposit_required") ? "input-error" : ""}
-              />
+              <label>Deposit Required (%):</label>
+              <div className="tax-row">
+                <div className="percent-input-wrapper">
+                  <input
+                    type="text"
+                    id="deposit_percentage"
+                    onChange={handleFormChange}
+                    value={form.deposit_percentage}
+                    placeholder="50"
+                    className={isInvalid("deposit_percentage") ? "input-error" : ""}
+                  />
+                  <span className="percent-suffix">%</span>
+                </div>
+
+                <div className="tax-amount text-black">
+                  {totalWithExtras > 0 && depositPct > 0
+                    ? `${formatDollarWithCommas(depositAmount)}`
+                    : ""}
+                </div>
+              </div>
 
               <label>Weekly Progress Payments:</label>
               <div className="tax-row">
@@ -1190,7 +1261,7 @@ const TestBidForm: React.FC = () => {
 
                 <div className="tax-amount text-black">
                   {weeklyAmount > 0
-                    ? `${formatDollarWithCommas(Math.round(weeklyAmount))}/week`
+                    ? `${formatDollarWithCommas(weeklyAmount)}/week`
                     : ""}
                 </div>
               </div>
@@ -1242,7 +1313,13 @@ const TestBidForm: React.FC = () => {
             />
 
             <button
-              onClick={() => setModal((m) => ({ ...m, open: false }))}
+              onClick={() => {
+                if (modal.type === "success") {
+                  navigate("/dashboard");
+                } else {
+                  setModal((m) => ({ ...m, open: false }));
+                }
+              }}
               style={{
                 background:
                   modal.type === "success"
@@ -1259,7 +1336,7 @@ const TestBidForm: React.FC = () => {
                 cursor: "pointer",
               }}
             >
-              Got it
+              {modal.type === "success" ? "Finish" : "Got it"}
             </button>
           </div>
         </div>
