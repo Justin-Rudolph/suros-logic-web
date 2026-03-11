@@ -16,10 +16,13 @@ export default function LineItemAIHelper({
   const [response, setResponse] = useState<any>(null);
   const [open, setOpen] = useState(false);
 
+  const [showBypassWarning, setShowBypassWarning] = useState(false);
+
   const generateEstimate = async () => {
     if (!scope.trim()) return;
 
     try {
+      setResponse(null); // clears previous estimate/questions
       setLoading(true);
 
       const API_BASE = import.meta.env.DEV
@@ -33,8 +36,7 @@ export default function LineItemAIHelper({
           description: scope,
           zipCode: zipCode,
         }),
-      }
-      );
+      });
 
       const data = await res.json();
       setResponse(data);
@@ -46,9 +48,39 @@ export default function LineItemAIHelper({
     }
   };
 
+  const bypassGenerate = async () => {
+    try {
+      setLoading(true);
+
+      const API_BASE = import.meta.env.DEV
+        ? "http://127.0.0.1:5001/suros-logic/us-central1"
+        : "";
+
+      const res = await fetch(`${API_BASE}/generateEstimate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: scope,
+          zipCode: zipCode,
+          bypass: true,
+        }),
+      });
+
+      const data = await res.json();
+
+      // Only update response
+      setResponse(data);
+
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
-      {/* BUTTON ROW — FORCED HORIZONTAL */}
+      {/* BUTTON ROW */}
       <div
         style={{
           display: "flex",
@@ -64,7 +96,7 @@ export default function LineItemAIHelper({
           type="button"
           onClick={generateEstimate}
           style={{
-            height: "36px", // match input height
+            height: "36px",
             padding: "0 12px",
             background: "#1e73be",
             color: "#fff",
@@ -99,7 +131,7 @@ export default function LineItemAIHelper({
         )}
       </div>
 
-      {/* MODAL */}
+      {/* MAIN MODAL */}
       {open && response && (
         <div
           style={{
@@ -123,6 +155,8 @@ export default function LineItemAIHelper({
               boxShadow: "0 30px 60px rgba(0,0,0,0.35)",
               position: "relative",
               color: "#000",
+              maxHeight: "80vh",
+              overflowY: "auto",
             }}
           >
             {/* CLOSE X */}
@@ -142,7 +176,7 @@ export default function LineItemAIHelper({
               ✕
             </button>
 
-            {response.status === "incomplete" && (
+            {!loading && response.status === "incomplete" && (
               <>
                 <h3
                   style={{
@@ -178,24 +212,75 @@ export default function LineItemAIHelper({
                   ))}
                 </ul>
 
-                <button
-                  onClick={() => setOpen(false)}
+                <div
                   style={{
-                    background: "#1e73be",
-                    color: "#fff",
-                    border: "none",
-                    padding: "10px 16px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "10px",
                   }}
                 >
-                  Close
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBypassWarning(true)}
+                    style={{
+                      background: "#e67e22",
+                      color: "#fff",
+                      border: "none",
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Bypass & Generate
+                  </button>
+                  <button
+                    onClick={() => setOpen(false)}
+                    style={{
+                      background: "#1e73be",
+                      color: "#fff",
+                      border: "none",
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
               </>
             )}
 
+            {loading && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "40px 20px",
+                  color: "#000",
+                  textAlign: "center"
+                }}
+              >
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    border: "4px solid #ddd",
+                    borderTop: "4px solid #1e73be",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite",
+                    marginBottom: "12px"
+                  }}
+                />
+                <div style={{ fontWeight: 600 }}>
+                  Generating Estimate...
+                </div>
+              </div>
+            )}
 
-            {response.status === "complete" && (
+            {!loading && response.status === "complete" && (
               <>
                 <h3 style={{ marginBottom: "16px", fontWeight: "bold" }}>
                   AI Estimate
@@ -203,17 +288,17 @@ export default function LineItemAIHelper({
 
                 <p>
                   <strong>Material: </strong>
-                  {response.estimate.material_cost?.toLocaleString()}
+                  {response.estimate.material_cost}
                 </p>
 
                 <p>
                   <strong>Labor: </strong>
-                  {response.estimate.labor_cost?.toLocaleString()}
+                  {response.estimate.labor_cost}
                 </p>
 
                 <p style={{ marginBottom: "16px" }}>
                   <strong>Total: </strong>
-                  {response.estimate.total_cost?.toLocaleString()}
+                  {response.estimate.total_cost}
                 </p>
 
                 <p style={{ marginBottom: "20px" }}>
@@ -263,6 +348,105 @@ export default function LineItemAIHelper({
           </div>
         </div>
       )}
+
+      {/* BYPASS WARNING MODAL */}
+      {showBypassWarning && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "10px",
+              maxWidth: "420px",
+              width: "100%",
+              padding: "26px",
+              textAlign: "center",
+              color: "#000"
+            }}
+          >
+            <h3 style={{ marginBottom: "12px", fontWeight: "bold", color: "black" }}>
+              Generate Estimate Without Required Info?
+            </h3>
+
+            <p style={{ marginBottom: "20px", lineHeight: 1.5 }}>
+              Bypassing required project details may result in an estimate that
+              is <strong>not 100% accurate.</strong>
+              <br /><br />
+              The AI will generate a rough estimate using industry averages and
+              assumptions based on the information currently provided.
+              <br /><br />
+              This estimate should be used for <strong>ballpark pricing only.</strong>
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "10px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowBypassWarning(false);
+                }}
+                style={{
+                  background: "#1e73be",
+                  border: "none",
+                  padding: "10px 16px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  setShowBypassWarning(false);
+                  bypassGenerate();
+                }}
+
+                style={{
+                  background: "#e67e22",
+                  color: "#fff",
+                  border: "none",
+                  padding: "10px 16px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Generate Estimate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <style>
+        {`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}
+      </style>
     </>
   );
 }

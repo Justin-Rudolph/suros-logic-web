@@ -6,7 +6,7 @@ module.exports = async function generateEstimateHandler(
   OPENAI_API_KEY
 ) {
   try {
-    const { description, zipCode } = req.body || {};
+    const { description, zipCode, bypass } = req.body || {};
 
     if (!OPENAI_API_KEY) {
       return res.status(500).json({
@@ -19,7 +19,7 @@ module.exports = async function generateEstimateHandler(
     });
 
     // Basic validation before calling OpenAI
-    if (!description || description.trim().length < 15) {
+    if (!bypass && (!description || description.trim().length < 15)) {
       return res.json({
         status: "incomplete",
         questions: [
@@ -54,13 +54,21 @@ Respond only in the following JSON format:
 }
 
 Requirements:
-- If required information is missing, return "status": "incomplete" and include any necessary clarification questions inside the "questions" array. You must add to the "questions" array if missing area dimensions or specific material descriptions.
-- A zip code is required to produce a complete estimate. If no zip code is provided, return "incomplete".
+
+- If BYPASS MODE is TRUE, you must generate a complete estimate even if information is missing.
+- When bypassing, use regional material and labor cost averages based on the provided zip code (ONLY if no zip code assume reasonable contractor industry averages for missing information).
+- Do NOT return "incomplete" when bypass mode is TRUE.
+
+Normal behavior (when bypass mode is FALSE):
+- If required information is missing, return "status": "incomplete" and include clarification questions inside the "questions" array.
+- A zip code is required to produce a complete estimate unless bypass mode is TRUE.
+
+Other rules:
 - You may not ask the user to provide pricing. You must independently determine pricing based on the details given.
 - Use regional material and labor cost averages based on the provided zip code.
 - If exact material specifications are unclear, determine a reasonable price range (low-end to high-end), calculate the median between those values, and use that median unless the range difference is extreme.
 
-If sufficient information is available:
+If sufficient information is available (or bypass mode is TRUE):
 - Calculate and provide a material cost estimate as a dollar amount.
 - Calculate and provide a labor cost estimate as a dollar amount.
 - Provide the combined total cost (labor + materials) as a dollar amount.
@@ -75,6 +83,8 @@ Do not include any additional commentary outside of the required JSON response.
         {
           role: "user",
           content: `
+BYPASS MODE: ${bypass ? "TRUE" : "FALSE"}
+
 Zip Code: ${zipCode || "Not Provided"}
 
 Scope of Work:
