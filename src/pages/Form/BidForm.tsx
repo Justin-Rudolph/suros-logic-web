@@ -831,12 +831,18 @@ const BidForm: React.FC = () => {
                                                 <div
                                                     style={{
                                                         display: "flex",
-                                                        alignItems: "center",
-                                                        position: "relative", // ✅ anchor bubble here
+                                                        alignItems: "flex-start",
+                                                        position: "relative",
+                                                        flexWrap: "wrap",
+                                                        gap: "6px",
                                                     }}
                                                 >
                                                     <input
                                                         type="text"
+                                                        style={{
+                                                            flex: "1 1 200px",
+                                                            minWidth: "150px"
+                                                        }}
                                                         placeholder="$"
                                                         value={item.line_total}
                                                         onChange={(e) =>

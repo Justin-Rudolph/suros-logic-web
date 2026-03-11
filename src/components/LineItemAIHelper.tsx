@@ -96,6 +96,7 @@ export default function LineItemAIHelper({
           type="button"
           onClick={generateEstimate}
           style={{
+            flexShrink: 0,
             height: "36px",
             padding: "0 12px",
             background: "#1e73be",
