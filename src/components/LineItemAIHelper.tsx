@@ -371,7 +371,9 @@ export default function LineItemAIHelper({
               width: "100%",
               padding: "26px",
               textAlign: "center",
-              color: "#000"
+              color: "#000",
+              maxHeight: "80vh",
+              overflowY: "auto"
             }}
           >
             <h3 style={{ marginBottom: "12px", fontWeight: "bold", color: "black" }}>
@@ -393,6 +395,7 @@ export default function LineItemAIHelper({
                 display: "flex",
                 justifyContent: "space-between",
                 gap: "10px",
+                flexWrap: "wrap"
               }}
             >
               <button
