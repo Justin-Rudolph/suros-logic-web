@@ -523,6 +523,25 @@ const TestBidForm: React.FC = () => {
   }, [lineItems, form.tax_percentage, form.contingency_percentage]);
 
   /** -------------------------------
+ * SET FIELD TO N/A
+ --------------------------------*/
+  const handleSetNA = (field: "customer_phone" | "customer_email") => {
+    setForm((prev) => {
+      const isNA = prev[field] === "N/A";
+
+      return {
+        ...prev,
+        [field]: isNA ? "" : "N/A",
+      };
+    });
+
+    setErrors((prev) => ({
+      ...prev,
+      [field]: false,
+    }));
+  };
+
+  /** -------------------------------
    * FORM CHANGE HANDLER (prod rules)
    --------------------------------*/
   const handleFormChange = (
@@ -535,6 +554,11 @@ const TestBidForm: React.FC = () => {
 
     // phones
     if (id === "company_phone" || id === "customer_phone") {
+      if (value === "N/A") {
+        setForm((prev) => ({ ...prev, [id]: "N/A" }));
+        return;
+      }
+
       setForm((prev) => ({ ...prev, [id]: formatPhone(value) }));
       return;
     }
@@ -664,7 +688,7 @@ const TestBidForm: React.FC = () => {
    --------------------------------*/
   const validateEmail = (e: FocusEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (!value) return;
+    if (!value || value === "N/A") return;
 
     const valid = /\S+@\S+\.\S+/.test(value);
     if (!valid) {
@@ -713,8 +737,15 @@ const TestBidForm: React.FC = () => {
     req("weekly_payments");
     req("customer_name");
     req("customer_address");
-    req("customer_phone");
-    req("customer_email");
+
+    // Customer phone/email only required when not marked N/A
+    if (!String(form.customer_phone ?? "").trim()) {
+      newErrors["customer_phone"] = true;
+    }
+
+    if (!String(form.customer_email ?? "").trim()) {
+      newErrors["customer_email"] = true;
+    }
 
     // Line items required: must exist AND each one must be complete
     if (!lineItems.length) {
@@ -950,25 +981,101 @@ const TestBidForm: React.FC = () => {
               />
 
               <label>Customer Phone:</label>
-              <input
-                type="text"
-                id="customer_phone"
-                value={form.customer_phone}
-                onChange={handleFormChange}
-                placeholder="(000) 000-0000"
-                className={isInvalid("customer_phone") ? "input-error" : ""}
-              />
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  width: "100%",
+                }}
+              >
+                <input
+                  type="text"
+                  id="customer_phone"
+                  value={form.customer_phone}
+                  onChange={handleFormChange}
+                  placeholder="(000) 000-0000"
+                  readOnly={form.customer_phone === "N/A"}
+                  title={
+                    form.customer_phone === "N/A"
+                      ? "This field cannot be edited when N/A is selected"
+                      : ""
+                  }
+                  className={`${isInvalid("customer_phone") ? "input-error" : ""} ${form.customer_phone === "N/A" ? "input-readonly" : ""
+                    }`}
+                  style={{ flex: 1 }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => handleSetNA("customer_phone")}
+                  style={{
+                    whiteSpace: "nowrap",
+                    padding: "10px 14px",
+                    background: form.customer_phone === "N/A" ? "#1e73be" : "#e5e7eb",
+                    color: form.customer_phone === "N/A" ? "#fff" : "#111",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    opacity: form.customer_phone === "N/A" ? 1 : 0.85,
+                    position: "relative",
+                    top: "-4px"
+                  }}
+                >
+                  N/A
+                </button>
+              </div>
 
               <label>Customer Email:</label>
-              <input
-                type="email"
-                id="customer_email"
-                value={form.customer_email}
-                onChange={handleFormChange}
-                onBlur={validateEmail}
-                placeholder="example@email.com"
-                className={isInvalid("customer_email") ? "input-error" : ""}
-              />
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  width: "100%",
+                }}
+              >
+                <input
+                  type="email"
+                  id="customer_email"
+                  value={form.customer_email}
+                  onChange={handleFormChange}
+                  onBlur={validateEmail}
+                  placeholder="example@email.com"
+                  readOnly={form.customer_email === "N/A"}
+                  title={
+                    form.customer_email === "N/A"
+                      ? "This field cannot be edited when N/A is selected"
+                      : ""
+                  }
+                  className={`${isInvalid("customer_email") ? "input-error" : ""} ${form.customer_email === "N/A" ? "input-readonly" : ""
+                    }`}
+                  style={{ flex: 1 }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => handleSetNA("customer_email")}
+                  style={{
+                    whiteSpace: "nowrap",
+                    padding: "10px 14px",
+                    background: form.customer_email === "N/A" ? "#1e73be" : "#e5e7eb",
+                    color: form.customer_email === "N/A" ? "#fff" : "#111",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    opacity: form.customer_email === "N/A" ? 1 : 0.85,
+                    position: "relative",
+                    top: "-4px"
+                  }}
+                >
+                  N/A
+                </button>
+              </div>
 
               {/* PROJECT */}
               <h2>Project & Payment Info</h2>

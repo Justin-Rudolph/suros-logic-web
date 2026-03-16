@@ -220,6 +220,25 @@ const BidForm: React.FC = () => {
     }, [lineItems, form.tax_percentage, form.contingency_percentage]);
 
     /** -------------------------------
+     * SET FIELD TO N/A
+     --------------------------------*/
+    const handleSetNA = (field: "customer_phone" | "customer_email") => {
+        setForm((prev) => {
+            const isNA = prev[field] === "N/A";
+
+            return {
+                ...prev,
+                [field]: isNA ? "" : "N/A",
+            };
+        });
+
+        setErrors((prev) => ({
+            ...prev,
+            [field]: false,
+        }));
+    };
+
+    /** -------------------------------
      * FORM CHANGE HANDLER
      --------------------------------*/
     const handleFormChange = (
@@ -232,6 +251,11 @@ const BidForm: React.FC = () => {
 
         // phones
         if (id === "company_phone" || id === "customer_phone") {
+            if (value === "N/A") {
+                setForm((prev) => ({ ...prev, [id]: "N/A" }));
+                return;
+            }
+
             setForm((prev) => ({ ...prev, [id]: formatPhone(value) }));
             return;
         }
@@ -360,7 +384,7 @@ const BidForm: React.FC = () => {
      --------------------------------*/
     const validateEmail = (e: FocusEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        if (!value) return;
+        if (!value || value === "N/A") return;
 
         const valid = /\S+@\S+\.\S+/.test(value);
         if (!valid) {
@@ -409,8 +433,15 @@ const BidForm: React.FC = () => {
         req("weekly_payments");
         req("customer_name");
         req("customer_address");
-        req("customer_phone");
-        req("customer_email");
+
+        // Customer phone/email only required when not marked N/A
+        if (!String(form.customer_phone ?? "").trim()) {
+            newErrors["customer_phone"] = true;
+        }
+
+        if (!String(form.customer_email ?? "").trim()) {
+            newErrors["customer_email"] = true;
+        }
 
         // Line items required: must exist AND each one must be complete
         if (!lineItems.length) {
@@ -522,7 +553,7 @@ const BidForm: React.FC = () => {
 
     return (
         (loading || !profile) ?
-            < div className="suros-gradient" >
+            <div className="suros-gradient">
                 <div
                     style={{
                         padding: "40px",
@@ -552,11 +583,10 @@ const BidForm: React.FC = () => {
                         Refresh
                     </button>
                 </div>
-            </div >
+            </div>
             :
             <div className="suros-gradient">
                 <div className="bid-form-page">
-                    {/* 🔙 BACK BUTTON */}
                     <button
                         onClick={() => navigate("/dashboard")}
                         style={{
@@ -588,7 +618,6 @@ const BidForm: React.FC = () => {
                                 <b>{form.company_name}</b>
                             </h1>
 
-                            {/* HEADER INFO */}
                             <div className="header-info">
                                 <label>Address:</label>
                                 <input
@@ -620,7 +649,6 @@ const BidForm: React.FC = () => {
 
                                 <p className="slogan">{form.company_slogan}</p>
 
-                                {/* company_slogan is required but displayed as text */}
                                 {isInvalid("company_slogan") && (
                                     <div className="field-error-text">Company slogan is required.</div>
                                 )}
@@ -629,9 +657,7 @@ const BidForm: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* FULL FORM */}
                             <form onSubmit={handleSubmit}>
-                                {/* INVOICE INFO */}
                                 <h2>Invoice Information</h2>
 
                                 <label>Invoice Date:</label>
@@ -653,7 +679,6 @@ const BidForm: React.FC = () => {
                                     className={isInvalid("invoice_number") ? "input-error" : ""}
                                 />
 
-                                {/* CUSTOMER INFO */}
                                 <h2>Customer Info</h2>
 
                                 <label>Customer Name:</label>
@@ -677,27 +702,90 @@ const BidForm: React.FC = () => {
                                 />
 
                                 <label>Customer Phone:</label>
-                                <input
-                                    type="text"
-                                    id="customer_phone"
-                                    value={form.customer_phone}
-                                    onChange={handleFormChange}
-                                    placeholder="(000) 000-0000"
-                                    className={isInvalid("customer_phone") ? "input-error" : ""}
-                                />
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        width: "100%",
+                                    }}
+                                >
+                                    <input
+                                        type="text"
+                                        id="customer_phone"
+                                        value={form.customer_phone}
+                                        onChange={handleFormChange}
+                                        placeholder="(000) 000-0000"
+                                        readOnly={form.customer_phone === "N/A"}
+                                        title={form.customer_phone === "N/A" ? "This field cannot be edited when N/A is selected" : ""}
+                                        className={`${isInvalid("customer_phone") ? "input-error" : ""} ${form.customer_phone === "N/A" ? "input-readonly" : ""}`}
+                                        style={{ flex: 1 }}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSetNA("customer_phone")}
+                                        style={{
+                                            whiteSpace: "nowrap",
+                                            padding: "10px 14px",
+                                            background: form.customer_phone === "N/A" ? "#1e73be" : "#e5e7eb",
+                                            color: form.customer_phone === "N/A" ? "#fff" : "#111",
+                                            border: "none",
+                                            borderRadius: "6px",
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            opacity: form.customer_phone === "N/A" ? 1 : 0.85,
+                                            position: "relative",
+                                            top: "-4px"
+                                        }}
+                                    >
+                                        N/A
+                                    </button>
+                                </div>
 
                                 <label>Customer Email:</label>
-                                <input
-                                    type="email"
-                                    id="customer_email"
-                                    value={form.customer_email}
-                                    onChange={handleFormChange}
-                                    onBlur={validateEmail}
-                                    placeholder="example@email.com"
-                                    className={isInvalid("customer_email") ? "input-error" : ""}
-                                />
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        width: "100%",
+                                    }}
+                                >
+                                    <input
+                                        type="email"
+                                        id="customer_email"
+                                        value={form.customer_email}
+                                        onChange={handleFormChange}
+                                        onBlur={validateEmail}
+                                        placeholder="example@email.com"
+                                        readOnly={form.customer_email === "N/A"}
+                                        title={form.customer_email === "N/A" ? "This field cannot be edited when N/A is selected" : ""}
+                                        className={`${isInvalid("customer_email") ? "input-error" : ""} ${form.customer_email === "N/A" ? "input-readonly" : ""}`}
+                                        style={{ flex: 1 }}
+                                    />
 
-                                {/* PROJECT */}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSetNA("customer_email")}
+                                        style={{
+                                            whiteSpace: "nowrap",
+                                            padding: "10px 14px",
+                                            background: form.customer_email === "N/A" ? "#1e73be" : "#e5e7eb",
+                                            color: form.customer_email === "N/A" ? "#fff" : "#111",
+                                            border: "none",
+                                            borderRadius: "6px",
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            opacity: form.customer_email === "N/A" ? 1 : 0.85,
+                                            position: "relative",
+                                            top: "-4px"
+                                        }}
+                                    >
+                                        N/A
+                                    </button>
+                                </div>
+
                                 <h2>Project & Payment Info</h2>
 
                                 <label>Salesperson Name:</label>
@@ -740,7 +828,6 @@ const BidForm: React.FC = () => {
                                     className={isInvalid("approx_weeks") ? "input-error" : ""}
                                 />
 
-                                {/* LINE ITEMS */}
                                 <h2>Line Items</h2>
 
                                 <label>How many line items (trades)?</label>
@@ -781,7 +868,6 @@ const BidForm: React.FC = () => {
                                                     marginBottom: "40px",
                                                 }}
                                             >
-
                                                 <h3>{index + 1} LINE ITEM</h3>
 
                                                 <label>Trade Name:</label>
@@ -867,13 +953,11 @@ const BidForm: React.FC = () => {
                                                         }
                                                     />
                                                 </div>
-
                                             </div>
                                         );
                                     })}
                                 </div>
 
-                                {/* CONTINGENCY */}
                                 <h2>Contingency</h2>
 
                                 <label>Contingency (%):</label>
@@ -914,10 +998,8 @@ const BidForm: React.FC = () => {
                                     </strong>
                                 </p>
 
-                                {/* TOTALS */}
                                 <h2>Totals & Payment</h2>
 
-                                {/* TAX (%) FIELD */}
                                 <label>Tax (%):</label>
                                 <div className="tax-row">
                                     <div className="percent-input-wrapper">
@@ -988,7 +1070,6 @@ const BidForm: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* SUBMIT */}
                                 <div className="submit-area">
                                     <button type="submit">Generate My Bid</button>
                                     <p className="powered">POWERED by Suros Logic Systems, LLC</p>
@@ -997,7 +1078,7 @@ const BidForm: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                {/* ✅ GLOBAL MODAL */}
+
                 {modal.open && (
                     <div
                         style={{
