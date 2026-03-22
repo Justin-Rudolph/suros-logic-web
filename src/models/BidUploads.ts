@@ -14,5 +14,5 @@ export interface BidUpload {
     storagePath: string;
     downloadURL: string;
 
-    timeOfCreation: Timestamp;
+    createdAt: Timestamp;
 }

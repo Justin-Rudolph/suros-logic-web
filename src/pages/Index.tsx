@@ -8,15 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 const Index = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
-
-  const [modal, setModal] = useState<{
-    open: boolean;
-  }>({
-    open: false,
-  });
-
 
   // AUTO-REDIRECT IF LOGGED IN
   useEffect(() => {
@@ -38,6 +31,35 @@ const Index = () => {
     e.preventDefault();
     console.log("Demo request:", formData);
     // Handle form submission
+  };
+
+  const makePayment = async () => {
+    try {
+      const apiBase = import.meta.env.DEV
+        ? "http://127.0.0.1:5001/suros-logic/us-central1"
+        : "";
+
+      const response = await fetch(`${apiBase}/stripe/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+
+        // ❌ DO NOT send profile
+        body: JSON.stringify({
+          // send nothing OR optional metadata
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Checkout failed: ${response.status}`);
+      }
+
+      const session = await response.json();
+
+      window.location.href = session.url;
+
+    } catch (err) {
+      console.error("Payment error:", err);
+    }
   };
 
   return (
@@ -393,7 +415,7 @@ const Index = () => {
                 <Button
                   className="w-full bg-primary hover:bg-primary/90"
                   size="lg"
-                  onClick={() => setModal({ open: true })}
+                  onClick={makePayment}
                 >
                   Get Started
                 </Button>
@@ -566,100 +588,6 @@ const Index = () => {
           <p className="text-muted-foreground">© 2024 Suros Logic Systems. All rights reserved.</p>
         </div>
       </footer>
-
-      {modal.open && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "10px",
-              width: "100%",
-              maxWidth: "480px",
-              padding: "28px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
-              textAlign: "center",
-            }}
-          >
-            <h2
-              style={{
-                marginBottom: "12px",
-                color: "#000",
-                fontWeight: "bold",
-              }}
-            >
-              ℹ️ Payments Coming Soon
-            </h2>
-
-            <p
-              style={{
-                color: "#000",
-                lineHeight: 1.6,
-                marginBottom: "26px",
-              }}
-            >
-              We are still setting up payments. If you are interested in purchasing our
-              services, please set up a meeting with us and we’ll take care of the rest.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                justifyContent: "center",
-              }}
-            >
-              {/* CANCEL */}
-              <button
-                onClick={() => setModal({ open: false })}
-                style={{
-                  background: "#e0e0e0",
-                  color: "#000",
-                  padding: "10px 20px",
-                  borderRadius: "6px",
-                  border: "none",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-
-              {/* BOOK MEETING */}
-              <a
-                href="https://calendly.com/astutemarketing-agency/new-meeting"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <button
-                  style={{
-                    background: "#1e73be",
-                    color: "#fff",
-                    padding: "10px 22px",
-                    borderRadius: "6px",
-                    border: "none",
-                    fontSize: "15px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Book Meeting
-                </button>
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

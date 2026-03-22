@@ -18,6 +18,7 @@ import {
 
 import { firestore, storage, auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 import "./ViewBids.css";
 import "../Dashboard/Dashboard.css";
@@ -26,6 +27,7 @@ import { BidUpload } from "@/models/BidUploads";
 export default function ViewBids() {
     const navigate = useNavigate();
     const user = auth.currentUser;
+    const { profile } = useAuth();
 
     const [uploads, setUploads] = useState<BidUpload[]>([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -36,9 +38,9 @@ export default function ViewBids() {
     const [description, setDescription] = useState("");
 
     const [deleteTarget, setDeleteTarget] = useState<BidUpload | null>(null);
-
     const [titleError, setTitleError] = useState(false);
 
+    const [showBillingModal, setShowBillingModal] = useState(false);
 
     // --------------------------------------------------
     // LISTEN FOR USER UPLOADS
@@ -62,8 +64,8 @@ export default function ViewBids() {
 
             list.sort(
                 (a, b) =>
-                    (b.timeOfCreation?.seconds || 0) -
-                    (a.timeOfCreation?.seconds || 0)
+                    (b.createdAt?.seconds || 0) -
+                    (a.createdAt?.seconds || 0)
             );
 
             setUploads(list);
@@ -89,6 +91,15 @@ export default function ViewBids() {
         setShowUploadModal(true);
     };
 
+    const handleUploadClick = () => {
+        if (!profile?.isSubscribed) {
+            setShowBillingModal(true);
+            return;
+        }
+
+        document.getElementById("upload-file-input")?.click();
+    };
+
     // --------------------------------------------------
     // UPLOAD
     // --------------------------------------------------
@@ -112,7 +123,7 @@ export default function ViewBids() {
                 (selectedFile.size / 1024 / 1024).toFixed(2) + " MB",
             storagePath,
             downloadURL,
-            timeOfCreation: serverTimestamp(),
+            createdAt: serverTimestamp(),
         });
 
         setShowUploadModal(false);
@@ -123,7 +134,6 @@ export default function ViewBids() {
         setTimeout(() => {
             setUploadSuccess(false);
         }, 2000);
-
     };
 
     // --------------------------------------------------
@@ -169,15 +179,12 @@ export default function ViewBids() {
                 {/* CENTERED UPLOAD (NO FILES) */}
                 {uploads.length === 0 && (
                     <div className="empty-upload-center">
-                        <label className="upload-btn upload-btn-large">
+                        <button
+                            className="upload-btn upload-btn-large"
+                            onClick={handleUploadClick}
+                        >
                             Upload File
-                            <input
-                                type="file"
-                                accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
-                                hidden
-                                onChange={handleFileSelect}
-                            />
-                        </label>
+                        </button>
                     </div>
                 )}
 
@@ -185,9 +192,7 @@ export default function ViewBids() {
                 {uploads.length > 0 && (
                     <>
                         <button
-                            onClick={() =>
-                                document.getElementById("upload-file-input")?.click()
-                            }
+                            onClick={handleUploadClick}
                             style={{
                                 position: "fixed",
                                 top: "20px",
@@ -205,17 +210,16 @@ export default function ViewBids() {
                         >
                             Upload File
                         </button>
-
-                        <input
-                            id="upload-file-input"
-                            type="file"
-                            accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
-                            hidden
-                            onChange={handleFileSelect}
-                        />
                     </>
                 )}
 
+                <input
+                    id="upload-file-input"
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
+                    hidden
+                    onChange={handleFileSelect}
+                />
 
                 {/* SUCCESS ALERT */}
                 {uploadSuccess && (
@@ -223,7 +227,6 @@ export default function ViewBids() {
                         Upload completed successfully!
                     </div>
                 )}
-
 
                 {/* FILE LIST */}
                 {uploads.length > 0 && (
@@ -284,7 +287,6 @@ export default function ViewBids() {
                             </p>
                         )}
 
-
                         <label>Description</label>
                         <textarea
                             className="modal-textarea"
@@ -312,7 +314,6 @@ export default function ViewBids() {
                             >
                                 Upload
                             </button>
-
                         </div>
                     </div>
                 </div>
@@ -352,6 +353,39 @@ export default function ViewBids() {
                 </div>
             )}
 
+            {/* 🔒 SUBSCRIPTION MODAL */}
+            {showBillingModal && (
+                <div className="billing-modal-overlay">
+                    <div className="billing-modal">
+                        <h2>Subscription Inactive</h2>
+
+                        <p>
+                            Your subscription is currently inactive.
+                            <br />
+                            Please reactivate your subscription to continue using Suros Logic.
+                        </p>
+
+                        <div className="billing-modal-actions">
+                            <button
+                                className="secondary"
+                                onClick={() => setShowBillingModal(false)}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                className="primary"
+                                onClick={() => {
+                                    setShowBillingModal(false);
+                                    navigate("/billing");
+                                }}
+                            >
+                                Reactivate Subscription
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

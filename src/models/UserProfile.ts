@@ -3,14 +3,19 @@ import { Timestamp } from "firebase/firestore";
 export type UserProfile = {
   uid: string;
 
+  // Editable fields
   displayName: string;
   companyName: string;
   companyAddress: string;
   slogan: string;
-
   phone: string;
   email: string;
 
+  // System fields
   profileComplete: boolean;
-  timeOfCreation: Timestamp;
-};
+  createdAt: Timestamp;
+
+  // Billing / Stripe (READ-ONLY in UI)
+  stripeCustomerId?: string;
+  isSubscribed?: boolean;
+}
