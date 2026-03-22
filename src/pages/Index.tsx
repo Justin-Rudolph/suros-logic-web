@@ -585,7 +585,7 @@ const Index = () => {
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto text-center space-y-4">
           <img src={surosLogo} alt="Suros Logic Systems" className="h-10 mx-auto opacity-70" />
-          <p className="text-muted-foreground">© 2024 Suros Logic Systems. All rights reserved.</p>
+          <p className="text-muted-foreground">© 2026 Suros Logic Systems. All rights reserved.</p>
         </div>
       </footer>
     </div>
