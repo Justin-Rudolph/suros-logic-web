@@ -29,7 +29,7 @@ export async function signup(
     phone: profileOverrides?.phone ?? "",
     email,
     profileComplete: false,
-    timeOfCreation: Timestamp.now(),
+    createdAt: Timestamp.now(),
   };
 
 

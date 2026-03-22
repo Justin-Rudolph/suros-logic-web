@@ -29,6 +29,10 @@ export default function ProfileDropdown() {
             Edit Profile
           </Link>
 
+          <Link to="/billing" className="dropdown-item">
+            Manage Subscription
+          </Link>
+
           <Link to="/privacy" className="dropdown-item">
             Privacy Policy
           </Link>

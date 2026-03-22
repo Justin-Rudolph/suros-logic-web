@@ -22,22 +22,26 @@ export default function EditProfile() {
   // ---------------------------------------------------------
   // HUMAN-FRIENDLY LABELS FOR VALIDATION MESSAGES
   // ---------------------------------------------------------
-  const fieldLabels: Record<keyof UserProfile, string> = {
-    uid: "User ID",
+  type EditableField =
+    | "displayName"
+    | "companyName"
+    | "companyAddress"
+    | "slogan"
+    | "phone"
+    | "email";
+
+  const fieldLabels: Record<EditableField, string> = {
     displayName: "Full Name",
     companyName: "Company Name",
     companyAddress: "Company Address",
     slogan: "Company Slogan",
     phone: "Phone Number",
     email: "Email Address",
-    profileComplete: "Profile Complete",
-    timeOfCreation: "Time of Creation",
   };
 
-  const requiredFields: (keyof UserProfile)[] = [
+  const requiredFields: EditableField[] = [
     "companyName",
     "companyAddress",
-    "slogan",
     "displayName",
     "email",
     "phone",
@@ -48,7 +52,10 @@ export default function EditProfile() {
   // ---------------------------------------------------------
   useEffect(() => {
     const load = async () => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       const ref = doc(firestore, "users", user.uid);
       const snap = await getDoc(ref);
@@ -56,16 +63,16 @@ export default function EditProfile() {
       const data: UserProfile = snap.exists()
         ? (snap.data() as UserProfile)
         : {
-          uid: user.uid,
-          displayName: "",
-          companyName: "",
-          companyAddress: "",
-          slogan: "",
-          phone: "",
-          email: user.email || "",
-          profileComplete: false,
-          timeOfCreation: Timestamp.now(),
-        };
+            uid: user.uid,
+            displayName: "",
+            companyName: "",
+            companyAddress: "",
+            slogan: "",
+            phone: "",
+            email: user.email || "",
+            profileComplete: false,
+            createdAt: Timestamp.now(),
+          };
 
       setForm(data);
       setLoading(false);
@@ -94,38 +101,72 @@ export default function EditProfile() {
   };
 
   // ---------------------------------------------------------
-  // SAVE PROFILE
+  // SAVE PROFILE (FIXED)
   // ---------------------------------------------------------
   const save = async () => {
     if (!user || !form) return;
     if (!validate()) return;
 
     setSaving(true);
+    setValidationError("");
 
     try {
       const ref = doc(firestore, "users", user.uid);
+      const snap = await getDoc(ref);
+      const isNewUser = !snap.exists();
 
-      const safeUpdate: UserProfile = {
-        uid: user.uid,
-        displayName: form.displayName,
-        companyName: form.companyName,
-        companyAddress: form.companyAddress,
-        slogan: form.slogan,
-        phone: form.phone,
-        email: form.email,
-        profileComplete: true,
-        timeOfCreation: form.timeOfCreation ?? Timestamp.now(),
-      };
+      let payload: UserProfile | Partial<UserProfile>;
 
-      await setDoc(ref, safeUpdate, { merge: true });
+      if (isNewUser) {
+        // 🔥 FIRST TIME → CREATE FULL DOCUMENT
+        payload = {
+          uid: user.uid,
 
-      // Update profile upon login
-      setProfile(safeUpdate);
+          displayName: form.displayName,
+          companyName: form.companyName,
+          companyAddress: form.companyAddress,
+          slogan: form.slogan ?? "",
+          phone: form.phone,
+          email: form.email,
 
-      // Show success banner but KEEP loading overlay visible
+          profileComplete: true,
+          createdAt: Timestamp.now(),
+
+          // defaults
+          isSubscribed: false,
+          stripeCustomerId: "",
+        };
+      } else {
+        // 🔁 EXISTING USER → UPDATE ONLY EDITABLE FIELDS
+        payload = {
+          displayName: form.displayName,
+          companyName: form.companyName,
+          companyAddress: form.companyAddress,
+          slogan: form.slogan ?? "",
+          phone: form.phone,
+          email: form.email,
+          profileComplete: true,
+        };
+      }
+
+      await setDoc(ref, payload, { merge: true });
+
+      // ✅ Update AuthContext immediately
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...payload,
+            }
+          : null
+      );
+
       setSuccess(true);
 
-      setTimeout(() => navigate("/dashboard"), 1500);
+      setTimeout(() => {
+        navigate("/dashboard", { replace: true });
+      }, 1500);
+
     } catch (err) {
       console.error("Save error:", err);
       setSaving(false);
@@ -133,7 +174,21 @@ export default function EditProfile() {
     }
   };
 
-  if (loading || !form) return null;
+  if (loading) {
+    return (
+      <div className="suros-gradient flex items-center justify-center min-h-screen">
+        <div className="loader" />
+      </div>
+    );
+  }
+
+  if (!form) {
+    return (
+      <div className="suros-gradient flex items-center justify-center min-h-screen text-white">
+        Failed to load profile.
+      </div>
+    );
+  }
 
   return (
     <div className="suros-gradient">
@@ -235,11 +290,11 @@ export default function EditProfile() {
             </div>
 
             <div className="edit-field">
-              <label>Company Slogan</label>
+              <label>Company Slogan (Optional)</label>
               <textarea
                 name="slogan"
                 rows={2}
-                value={form.slogan}
+                value={form.slogan ?? ""}
                 onChange={(e) =>
                   setForm({ ...form, slogan: e.target.value })
                 }

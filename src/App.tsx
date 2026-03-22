@@ -24,6 +24,10 @@ import TermsConditions from "./pages/Legal/TermsConditions";
 import ViewBids from "./pages/Bids/ViewBids";
 import PriceEstimator from "./components/PriceEstimator";
 
+import PaymentSuccess from "./pages/Payments/PaymentSuccess";
+import PaymentFailure from "./pages/Payments/PaymentFailure";
+import ManageSubscription from "./pages/Payments/ManageSubscription";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -40,6 +44,9 @@ const App = () => (
             <Route path="/auth" element={<Login />} />
             <Route path="/estimate" element={<PriceEstimator />} />
 
+            <Route path="/success" element={<PaymentSuccess />} />
+            <Route path="/cancel" element={<PaymentFailure />} />
+
             {/* PUBLIC LEGAL ROUTES */}
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
@@ -50,6 +57,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/billing"
+              element={
+                <ProtectedRoute>
+                  <ManageSubscription />
                 </ProtectedRoute>
               }
             />
