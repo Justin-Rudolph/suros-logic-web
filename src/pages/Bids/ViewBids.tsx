@@ -151,7 +151,7 @@ export default function ViewBids() {
     return (
         <div className="suros-gradient viewbids-page">
             <button
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/dashboard")}
                 style={{
                     position: "fixed",
                     top: "20px",

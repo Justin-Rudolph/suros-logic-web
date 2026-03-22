@@ -10,7 +10,7 @@ export default function TermsConditions() {
             {/* Logo */}
             <div className="flex items-center mb-10 px-6 pt-10">
                 <button
-                    onClick={() => navigate("/")}
+                    onClick={() => navigate("/dashboard")}
                     style={{
                         position: "fixed",
                         top: "20px",

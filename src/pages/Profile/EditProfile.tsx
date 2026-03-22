@@ -63,16 +63,16 @@ export default function EditProfile() {
       const data: UserProfile = snap.exists()
         ? (snap.data() as UserProfile)
         : {
-            uid: user.uid,
-            displayName: "",
-            companyName: "",
-            companyAddress: "",
-            slogan: "",
-            phone: "",
-            email: user.email || "",
-            profileComplete: false,
-            createdAt: Timestamp.now(),
-          };
+          uid: user.uid,
+          displayName: "",
+          companyName: "",
+          companyAddress: "",
+          slogan: "",
+          phone: "",
+          email: user.email || "",
+          profileComplete: false,
+          createdAt: Timestamp.now(),
+        };
 
       setForm(data);
       setLoading(false);
@@ -133,7 +133,7 @@ export default function EditProfile() {
           createdAt: Timestamp.now(),
 
           // defaults
-          isSubscribed: false,
+          isSubscribed: true,
           stripeCustomerId: "",
         };
       } else {
@@ -151,21 +151,25 @@ export default function EditProfile() {
 
       await setDoc(ref, payload, { merge: true });
 
-      // ✅ Update AuthContext immediately
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...payload,
-            }
-          : null
-      );
+      // 🔥 ALWAYS update profile (even if prev is null)
+      setProfile((prev) => {
+        if (!prev) {
+          // first-time user → payload must be full UserProfile
+          return payload as UserProfile;
+        }
+
+        return {
+          ...prev,
+          ...payload,
+        };
+      });
 
       setSuccess(true);
 
-      setTimeout(() => {
-        navigate("/dashboard", { replace: true });
-      }, 1500);
+      // Wait for Firestore propagation
+      await new Promise((res) => setTimeout(res, 700));
+
+      navigate("/dashboard", { replace: true });
 
     } catch (err) {
       console.error("Save error:", err);
@@ -196,7 +200,7 @@ export default function EditProfile() {
       {/* FLOATING LOGO BACK BUTTON (ONLY AFTER FIRST COMPLETION) */}
       {form.profileComplete && (
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard")}
           style={{
             position: "fixed",
             top: "20px",

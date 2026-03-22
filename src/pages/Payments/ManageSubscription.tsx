@@ -9,17 +9,25 @@ export default function ManageSubscription() {
     const [error, setError] = useState("");
     const navigate = useNavigate();
 
-    const hasActiveSubscription = profile?.isSubscribed === true;
+    const hasActiveSubscription =
+        profile?.isSubscribed === true &&
+        profile?.stripeCustomerId &&
+        profile.stripeCustomerId.trim() !== "";
+
+    // ✅ NEW: Free trial state
+    const isFreeTrial =
+        profile?.isSubscribed === true &&
+        (!profile?.stripeCustomerId || profile.stripeCustomerId.trim() === "");
 
     const API_BASE = import.meta.env.DEV
         ? "http://127.0.0.1:5001/suros-logic/us-central1"
-        : "";
+        : "https://us-central1-suros-logic.cloudfunctions.net";
 
     /* ----------------------------------------------------------
        OPEN STRIPE BILLING PORTAL (ACTIVE SUBS)
     ---------------------------------------------------------- */
     const openBillingPortal = async () => {
-        if (!profile?.stripeCustomerId) {
+        if (!profile?.stripeCustomerId || profile.stripeCustomerId.trim() === "") {
             setError("Unable to locate billing information.");
             return;
         }
@@ -57,7 +65,7 @@ export default function ManageSubscription() {
     };
 
     /* ----------------------------------------------------------
-       START NEW SUBSCRIPTION (FIXED)
+       START NEW SUBSCRIPTION
     ---------------------------------------------------------- */
     const startNewSubscription = async () => {
         try {
@@ -97,7 +105,7 @@ export default function ManageSubscription() {
         <div className="suros-gradient min-h-screen flex items-center justify-center px-6">
 
             <button
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/dashboard")}
                 style={{
                     position: "fixed",
                     top: "20px",
@@ -125,13 +133,16 @@ export default function ManageSubscription() {
                 <p className="text-gray-600 mb-6">
                     {hasActiveSubscription
                         ? "Manage your subscription, payment method, and invoices."
-                        : "Your subscription is inactive. Start a new subscription below."}
+                        : isFreeTrial
+                            ? "You are currently on a free trial."
+                            : "Your subscription is inactive. Start a new subscription below."}
                 </p>
 
                 {error && (
                     <p className="text-red-500 mb-4">{error}</p>
                 )}
 
+                {/* ACTIVE SUB */}
                 {hasActiveSubscription ? (
                     <button
                         onClick={openBillingPortal}
@@ -142,7 +153,13 @@ export default function ManageSubscription() {
                             ? "Opening Billing Portal..."
                             : "Manage Subscription"}
                     </button>
+                ) : isFreeTrial ? (
+                    /* ✅ FREE TRIAL (NO BUTTON) */
+                    <div className="w-full py-3 bg-green-600 text-white rounded-xl font-semibold">
+                        Free Trial Active
+                    </div>
                 ) : (
+                    /* NO SUB */
                     <button
                         onClick={startNewSubscription}
                         disabled={loading}
