@@ -11,9 +11,9 @@ import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
 import { BidFormRecord } from "@/models/BidForms";
 
-import "./ViewPastBids.css";
+import "./BidHistory.css";
 
-export default function ViewPastBids() {
+export default function BidHistory() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -71,9 +71,9 @@ export default function ViewPastBids() {
       </button>
 
       <div className="past-bids-container">
-        <h1 className="past-bids-title">View Past Bids</h1>
+        <h1 className="past-bids-title">Bid History</h1>
         <p className="past-bids-subtitle">
-          Open any previous bid form to review or modify it.
+          Open your previously submitted bids and reuse them with prefilled fields.
         </p>
 
         {bids.length === 0 ? (

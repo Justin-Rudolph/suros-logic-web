@@ -64,7 +64,7 @@ export default function Dashboard() {
             className="dashboard-card"
             onClick={() => handleProtectedNav("/bids/history")}
           >
-            <h2 className="dashboard-card-title">View Bid History</h2>
+            <h2 className="dashboard-card-title">Bid History</h2>
             <p className="dashboard-card-description">
               Open your previously submitted bids and reuse them with prefilled fields.
             </p>
