@@ -13,8 +13,10 @@ import "./BidForm.css";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "@/styles/gradients.css";
+import { addDoc, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { firestore } from "@/lib/firebase";
 
 type FormErrors = Record<string, boolean>;
 
@@ -59,12 +61,23 @@ const emptyLineItem: LineItem = {
 
 const BidForm: React.FC = () => {
     const navigate = useNavigate();
-    const { profile, loading } = useAuth();
+    const location = useLocation();
+    const { profile, loading, user } = useAuth();
 
     const [form, setForm] = useState<ExtendedBidFormState>(initialFormState);
     const [numLineItems, setNumLineItems] = useState("");
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [errors, setErrors] = useState<FormErrors>({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const prefillBid = (location.state as {
+        prefillBid?: {
+            formSnapshot: ExtendedBidFormState;
+            lineItems: LineItem[];
+        };
+    } | null)?.prefillBid;
+
+    const isPrefillMode = !!prefillBid;
 
     const isInvalid = (key: string) => !!errors[key];
 
@@ -94,7 +107,7 @@ const BidForm: React.FC = () => {
      * AUTO-LOAD USER PROFILE INTO COMPANY FIELDS
      ---------------------------------------------------*/
     useEffect(() => {
-        if (!profile) return;
+        if (!profile || isPrefillMode) return;
 
         setForm((prev) => ({
             ...prev,
@@ -114,7 +127,20 @@ const BidForm: React.FC = () => {
             company_email: false,
             company_slogan: false,
         }));
-    }, [profile]);
+    }, [profile, isPrefillMode]);
+
+    useEffect(() => {
+        if (!prefillBid) return;
+
+        setForm((prev) => ({
+            ...prev,
+            ...prefillBid.formSnapshot,
+        }));
+
+        setLineItems(prefillBid.lineItems || []);
+        setNumLineItems(String(prefillBid.lineItems?.length || ""));
+        setErrors({});
+    }, [prefillBid]);
 
     /** -------------------------------
      * FORMAT PHONE FIELD
@@ -474,15 +500,18 @@ const BidForm: React.FC = () => {
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
+        if (isSubmitting) return;
+
         if (!validateForm()) {
             showModal(
                 "warning",
                 "Incomplete Form",
                 "Please complete all required fields before submitting your bid."
             );
-
             return;
         }
+
+        setIsSubmitting(true);
 
         const convertMoney = (v: string | number) =>
             Number(String(v).replace(/[^0-9.]/g, "")) || 0;
@@ -520,15 +549,57 @@ const BidForm: React.FC = () => {
                 }
             );
 
+            setIsSubmitting(false);
+
             if (res.ok) {
+                if (user) {
+                    const customerName = form.customer_name?.trim() || "";
+                    const jobName = form.job?.trim() || "";
+
+                    const bidTitle = `${customerName || "Unknown Customer"} - ${jobName || "Untitled Job"}`;
+
+                    // 🔍 Check if a bid already exists with same customer + job
+                    const existingQuery = query(
+                        collection(firestore, "bidForms"),
+                        where("userId", "==", user.uid),
+                        where("formSnapshot.customer_name", "==", customerName),
+                        where("formSnapshot.job", "==", jobName)
+                    );
+
+                    const existingSnapshot = await getDocs(existingQuery);
+
+                    if (!existingSnapshot.empty) {
+                        // ✅ UPDATE existing document
+                        const existingDoc = existingSnapshot.docs[0];
+
+                        await updateDoc(doc(firestore, "bidForms", existingDoc.id), {
+                            title: bidTitle,
+                            formSnapshot: form,
+                            lineItems,
+                            updatedAt: serverTimestamp(), // optional but recommended
+                        });
+
+                    } else {
+                        // ✅ CREATE new document
+                        await addDoc(collection(firestore, "bidForms"), {
+                            userId: user.uid,
+                            title: bidTitle,
+                            formSnapshot: form,
+                            lineItems,
+                            createdAt: serverTimestamp(),
+                        });
+                    }
+                }
+
                 showModal(
                     "success",
                     "Bid Submitted Successfully",
                     `
-                    Your bid is being generated now.<br/><br/>
-                    Please check your inbox shortly — delivery typically takes a few minutes while we finalize the document and send it over.
-                    `
+                Your bid is being generated now.<br/><br/>
+                Please check your inbox shortly — delivery typically takes a few minutes while we finalize the document and send it over.
+                `
                 );
+
                 setForm(initialFormState);
                 setLineItems([]);
                 setNumLineItems("");
@@ -539,15 +610,15 @@ const BidForm: React.FC = () => {
                     "Submission Failed",
                     "We ran into an issue while submitting your bid. Please try again in a moment."
                 );
-
             }
         } catch (err) {
+            setIsSubmitting(false); // ✅ stop loading on error
+
             showModal(
                 "error",
                 "Network Error",
                 "We could not connect to our servers. Please check your connection and try again."
             );
-
         }
     };
 
@@ -1071,7 +1142,20 @@ const BidForm: React.FC = () => {
                                 </div>
 
                                 <div className="submit-area">
-                                    <button type="submit">Generate My Bid</button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        style={{
+                                            opacity: isSubmitting ? 0.7 : 1,
+                                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                                        }}
+                                    >
+                                        {isSubmitting ? (
+                                            <span className="spinner" />
+                                        ) : (
+                                            "Generate My Bid"
+                                        )}
+                                    </button>
                                     <p className="powered">POWERED by Suros Logic Systems, LLC</p>
                                 </div>
                             </form>

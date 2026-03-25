@@ -22,6 +22,7 @@ import PrivacyPolicy from "./pages/Legal/PrivacyPolicy";
 import TermsConditions from "./pages/Legal/TermsConditions";
 
 import ViewBids from "./pages/Bids/ViewBids";
+import ViewPastBids from "./pages/Bids/ViewPastBids";
 import PriceEstimator from "./components/PriceEstimator";
 
 import PaymentSuccess from "./pages/Payments/PaymentSuccess";
@@ -102,6 +103,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ViewBids />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/bids/history"
+              element={
+                <ProtectedRoute>
+                  <ViewPastBids />
                 </ProtectedRoute>
               }
             />

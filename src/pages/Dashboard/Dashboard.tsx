@@ -58,6 +58,19 @@ export default function Dashboard() {
 
             <div className="dashboard-card-button">View Bids →</div>
           </button>
+
+          {/* CARD 3 */}
+          <button
+            className="dashboard-card"
+            onClick={() => handleProtectedNav("/bids/history")}
+          >
+            <h2 className="dashboard-card-title">View Bid History</h2>
+            <p className="dashboard-card-description">
+              Open your previously submitted bids and reuse them with prefilled fields.
+            </p>
+
+            <div className="dashboard-card-button">Open History →</div>
+          </button>
         </div>
       </div>
 

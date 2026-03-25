@@ -1,0 +1,91 @@
+.past-bids-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+}
+
+.past-bids-back {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: #1e73be;
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  border: none;
+  z-index: 10;
+}
+
+.past-bids-container {
+  max-width: 1000px;
+  margin: 120px auto 40px;
+  color: #fff;
+  text-align: center; /* centers title + subtitle */
+}
+
+.past-bids-title {
+  font-size: 2.1rem;
+  margin-bottom: 8px;
+  font-weight: 700; /* makes title bold */
+}
+
+.past-bids-subtitle {
+  opacity: 0.85;
+  margin-bottom: 28px;
+}
+
+.past-bids-empty {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.past-bids-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.past-bid-item {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.past-bid-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* 🔥 force left alignment */
+  flex: 1; /* 🔥 take available space */
+  min-width: 0; /* 🔥 prevents weird overflow pushing */
+}
+
+.past-bid-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.past-bid-time {
+  opacity: 0.75;
+  font-size: 0.92rem;
+}
+
+.past-bid-open {
+  border: none;
+  border-radius: 8px;
+  background: #4ea8e4;
+  color: #fff;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
