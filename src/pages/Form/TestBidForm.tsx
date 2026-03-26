@@ -715,7 +715,6 @@ const TestBidForm: React.FC = () => {
     req("company_address");
     req("company_phone");
     req("company_email");
-    req("company_slogan");
     req("invoice_date");
     req("invoice_number");
     req("salesperson");
@@ -925,9 +924,6 @@ const TestBidForm: React.FC = () => {
 
               <p className="slogan">{form.company_slogan}</p>
 
-              {isInvalid("company_slogan") && (
-                <div className="field-error-text">Company slogan is required.</div>
-              )}
               {isInvalid("company_name") && (
                 <div className="field-error-text">Company name is required.</div>
               )}

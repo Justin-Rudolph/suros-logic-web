@@ -41,6 +41,8 @@ export default function ViewBids() {
     const [titleError, setTitleError] = useState(false);
 
     const [showBillingModal, setShowBillingModal] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // --------------------------------------------------
     // LISTEN FOR USER UPLOADS
@@ -106,46 +108,65 @@ export default function ViewBids() {
     const uploadBid = async () => {
         if (!selectedFile || !title.trim() || !user) return;
 
-        const storagePath = `bids/${user.uid}/${Date.now()}-${selectedFile.name}`;
-        const fileRef = ref(storage, storagePath);
+        try {
+            setIsUploading(true);
 
-        await uploadBytes(fileRef, selectedFile);
-        const downloadURL = await getDownloadURL(fileRef);
+            const storagePath = `bids/${user.uid}/${Date.now()}-${selectedFile.name}`;
+            const fileRef = ref(storage, storagePath);
 
-        await addDoc(collection(firestore, "bidUploads"), {
-            userId: user.uid,
-            title,
-            description,
-            fileName: selectedFile.name,
-            fileType: selectedFile.type,
-            fileSize: selectedFile.size,
-            readableSize:
-                (selectedFile.size / 1024 / 1024).toFixed(2) + " MB",
-            storagePath,
-            downloadURL,
-            createdAt: serverTimestamp(),
-        });
+            await uploadBytes(fileRef, selectedFile);
+            const downloadURL = await getDownloadURL(fileRef);
 
-        setShowUploadModal(false);
-        setSelectedFile(null);
-        setTitle("");
-        setDescription("");
-        setUploadSuccess(true);
-        setTimeout(() => {
-            setUploadSuccess(false);
-        }, 2000);
+            await addDoc(collection(firestore, "bidUploads"), {
+                userId: user.uid,
+                title,
+                description,
+                fileName: selectedFile.name,
+                fileType: selectedFile.type,
+                fileSize: selectedFile.size,
+                readableSize:
+                    (selectedFile.size / 1024 / 1024).toFixed(2) + " MB",
+                storagePath,
+                downloadURL,
+                createdAt: serverTimestamp(),
+            });
+
+            setShowUploadModal(false);
+            setSelectedFile(null);
+            setTitle("");
+            setDescription("");
+
+            setUploadSuccess(true);
+            setTimeout(() => setUploadSuccess(false), 2000);
+
+        } catch (err) {
+            console.error("Upload failed:", err);
+            alert("Upload failed. Please try again.");
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     // --------------------------------------------------
     // DELETE
     // --------------------------------------------------
     const deleteBid = async () => {
-        if (!deleteTarget) return;
+        if (!deleteTarget || isDeleting) return;
 
-        await deleteDoc(doc(firestore, "bidUploads", deleteTarget.id));
-        await deleteObject(ref(storage, deleteTarget.storagePath));
+        try {
+            setIsDeleting(true);
 
-        setDeleteTarget(null);
+            await deleteDoc(doc(firestore, "bidUploads", deleteTarget.id));
+            await deleteObject(ref(storage, deleteTarget.storagePath));
+
+            setDeleteTarget(null);
+
+        } catch (err) {
+            console.error("Delete failed:", err);
+            alert("Delete failed. Please try again.");
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     return (
@@ -303,16 +324,24 @@ export default function ViewBids() {
                             </button>
                             <button
                                 className="confirm-btn"
+                                disabled={isUploading}
+                                style={{
+                                    opacity: isUploading ? 0.6 : 1,
+                                    cursor: isUploading ? "not-allowed" : "pointer",
+                                }}
                                 onClick={() => {
+                                    if (isUploading) return; // extra safety
+
                                     if (!title.trim()) {
                                         setTitleError(true);
                                         return;
                                     }
+
                                     setTitleError(false);
                                     uploadBid();
                                 }}
                             >
-                                Upload
+                                {isUploading ? "Uploading..." : "Upload"}
                             </button>
                         </div>
                     </div>
@@ -344,9 +373,14 @@ export default function ViewBids() {
 
                             <button
                                 className="delete-confirm-btn"
+                                disabled={isDeleting}
+                                style={{
+                                    opacity: isDeleting ? 0.6 : 1,
+                                    cursor: isDeleting ? "not-allowed" : "pointer",
+                                }}
                                 onClick={deleteBid}
                             >
-                                Delete
+                                {isDeleting ? "Deleting..." : "Delete"}
                             </button>
                         </div>
                     </div>
