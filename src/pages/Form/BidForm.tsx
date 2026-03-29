@@ -113,7 +113,9 @@ const BidForm: React.FC = () => {
             ...prev,
             company_name: profile.companyName ?? prev.company_name,
             company_address: profile.companyAddress ?? prev.company_address,
-            company_phone: profile.phone ?? prev.company_phone,
+            company_phone: profile.phone
+                ? formatPhone(profile.phone)
+                : prev.company_phone,
             company_email: profile.email ?? prev.company_email,
             company_slogan: profile.slogan ?? prev.company_slogan,
         }));
@@ -134,6 +136,15 @@ const BidForm: React.FC = () => {
         setForm((prev) => ({
             ...prev,
             ...prefillBid.formSnapshot,
+            company_phone: prefillBid.formSnapshot.company_phone
+                ? formatPhone(prefillBid.formSnapshot.company_phone)
+                : "",
+            customer_phone:
+                prefillBid.formSnapshot.customer_phone === "N/A"
+                    ? "N/A"
+                    : prefillBid.formSnapshot.customer_phone
+                        ? formatPhone(prefillBid.formSnapshot.customer_phone)
+                        : "",
         }));
 
         setLineItems(prefillBid.lineItems || []);
@@ -145,12 +156,14 @@ const BidForm: React.FC = () => {
      * FORMAT PHONE FIELD
      --------------------------------*/
     const formatPhone = (value: string) => {
-        const digits = value.replace(/\D/g, "").substring(0, 10);
-        const len = digits.length;
+        const digits = value.replace(/\D/g, "").slice(0, 10);
 
-        if (len < 4) return digits;
-        if (len < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-        return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 6) {
+            return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+        }
+
+        return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
     };
 
     /** -------------------------------
@@ -781,7 +794,7 @@ const BidForm: React.FC = () => {
                                         id="customer_phone"
                                         value={form.customer_phone}
                                         onChange={handleFormChange}
-                                        placeholder="(000) 000-0000"
+                                        placeholder="000-000-0000"
                                         readOnly={form.customer_phone === "N/A"}
                                         title={form.customer_phone === "N/A" ? "This field cannot be edited when N/A is selected" : ""}
                                         className={`${isInvalid("customer_phone") ? "input-error" : ""} ${form.customer_phone === "N/A" ? "input-readonly" : ""}`}

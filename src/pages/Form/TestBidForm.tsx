@@ -63,7 +63,7 @@ const initialTestState: ExtendedBidFormState = {
   company_slogan:
     "Last call you’ll make for all your contracting and remodeling needs.",
   company_address: "4829 Rolling Brook Dr, Tampa, FL 33625",
-  company_phone: "(813) 555-9082",
+  company_phone: "813-555-9082",
   company_email: "email@lastcallhomesolutions.com",
   invoice_date: "2025-11-28",
   invoice_number: "LC-2025-1178",
@@ -90,7 +90,7 @@ const initialTestState: ExtendedBidFormState = {
 
   customer_name: "Michael Thompson",
   customer_address: "2290 Maple Ridge Ct, Tampa FL 33625",
-  customer_phone: "(813) 445-7710",
+  customer_phone: "813-445-7710",
   customer_email: "michael.thompson@example.com",
 };
 
@@ -420,12 +420,14 @@ const TestBidForm: React.FC = () => {
    * FORMAT PHONE FIELD
    --------------------------------*/
   const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, "").substring(0, 10);
-    const len = digits.length;
+    const digits = value.replace(/\D/g, "").slice(0, 10);
 
-    if (len < 4) return digits;
-    if (len < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) {
+      return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    }
+
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
   };
 
   /** -------------------------------
@@ -991,7 +993,7 @@ const TestBidForm: React.FC = () => {
                   id="customer_phone"
                   value={form.customer_phone}
                   onChange={handleFormChange}
-                  placeholder="(000) 000-0000"
+                  placeholder="000-000-0000"
                   readOnly={form.customer_phone === "N/A"}
                   title={
                     form.customer_phone === "N/A"
