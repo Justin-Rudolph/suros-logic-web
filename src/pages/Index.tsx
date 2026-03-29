@@ -527,46 +527,6 @@ const Index = () => {
           <Card className="bg-card/80 backdrop-blur">
             <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* <div className="grid md:grid-cols-2 gap-4">
-                  <Input
-                    placeholder="Name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                  <Input
-                    placeholder="Company"
-                    value={formData.company}
-                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    required
-                  />
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                  <Input
-                    type="tel"
-                    placeholder="Phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    required
-                  />
-                </div>
-                <Input
-                  placeholder="What trades do you do?"
-                  value={formData.trades}
-                  onChange={(e) => setFormData({ ...formData, trades: e.target.value })}
-                  required
-                />
-                <Input
-                  placeholder="Approx. bids per month"
-                  value={formData.bidsPerMonth}
-                  onChange={(e) => setFormData({ ...formData, bidsPerMonth: e.target.value })}
-                  required
-                /> */}
                 <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
                   <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
                     Book My Demo <ArrowRight className="ml-2" />

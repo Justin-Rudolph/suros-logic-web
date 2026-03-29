@@ -1,74 +1,194 @@
-# Welcome to your Lovable project
+# Suros Logic Web
 
-## Project info
+Suros Logic Web is a production React + Firebase application for contractors to generate, manage, and reuse professional bid documents.
 
-**URL**: https://lovable.dev/projects/6dd4f156-f54e-4963-b58f-88752b324e62
+It includes:
+- A marketing/public site with Stripe checkout.
+- An authenticated dashboard and bid workflow.
+- Firebase-backed profile + bid storage.
+- Firebase Cloud Functions for Stripe billing + AI estimate generation.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+### Frontend
+- React 18 + TypeScript + Vite
+- React Router
+- Firebase Web SDK (Auth, Firestore, Storage)
+- Tailwind CSS + Radix UI + shadcn/ui components
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6dd4f156-f54e-4963-b58f-88752b324e62) and start prompting.
+### Backend (Firebase Functions)
+- Node.js 20
+- Firebase Functions v2 + Firebase Admin
+- Stripe API (subscriptions + billing portal + webhooks)
+- OpenAI API (estimate generation)
+- SendGrid (new-user password setup email)
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## Monorepo Structure
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```text
+.
+├── src/                    # Frontend app
+├── public/                 # Static assets
+├── functions/              # Firebase Cloud Functions backend
+├── firebase.json           # Hosting/functions config
+├── package.json            # Frontend scripts + deps
+└── functions/package.json  # Functions scripts + deps
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+---
 
-Follow these steps:
+## Core Product Flows
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+- **Landing page** (`/`) with marketing content and Stripe checkout CTA.
+- **Authentication** (`/auth`) via Firebase Auth.
+- **Protected dashboard** (`/dashboard`) for bid operations.
+- **Bid form** (`/form/bid_form`) with line items, pricing math, and submission webhook.
+- **Bid history + saved bids** (`/view-bids`, `/bids/history`) backed by Firestore.
+- **Billing management** (`/billing`) via Stripe customer portal.
+- **Legal pages** (`/privacy`, `/terms`).
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+---
 
-# Step 3: Install the necessary dependencies.
-npm i
+## Local Development
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+## 1) Prerequisites
+
+- Node.js 20+
+- npm
+- Firebase CLI (`npm i -g firebase-tools`)
+
+## 2) Install dependencies
+
+From repo root:
+
+```bash
+npm install
+```
+
+Install Cloud Functions dependencies:
+
+```bash
+cd functions
+npm install
+cd ..
+```
+
+## 3) Configure environment variables
+
+Create a local env file:
+
+```bash
+cp .env.example .env.local
+```
+
+> If `.env.example` does not exist yet, create `.env.local` manually.
+
+Frontend variables used by the app:
+
+```bash
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_MEASUREMENT_ID=
+VITE_API_URL=
+```
+
+Functions secrets/variables used by backend routes:
+
+```bash
+# Firebase Secret Manager / function runtime secrets
+OPENAI_API_KEY=
+STRIPE_SECRET_KEY_LIVE=
+STRIPE_WEBHOOK_SECRET_LIVE=
+SENDGRID_API_KEY=
+
+# Optional local emulator/runtime vars used by Stripe route
+STRIPE_SECRET_KEY_TEST=
+STRIPE_WEBHOOK_SECRET_TEST=
+STRIPE_PRICE_ID_MONTHLY_TEST=
+STRIPE_PRICE_ID_MONTHLY_LIVE=
+```
+
+## 4) Run frontend
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Default Vite URL: `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 5) Run Cloud Functions emulator (optional but recommended for backend work)
 
-**Use GitHub Codespaces**
+In a separate terminal:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+cd functions
+npm run serve
+OR
+firebase emulators:start --only functions
+```
 
-## What technologies are used for this project?
+## 5.1) Run Stripe webhook for testing (optional but recommended for backend work)
 
-This project is built with:
+In a separate terminal:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+stripe listen --forward-to localhost:5001/suros-logic/us-central1/stripe/events
+```
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/6dd4f156-f54e-4963-b58f-88752b324e62) and click on Share -> Publish.
+## Available Scripts
 
-## Can I connect a custom domain to my Lovable project?
+### Frontend (`/package.json`)
 
-Yes, you can!
+- `npm run dev` — start Vite dev server
+- `npm run build` — production build
+- `npm run build:dev` — development-mode build
+- `npm run lint` — run ESLint
+- `npm run preview` — preview built app
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Functions (`/functions/package.json`)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `npm run serve` — run Firebase emulators for functions
+- `npm run deploy` — deploy functions
+- `npm run logs` — view functions logs
 
+---
+
+## Deployment
+
+The repo is configured for Firebase Hosting + Functions.
+
+- Hosting serves `dist/` and rewrites all SPA routes to `index.html`.
+- `generateEstimate` is exposed as a function rewrite route.
+- Stripe endpoints are served from the `stripe` function.
+
+Typical deployment flow:
+
+```bash
+npm run build
+firebase deploy
+```
+
+---
+
+## Notes for Maintainers
+
+- Subscription gating is enforced in the dashboard based on Firestore user profile flags (`isSubscribed`, `stripeCustomerId`).
+- Bid form submissions currently post to an external n8n webhook for document generation workflow.
+- Firestore data models live under `src/models`.
+- Auth + user profile bootstrapping logic lives in `src/context/AuthContext.tsx`.
+
+---
+
+## License
+
+Private/internal project unless explicitly licensed otherwise by repository owner.
