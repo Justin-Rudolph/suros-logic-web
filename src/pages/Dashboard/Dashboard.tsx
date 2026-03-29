@@ -29,7 +29,7 @@ export default function Dashboard() {
         <h1 className="dashboard-title">Welcome to Your Dashboard</h1>
 
         <p className="dashboard-subtitle">
-          Automate your bids. Manage your submissions. Speed up your workflow.
+          Create bids, manage submissions, and track related change orders in one place.
         </p>
 
         <div className="dashboard-card-wrapper">
@@ -62,11 +62,11 @@ export default function Dashboard() {
           {/* CARD 3 */}
           <button
             className="dashboard-card"
-            onClick={() => handleProtectedNav("/bids/history")}
+            onClick={() => navigate("/bids/history")}
           >
-            <h2 className="dashboard-card-title">Bid History</h2>
+            <h2 className="dashboard-card-title">Bid & Change Order History</h2>
             <p className="dashboard-card-description">
-              Open your previously submitted bids and reuse them with prefilled fields.
+              Reopen submitted bids, create linked change orders, and review prior change order forms.
             </p>
 
             <div className="dashboard-card-button">Open History →</div>

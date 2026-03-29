@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 import BidForm from "./pages/Form/BidForm";
+import ChangeOrderForm from "./pages/Form/ChangeOrderForm";
 import TestBidForm from "./pages/Form/TestBidForm";
 
 import Login from "./pages/Auth/Login";
@@ -85,6 +86,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <BidForm />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/form/change_order"
+              element={
+                <ProtectedRoute>
+                  <ChangeOrderForm />
                 </ProtectedRoute>
               }
             />
