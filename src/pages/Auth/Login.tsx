@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Eye } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import surosLogo from "@/assets/suros-logo-new.png";
@@ -12,6 +13,7 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -84,13 +86,33 @@ export default function Login() {
           />
 
           <label className="font-semibold text-black">Password</label>
-          <input
-            type="password"
-            value={password}
-            placeholder="Enter your password"
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 mb-6 border border-gray-300 rounded-lg text-black"
-          />
+          <div className="relative mb-1">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              placeholder="Enter your password"
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-3 pr-12 border border-gray-300 rounded-lg text-black"
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 flex items-center px-3 transition"
+              style={{ color: showPassword ? "#1e73be" : "#6b7280" }}
+            >
+              <Eye size={18} />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate("/forgot-password")}
+            className="mt-2 mb-6 text-sm text-blue-600 hover:text-blue-700 transition"
+          >
+            Forgot your password?
+          </button>
 
           <button
             onClick={handleLogin}

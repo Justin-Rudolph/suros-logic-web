@@ -55,3 +55,17 @@ exports.stripe = onRequest(
     return stripeRoute.app(req, res);
   }
 );
+
+/* --------------------------------------------------
+   AUTH
+-------------------------------------------------- */
+
+exports.auth = onRequest(
+  {
+    secrets: [SENDGRID_API_KEY],
+  },
+  (req, res) => {
+    const authRoute = require("./routes/auth");
+    return authRoute.app(req, res);
+  }
+);

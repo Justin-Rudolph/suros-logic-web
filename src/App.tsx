@@ -18,6 +18,8 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
 import EditProfile from "./pages/Profile/EditProfile";
+import ChangePassword from "./pages/Profile/ChangePassword";
+import ForgotPassword from "./pages/Auth/ForgotPassword";
 
 import PrivacyPolicy from "./pages/Legal/PrivacyPolicy";
 import TermsConditions from "./pages/Legal/TermsConditions";
@@ -44,6 +46,7 @@ const App = () => (
             {/* PUBLIC ROUTES */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/estimate" element={<PriceEstimator />} />
 
             <Route path="/success" element={<PaymentSuccess />} />
@@ -77,6 +80,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <EditProfile />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePassword />
                 </ProtectedRoute>
               }
             />
