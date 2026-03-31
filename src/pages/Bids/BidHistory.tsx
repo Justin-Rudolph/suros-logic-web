@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import {
   collection,
+  deleteDoc,
+  doc,
   onSnapshot,
   query,
   where,
@@ -25,6 +28,8 @@ export default function BidHistory() {
   const [changeOrders, setChangeOrders] = useState<ChangeOrderRecord[]>([]);
   const [expandedBidIds, setExpandedBidIds] = useState<Record<string, boolean>>({});
   const [showBillingModal, setShowBillingModal] = useState(false);
+  const [bidPendingDelete, setBidPendingDelete] = useState<BidFormRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const hasActiveSubscription = profile?.isSubscribed === true;
 
@@ -116,6 +121,8 @@ export default function BidHistory() {
     navigate("/form/bid_form", {
       state: {
         prefillBid: {
+          id: bid.id,
+          status: bid.status,
           formSnapshot: bid.formSnapshot,
           lineItems: bid.lineItems,
         },
@@ -156,6 +163,36 @@ export default function BidHistory() {
     }));
   };
 
+  const confirmDeleteBid = (bid: BidFormRecord) => {
+    setBidPendingDelete(bid);
+  };
+
+  const handleDeleteBid = async () => {
+    if (!bidPendingDelete) return;
+
+    setIsDeleting(true);
+
+    try {
+      const linkedChangeOrders = changeOrdersByBid[bidPendingDelete.id] || [];
+
+      await Promise.all([
+        deleteDoc(doc(firestore, "bidForms", bidPendingDelete.id)),
+        ...linkedChangeOrders.map((changeOrder) =>
+          deleteDoc(doc(firestore, "changeOrder", changeOrder.id))
+        ),
+      ]);
+
+      setExpandedBidIds((prev) => {
+        const next = { ...prev };
+        delete next[bidPendingDelete.id];
+        return next;
+      });
+      setBidPendingDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="suros-gradient past-bids-page">
       <button className="past-bids-back" onClick={() => navigate("/dashboard")}>
@@ -181,26 +218,38 @@ export default function BidHistory() {
                 <li key={bid.id} className="past-bid-item past-bid-item-stack">
                   <div className="past-bid-main-row">
                     <div className="past-bid-content">
-                      <div className="past-bid-title">{bid.title || "Untitled Bid"}</div>
-                      <div className="past-bid-time">{displayDate}</div>
-                    </div>
-
-                    <div className="past-bid-actions">
+                      <div className="past-bid-title">{bid.title || "Draft"}</div>
+                      <div className="past-bid-time-row">
+                        <div className="past-bid-time">{displayDate}</div>
+                        {bid.status === "draft" && (
+                          <div className="past-bid-draft-badge">Draft</div>
+                        )}
+                      </div>
                       {linkedChangeOrders.length > 0 && (
                         <button
-                          className="past-bid-secondary"
+                          className="past-bid-toggle"
                           onClick={() => toggleChangeOrders(bid.id)}
                         >
                           {isExpanded ? "Hide" : "Show"} Change Orders ({linkedChangeOrders.length})
                         </button>
                       )}
+                    </div>
 
+                    <div className="past-bid-actions">
                       <button className="past-bid-secondary" onClick={() => openChangeOrder(bid)}>
                         Change Order
                       </button>
 
                       <button className="past-bid-open" onClick={() => openBid(bid)}>
                         Open & Edit
+                      </button>
+
+                      <button
+                        className="past-bid-delete-icon"
+                        onClick={() => confirmDeleteBid(bid)}
+                        aria-label="Delete bid"
+                      >
+                        <Trash2 size={18} />
                       </button>
                     </div>
                   </div>
@@ -256,6 +305,44 @@ export default function BidHistory() {
               >
                 Reactivate Subscription
               </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bidPendingDelete && (
+        <div className="billing-modal-overlay">
+          <div className="billing-modal">
+            <h2>Delete Bid Record?</h2>
+
+            <p>
+              {(() => {
+                const linkedCount = (changeOrdersByBid[bidPendingDelete.id] || []).length;
+
+                if (linkedCount === 0) {
+                  return "This will permanently delete this bid from your history.";
+                }
+
+                return `This will permanently delete this bid from your history and ${linkedCount} linked ${linkedCount === 1 ? "change order" : "change orders"}.`;
+              })()}
+            </p>
+
+            <div className="billing-modal-actions">
+              <button
+                className="secondary"
+                onClick={() => setBidPendingDelete(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+
+              <button
+                className="danger"
+                onClick={handleDeleteBid}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
         </div>

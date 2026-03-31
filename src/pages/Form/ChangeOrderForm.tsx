@@ -570,8 +570,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="job_name"
                 value={form.job_name}
                 onChange={handleFormChange}
-                readOnly
-                className={`${isInvalid("job_name") ? "input-error" : ""} input-readonly`}
+                readOnly={viewOnly}
+                className={`${isInvalid("job_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
               />
 
               <label>Customer Name:</label>
@@ -580,8 +580,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="customer_name"
                 value={form.customer_name}
                 onChange={handleFormChange}
-                readOnly
-                className={`${isInvalid("customer_name") ? "input-error" : ""} input-readonly`}
+                readOnly={viewOnly}
+                className={`${isInvalid("customer_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
               />
 
               <label>Date of Issue:</label>

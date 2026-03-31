@@ -93,8 +93,43 @@
 .past-bid-time {
   opacity: 0.75;
   font-size: 0.92rem;
-  width: 100%;
   text-align: left;
+}
+
+.past-bid-time-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.past-bid-draft-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.past-bid-toggle {
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.past-bid-toggle:hover {
+  color: #ffffff;
 }
 
 .past-bid-open {
@@ -102,14 +137,15 @@
   border-radius: 8px;
   background: #4ea8e4;
   color: #fff;
-  padding: 10px 14px;
+  padding: 10px 16px;
   cursor: pointer;
   font-weight: 600;
 }
 
 .past-bid-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
@@ -117,11 +153,29 @@
 .past-bid-secondary {
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   color: #fff;
   padding: 10px 14px;
   cursor: pointer;
   font-weight: 600;
+}
+
+.past-bid-delete-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.25);
+  color: #fca5a5;
+  cursor: pointer;
+}
+
+.past-bid-delete-icon:hover {
+  background: rgba(153, 27, 27, 0.38);
+  color: #fecaca;
 }
 
 .change-order-list-wrap {
@@ -173,6 +227,15 @@
 
   .past-bid-actions {
     justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .past-bid-time-row {
+    align-items: flex-start;
+  }
+
+  .past-bid-delete-icon {
+    margin-left: auto;
   }
 }
 
@@ -233,4 +296,14 @@
   border-radius: 8px;
   font-weight: 600;
   text-decoration: none;
+}
+
+.billing-modal-actions .danger {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
 }

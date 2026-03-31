@@ -10,8 +10,9 @@ export interface BidFormRecord {
   id: string;
   userId: string;
   title: string;
+  status?: "draft" | "submitted";
   formSnapshot: StoredBidFormState;
   lineItems: LineItem[];
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }

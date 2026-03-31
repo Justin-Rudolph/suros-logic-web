@@ -15,7 +15,7 @@ import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import "@/styles/gradients.css";
-import { addDoc, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
 
 type FormErrors = Record<string, boolean>;
@@ -24,6 +24,14 @@ type FormErrors = Record<string, boolean>;
 type ExtendedBidFormState = BidFormState & {
     tax_percentage: string; // e.g. "6%" or "6.5%"
     contingency_percentage: string; // e.g. "10%"
+};
+
+type BidRecordStatus = "draft" | "submitted";
+type PrefillBidState = {
+    id?: string;
+    status?: BidRecordStatus;
+    formSnapshot: ExtendedBidFormState;
+    lineItems: LineItem[];
 };
 
 const initialFormState: ExtendedBidFormState = {
@@ -69,12 +77,10 @@ const BidForm: React.FC = () => {
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentBidId, setCurrentBidId] = useState<string | null>(null);
 
     const prefillBid = (location.state as {
-        prefillBid?: {
-            formSnapshot: ExtendedBidFormState;
-            lineItems: LineItem[];
-        };
+        prefillBid?: PrefillBidState;
     } | null)?.prefillBid;
 
     const isPrefillMode = !!prefillBid;
@@ -133,6 +139,8 @@ const BidForm: React.FC = () => {
     useEffect(() => {
         if (!prefillBid) return;
 
+        setCurrentBidId(prefillBid.id ?? null);
+
         setForm((prev) => ({
             ...prev,
             ...prefillBid.formSnapshot,
@@ -151,6 +159,42 @@ const BidForm: React.FC = () => {
         setNumLineItems(String(prefillBid.lineItems?.length || ""));
         setErrors({});
     }, [prefillBid]);
+
+    const buildBidTitle = () => {
+        const customerName = form.customer_name.trim();
+        const jobName = form.job.trim();
+        const titleParts = [jobName, customerName].filter(Boolean);
+
+        return titleParts.length > 0 ? titleParts.join(" - ") : "Draft";
+    };
+
+    const persistBidRecord = async (status: BidRecordStatus) => {
+        if (!user) {
+            throw new Error("User must be signed in to save a bid.");
+        }
+
+        const bidData = {
+            userId: user.uid,
+            title: buildBidTitle(),
+            status,
+            formSnapshot: form,
+            lineItems,
+            updatedAt: serverTimestamp(),
+        };
+
+        if (currentBidId) {
+            await updateDoc(doc(firestore, "bidForms", currentBidId), bidData);
+            return currentBidId;
+        }
+
+        const createdDoc = await addDoc(collection(firestore, "bidForms"), {
+            ...bidData,
+            createdAt: serverTimestamp(),
+        });
+
+        setCurrentBidId(createdDoc.id);
+        return createdDoc.id;
+    };
 
     /** -------------------------------
      * FORMAT PHONE FIELD
@@ -563,44 +607,7 @@ const BidForm: React.FC = () => {
             setIsSubmitting(false);
 
             if (res.ok) {
-                if (user) {
-                    const customerName = form.customer_name?.trim() || "";
-                    const jobName = form.job?.trim() || "";
-
-                    const bidTitle = `${customerName || "Unknown Customer"} - ${jobName || "Untitled Job"}`;
-
-                    // 🔍 Check if a bid already exists with same customer + job
-                    const existingQuery = query(
-                        collection(firestore, "bidForms"),
-                        where("userId", "==", user.uid),
-                        where("formSnapshot.customer_name", "==", customerName),
-                        where("formSnapshot.job", "==", jobName)
-                    );
-
-                    const existingSnapshot = await getDocs(existingQuery);
-
-                    if (!existingSnapshot.empty) {
-                        // ✅ UPDATE existing document
-                        const existingDoc = existingSnapshot.docs[0];
-
-                        await updateDoc(doc(firestore, "bidForms", existingDoc.id), {
-                            title: bidTitle,
-                            formSnapshot: form,
-                            lineItems,
-                            updatedAt: serverTimestamp(), // optional but recommended
-                        });
-
-                    } else {
-                        // ✅ CREATE new document
-                        await addDoc(collection(firestore, "bidForms"), {
-                            userId: user.uid,
-                            title: bidTitle,
-                            formSnapshot: form,
-                            lineItems,
-                            createdAt: serverTimestamp(),
-                        });
-                    }
-                }
+                await persistBidRecord("submitted");
 
                 showModal(
                     "success",
@@ -615,6 +622,7 @@ const BidForm: React.FC = () => {
                 setLineItems([]);
                 setNumLineItems("");
                 setErrors({});
+                setCurrentBidId(null);
             } else {
                 showModal(
                     "error",
@@ -629,6 +637,31 @@ const BidForm: React.FC = () => {
                 "error",
                 "Network Error",
                 "We could not connect to our servers. Please check your connection and try again."
+            );
+        }
+    };
+
+    const handleSaveDraft = async () => {
+        if (isSubmitting) return;
+
+        setIsSubmitting(true);
+
+        try {
+            await persistBidRecord("draft");
+            setIsSubmitting(false);
+
+            showModal(
+                "success",
+                "Draft Saved",
+                "Your bid draft has been saved. You can come back and finish it later from Bid History."
+            );
+        } catch (err) {
+            setIsSubmitting(false);
+
+            showModal(
+                "error",
+                "Draft Save Failed",
+                "We ran into an issue while saving your draft. Please try again in a moment."
             );
         }
     };
@@ -1150,6 +1183,18 @@ const BidForm: React.FC = () => {
                                 </div>
 
                                 <div className="submit-area">
+                                    <button
+                                        type="button"
+                                        className="secondary-submit"
+                                        onClick={handleSaveDraft}
+                                        disabled={isSubmitting}
+                                        style={{
+                                            opacity: isSubmitting ? 0.7 : 1,
+                                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                                        }}
+                                    >
+                                        {isSubmitting ? <span className="spinner" /> : "Save Draft"}
+                                    </button>
                                     <button
                                         type="submit"
                                         disabled={isSubmitting}
