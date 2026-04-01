@@ -707,6 +707,7 @@ const ChangeOrderForm: React.FC = () => {
                       cursor: "pointer",
                       fontWeight: 600,
                       opacity: isTaxAmountNA ? 1 : 0.85,
+                      marginTop: "-8px",
                     }}
                   >
                     N/A
