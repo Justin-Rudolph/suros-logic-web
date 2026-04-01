@@ -271,10 +271,11 @@ export default function EditProfile() {
             </div>
 
             <div className="edit-field">
-              <label>Company Address</label>
+              <label>Company Address (include zipcode)</label>
               <textarea
                 name="companyAddress"
                 rows={2}
+                placeholder="1234 Main St Tampa, FL 33611"
                 value={form.companyAddress}
                 onChange={(e) =>
                   setForm({ ...form, companyAddress: e.target.value })
@@ -317,7 +318,7 @@ export default function EditProfile() {
             </div>
           </div>
 
-          <button className="save-btn" onClick={save}>
+          <button className="save-btn" onClick={save} style={{ marginTop: "20px" }}>
             Save Changes
           </button>
         </div>
