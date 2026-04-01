@@ -48,9 +48,24 @@ Respond only in the following JSON format:
   "estimate": {
     "material_cost": "",
     "labor_cost": "",
-    "total_cost": ""
+    "total_cost": "",
+    "description": ""
   },
-  "explanation": ""
+  "explanation": "",
+  "estimates": {
+    "average_price": {
+      "material_cost": "",
+      "labor_cost": "",
+      "total_cost": "",
+      "description": ""
+    },
+    "high_tier_price": {
+      "material_cost": "",
+      "labor_cost": "",
+      "total_cost": "",
+      "description": ""
+    }
+  }
 }
 
 Requirements:
@@ -69,10 +84,15 @@ Other rules:
 - If exact material specifications are unclear, determine a reasonable price range (low-end to high-end), calculate the median between those values, and use that median unless the range difference is extreme.
 
 If sufficient information is available (or bypass mode is TRUE):
-- Calculate and provide a material cost estimate as a dollar amount.
-- Calculate and provide a labor cost estimate as a dollar amount.
-- Provide the combined total cost (labor + materials) as a dollar amount.
-- Include a detailed explanation (maximum 10 sentences) explaining how you determined the material and labor costs. Base your calculations strictly on the information given in the request, and clearly break out how each cost was derived.
+- Generate two complete estimate tiers:
+  1. "average_price": a realistic median market price using standard quality materials, standard contractor overhead, and typical labor rates for the region.
+  2. "high_tier_price": a realistic higher-end market price using premium materials, stronger contractor margin/overhead, and higher-end labor rates for the region.
+- For each tier, calculate and provide:
+  - material_cost as a dollar amount
+  - labor_cost as a dollar amount
+  - total_cost as a dollar amount
+  - description: a detailed explanation (maximum 10 sentences) explaining how you determined the material and labor costs for that specific tier. Base your calculations strictly on the information given in the request, and clearly break out how each cost was derived.
+- Also set the top-level "estimate" equal to the "average_price" tier and set the top-level "explanation" equal to the "average_price.description" for backward compatibility.
 
 Formatting Requirements:
 - All dollar amounts must be formatted with proper commas and no decimal places (Ex: $1,000).
@@ -104,6 +124,16 @@ ${description}
         error: "Invalid JSON returned from AI",
         raw: content,
       });
+    }
+
+    if (
+      parsed?.status === "complete" &&
+      parsed?.estimates?.average_price &&
+      parsed?.estimates?.high_tier_price
+    ) {
+      parsed.estimate = parsed.estimates.average_price;
+      parsed.explanation =
+        parsed.estimates.average_price.description || parsed.explanation || "";
     }
 
     return res.json(parsed);

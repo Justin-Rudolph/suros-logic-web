@@ -1,5 +1,22 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
+
+type EstimateTier = {
+  material_cost: string;
+  labor_cost: string;
+  total_cost: string;
+  description?: string;
+};
+
+type EstimateResponse = {
+  status: "complete" | "incomplete";
+  questions?: string[];
+  estimate?: EstimateTier;
+  explanation?: string;
+  estimates?: {
+    average_price?: EstimateTier;
+    high_tier_price?: EstimateTier;
+  };
+};
 
 interface Props {
   scope: string;
@@ -13,16 +30,37 @@ export default function LineItemAIHelper({
   onApplyTotal,
 }: Props) {
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<any>(null);
+  const [response, setResponse] = useState<EstimateResponse | null>(null);
   const [open, setOpen] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<"average_price" | "high_tier_price">("average_price");
 
   const [showBypassWarning, setShowBypassWarning] = useState(false);
+
+  const parseCurrencyToNumber = (value?: string) => {
+    if (!value) return 0;
+    const numericValue = Number(value.replace(/[^0-9.-]+/g, ""));
+    return Number.isFinite(numericValue) ? numericValue : 0;
+  };
+
+  const getTierEstimate = (
+    data: EstimateResponse | null,
+    tier: "average_price" | "high_tier_price"
+  ): EstimateTier | null => {
+    if (!data || data.status !== "complete") return null;
+
+    if (tier === "average_price") {
+      return data.estimates?.average_price || data.estimate || null;
+    }
+
+    return data.estimates?.high_tier_price || null;
+  };
 
   const generateEstimate = async () => {
     if (!scope.trim()) return;
 
     try {
       setResponse(null); // clears previous estimate/questions
+      setSelectedTier("average_price");
       setLoading(true);
 
       const API_BASE = import.meta.env.DEV
@@ -50,6 +88,7 @@ export default function LineItemAIHelper({
 
   const bypassGenerate = async () => {
     try {
+      setSelectedTier("average_price");
       setLoading(true);
 
       const API_BASE = import.meta.env.DEV
@@ -287,63 +326,131 @@ export default function LineItemAIHelper({
                   AI Estimate
                 </h3>
 
-                <p>
-                  <strong>Material: </strong>
-                  {response.estimate.material_cost}
-                </p>
-
-                <p>
-                  <strong>Labor: </strong>
-                  {response.estimate.labor_cost}
-                </p>
-
-                <p style={{ marginBottom: "16px" }}>
-                  <strong>Total: </strong>
-                  {response.estimate.total_cost}
-                </p>
-
-                <p style={{ marginBottom: "20px" }}>
-                  {response.explanation}
-                </p>
-
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: "space-between",
-                    gap: "10px",
+                    gap: "6px",
+                    marginBottom: "16px",
+                    flexWrap: "wrap",
+                    borderBottom: "1px solid #d9d9d9",
+                    paddingBottom: "2px",
                   }}
                 >
-                  <button
-                    onClick={() => setOpen(false)}
-                    style={{
-                      background: "#ccc",
-                      border: "none",
-                      padding: "10px 16px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      color: "#000",
-                    }}
-                  >
-                    Close
-                  </button>
+                  {[
+                    { key: "average_price", label: "Average Price" },
+                    { key: "high_tier_price", label: "High Tier Price" },
+                  ].map((tier) => {
+                    const isActive = selectedTier === tier.key;
+                    const isDisabled = !getTierEstimate(
+                      response,
+                      tier.key as "average_price" | "high_tier_price"
+                    );
 
-                  <button
-                    onClick={() => {
-                      onApplyTotal?.(response.estimate.total_cost);
-                      setOpen(false);
-                    }}
-                    style={{
-                      background: "#27ae60",
-                      color: "#fff",
-                      border: "none",
-                      padding: "10px 16px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Apply To Line Total
-                  </button>
+                    return (
+                      <button
+                        key={tier.key}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() =>
+                          setSelectedTier(tier.key as "average_price" | "high_tier_price")
+                        }
+                        style={{
+                          background: "transparent",
+                          color: isActive ? "#1e73be" : "#555",
+                          border: "none",
+                          borderBottom: isActive
+                            ? "2px solid #1e73be"
+                            : "2px solid transparent",
+                          padding: "6px 4px 8px",
+                          borderRadius: 0,
+                          cursor: isDisabled ? "not-allowed" : "pointer",
+                          fontWeight: 600,
+                          opacity: isDisabled ? 0.5 : 1,
+                          fontSize: "13px",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {tier.label}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {(() => {
+                  const activeEstimate = getTierEstimate(response, selectedTier);
+
+                  if (!activeEstimate) {
+                    return (
+                      <p style={{ marginBottom: "20px" }}>
+                        This estimate tier is not available.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <p>
+                        <strong>Material: </strong>
+                        {activeEstimate.material_cost}
+                      </p>
+
+                      <p>
+                        <strong>Labor: </strong>
+                        {activeEstimate.labor_cost}
+                      </p>
+
+                      <p style={{ marginBottom: "16px" }}>
+                        <strong>Total: </strong>
+                        {activeEstimate.total_cost}
+                      </p>
+
+                      <p style={{ marginBottom: "20px" }}>
+                        {activeEstimate.description || response.explanation}
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <button
+                          onClick={() => setOpen(false)}
+                          style={{
+                            background: "#ccc",
+                            border: "none",
+                            padding: "10px 16px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            color: "#000",
+                          }}
+                        >
+                          Close
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            onApplyTotal?.(
+                              parseCurrencyToNumber(activeEstimate.total_cost)
+                            );
+                            setOpen(false);
+                          }}
+                          style={{
+                            background: "#27ae60",
+                            color: "#fff",
+                            border: "none",
+                            padding: "10px 16px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Apply To Line Total
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
