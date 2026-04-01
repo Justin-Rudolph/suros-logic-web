@@ -22,7 +22,7 @@ type FormErrors = Record<string, boolean>;
 
 // Extend your existing BidFormState without forcing you to edit ./types yet
 type ExtendedBidFormState = BidFormState & {
-    tax_percentage: string; // e.g. "6%" or "6.5%"
+    tax_percentage: string; // e.g. "7%"
     contingency_percentage: string; // e.g. "10%"
 };
 
@@ -78,6 +78,7 @@ const BidForm: React.FC = () => {
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentBidId, setCurrentBidId] = useState<string | null>(null);
+    const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
 
     const prefillBid = (location.state as {
         prefillBid?: PrefillBidState;
@@ -144,6 +145,10 @@ const BidForm: React.FC = () => {
         setForm((prev) => ({
             ...prev,
             ...prefillBid.formSnapshot,
+            tax_percentage:
+                prefillBid.formSnapshot.tax_percentage === "N/A"
+                    ? initialFormState.tax_percentage
+                    : prefillBid.formSnapshot.tax_percentage || initialFormState.tax_percentage,
             company_phone: prefillBid.formSnapshot.company_phone
                 ? formatPhone(prefillBid.formSnapshot.company_phone)
                 : "",
@@ -157,6 +162,7 @@ const BidForm: React.FC = () => {
 
         setLineItems(prefillBid.lineItems || []);
         setNumLineItems(String(prefillBid.lineItems?.length || ""));
+        setIsTaxAmountNA(prefillBid.formSnapshot.tax_percentage === "N/A");
         setErrors({});
     }, [prefillBid]);
 
@@ -267,7 +273,7 @@ const BidForm: React.FC = () => {
     const taxPct = parsePercent(form.tax_percentage);
     const contingencyPct = parsePercent(form.contingency_percentage);
 
-    const taxAmount = roundMoney(subtotal * (taxPct / 100));
+    const taxAmount = isTaxAmountNA ? 0 : roundMoney(subtotal * (taxPct / 100));
 
     const contingencyAmount = roundMoney(subtotal * (contingencyPct / 100));
 
@@ -299,7 +305,7 @@ const BidForm: React.FC = () => {
             setErrors((prev) => ({ ...prev, total_costs: false }));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lineItems, form.tax_percentage, form.contingency_percentage]);
+    }, [isTaxAmountNA, lineItems, form.tax_percentage, form.contingency_percentage]);
 
     /** -------------------------------
      * SET FIELD TO N/A
@@ -317,6 +323,14 @@ const BidForm: React.FC = () => {
         setErrors((prev) => ({
             ...prev,
             [field]: false,
+        }));
+    };
+
+    const handleSetTaxAmountNA = () => {
+        setIsTaxAmountNA((prev) => !prev);
+        setErrors((prev) => ({
+            ...prev,
+            tax_percentage: false,
         }));
     };
 
@@ -504,7 +518,7 @@ const BidForm: React.FC = () => {
         req("contingency_percentage");
         req("contingency_coverage");
 
-        // Tax field required
+        // Tax field required unless explicitly marked N/A
         req("tax_percentage");
 
         // total_costs is required but computed; still enforce existence
@@ -580,9 +594,9 @@ const BidForm: React.FC = () => {
 
         const payload = {
             ...form,
-            tax_percentage: taxPct,
+            tax_percentage: Number(initialFormState.tax_percentage),
             contingency_percentage: contingencyPct,
-            tax_amount: taxAmount,
+            tax_amount: isTaxAmountNA ? "N/A" : taxAmount,
             contingency_amount: contingencyAmount,
             approx_weeks: form.approx_weeks,
             total_costs: parseFormattedMoney(form.total_costs),
@@ -1126,8 +1140,28 @@ const BidForm: React.FC = () => {
                                         <span className="percent-suffix">%</span>
                                     </div>
 
+                                    <button
+                                        type="button"
+                                        onClick={handleSetTaxAmountNA}
+                                        style={{
+                                            whiteSpace: "nowrap",
+                                            padding: "10px 14px",
+                                            background: isTaxAmountNA ? "#1e73be" : "#e5e7eb",
+                                            color: isTaxAmountNA ? "#fff" : "#111",
+                                            border: "none",
+                                            borderRadius: "6px",
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            opacity: isTaxAmountNA ? 1 : 0.85,
+                                        }}
+                                    >
+                                        N/A
+                                    </button>
+
                                     <div className="tax-amount text-black">
-                                        {subtotal > 0 && taxPct > 0
+                                        {isTaxAmountNA
+                                            ? "Tax marked N/A"
+                                            : subtotal > 0 && taxPct > 0
                                             ? `${formatDollarWithCommas(taxAmount)} in taxes`
                                             : ""}
                                     </div>

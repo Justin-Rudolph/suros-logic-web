@@ -72,6 +72,7 @@ const initialFormState: ChangeOrderFormState = {
 };
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
+const TAX_NOT_APPLICABLE = "N/A";
 
 const formatDollarWithCommas = (value: string | number) => {
   const cleaned = String(value).replace(/[^0-9.]/g, "");
@@ -143,6 +144,7 @@ const ChangeOrderForm: React.FC = () => {
   const [form, setForm] = useState<ChangeOrderFormState>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
   const [modal, setModal] = useState<{
     open: boolean;
     type: ModalType;
@@ -168,8 +170,8 @@ const ChangeOrderForm: React.FC = () => {
   );
 
   const taxOnPriceChangeAmount = useMemo(
-    () => roundMoney(priceOfChangeAmount * (TAX_PERCENTAGE / 100)),
-    [priceOfChangeAmount]
+    () => (isTaxAmountNA ? 0 : roundMoney(priceOfChangeAmount * (TAX_PERCENTAGE / 100))),
+    [isTaxAmountNA, priceOfChangeAmount]
   );
 
   const newContractPriceAmount = useMemo(
@@ -196,7 +198,16 @@ const ChangeOrderForm: React.FC = () => {
 
   useEffect(() => {
     if (existingChangeOrder) {
-      setForm(existingChangeOrder.formSnapshot);
+      setForm({
+        ...existingChangeOrder.formSnapshot,
+        tax_on_price_change:
+          existingChangeOrder.formSnapshot.tax_on_price_change === TAX_NOT_APPLICABLE
+            ? ""
+            : existingChangeOrder.formSnapshot.tax_on_price_change,
+      });
+      setIsTaxAmountNA(
+        existingChangeOrder.formSnapshot.tax_on_price_change === TAX_NOT_APPLICABLE
+      );
       setErrors({});
       return;
     }
@@ -219,6 +230,18 @@ const ChangeOrderForm: React.FC = () => {
   }, [existingChangeOrder, linkedBid, profile]);
 
   useEffect(() => {
+    if (isTaxAmountNA) {
+      setForm((prev) => ({
+        ...prev,
+        tax_on_price_change: TAX_NOT_APPLICABLE,
+        new_contract_price:
+          originalContractPriceAmount > 0 || priceOfChangeAmount > 0
+            ? formatDollarWithCommas(newContractPriceAmount)
+            : "",
+      }));
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       tax_on_price_change: taxOnPriceChangeAmount
@@ -233,6 +256,7 @@ const ChangeOrderForm: React.FC = () => {
           : "",
     }));
   }, [
+    isTaxAmountNA,
     newContractPriceAmount,
     originalContractPriceAmount,
     priceOfChangeAmount,
@@ -321,6 +345,24 @@ const ChangeOrderForm: React.FC = () => {
     }, 0);
   };
 
+  const handleSetTaxNA = () => {
+    setErrors((prev) => ({
+      ...prev,
+      tax_on_price_change: false,
+    }));
+
+    setForm((prev) => ({
+      ...prev,
+      tax_on_price_change:
+        isTaxAmountNA
+          ? priceOfChangeAmount > 0
+            ? formatDollarWithCommas(roundMoney(priceOfChangeAmount * (TAX_PERCENTAGE / 100)))
+            : ""
+          : TAX_NOT_APPLICABLE,
+    }));
+    setIsTaxAmountNA((prev) => !prev);
+  };
+
   const validateForm = () => {
     const nextErrors: FormErrors = {};
 
@@ -384,7 +426,7 @@ const ChangeOrderForm: React.FC = () => {
       tax_percentage: TAX_PERCENTAGE,
       original_contract_price: parseMoney(form.original_contract_price),
       price_of_change: parseMoney(form.price_of_change),
-      tax_on_price_change: taxOnPriceChangeAmount,
+      tax_on_price_change: isTaxAmountNA ? TAX_NOT_APPLICABLE : taxOnPriceChangeAmount,
       new_contract_price: newContractPriceAmount,
       additional_time_for_change: additionalTimeDays,
     };
@@ -651,7 +693,29 @@ const ChangeOrderForm: React.FC = () => {
                   className={`${isInvalid("tax_on_price_change") ? "input-error" : ""} input-readonly`}
                 />
 
-                <div className="tax-amount text-black">{TAX_PERCENTAGE}% automatic tax</div>
+                {!viewOnly && (
+                  <button
+                    type="button"
+                    onClick={handleSetTaxNA}
+                    style={{
+                      whiteSpace: "nowrap",
+                      padding: "10px 14px",
+                      background: isTaxAmountNA ? "#1e73be" : "#e5e7eb",
+                      color: isTaxAmountNA ? "#fff" : "#111",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      opacity: isTaxAmountNA ? 1 : 0.85,
+                    }}
+                  >
+                    N/A
+                  </button>
+                )}
+
+                <div className="tax-amount text-black">
+                  {`${TAX_PERCENTAGE}% automatic tax${isTaxAmountNA ? " disabled" : ""}`}
+                </div>
               </div>
 
               <label>New Contract Price:</label>
