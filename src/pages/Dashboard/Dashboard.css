@@ -1,6 +1,8 @@
 /* ==== PAGE WRAPPER ==== */
 .dashboard-wrapper {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(
     135deg,
     rgba(65, 29, 33, 1) 0%,
@@ -14,8 +16,12 @@
 
 /* ==== CENTERED CONTENT ==== */
 .dashboard-container {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 60px 20px;
   text-align: center;
 }
@@ -39,7 +45,7 @@
   display: flex;
   gap: 30px;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* ==== CARD ==== */
@@ -80,6 +86,87 @@
   font-weight: 600;
   text-align: center;
   color: white;
+}
+
+.dashboard-release-notes {
+  margin-top: auto;
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  text-align: left;
+}
+
+.dashboard-release-notes-unread {
+  border-color: rgba(255, 74, 61, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(255, 74, 61, 0.26),
+    0 0 20px rgba(255, 74, 61, 0.22),
+    0 18px 42px rgba(255, 74, 61, 0.14);
+}
+
+.dashboard-release-notes-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dashboard-release-notes-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #FF4A3D;
+  color: #FFFFFF;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-release-notes-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.dashboard-release-notes-description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.dashboard-release-notes-button {
+  flex-shrink: 0;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  color: #FFFFFF;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.dashboard-release-notes-button-unread {
+  background: #FF4A3D;
+}
+
+.dashboard-release-notes-button-read {
+  background: #6B7280;
+}
+
+.dashboard-release-notes-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.95;
 }
 
 .billing-modal-overlay {
@@ -142,4 +229,27 @@
   border-radius: 8px;
   font-weight: 600;
   text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-card-wrapper {
+    flex-direction: column;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-card {
+    width: 360px;
+  }
+
+  .dashboard-release-notes {
+    margin-top: 56px;
+    padding: 22px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dashboard-release-notes-button {
+    width: 100%;
+  }
 }

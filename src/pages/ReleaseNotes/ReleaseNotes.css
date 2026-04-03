@@ -1,0 +1,142 @@
+.release-notes-page {
+  min-height: 100vh;
+  background: linear-gradient(
+    135deg,
+    rgba(65, 29, 33, 1) 0%,
+    rgba(19, 20, 27, 1) 45%,
+    rgba(20, 46, 79, 1) 100%
+  );
+  color: #FFFFFF;
+  font-family: "Montserrat", sans-serif;
+}
+
+.release-notes-container {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 92px 20px 80px;
+}
+
+.release-notes-hero {
+  margin-bottom: 28px;
+}
+
+.release-notes-kicker {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.release-notes-heading {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 700;
+}
+
+.release-notes-date {
+  margin: 12px 0 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+}
+
+.release-notes-summary {
+  margin: 0;
+  max-width: 620px;
+  font-size: 18px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.release-notes-featured {
+  margin-bottom: 24px;
+  padding: 24px 28px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 74, 61, 0.2), rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.release-notes-featured-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.release-notes-featured-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.release-notes-featured-date {
+  margin: 0 0 18px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+}
+
+.release-notes-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.release-notes-card {
+  padding: 28px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.release-notes-card-header {
+  margin-bottom: 18px;
+}
+
+.release-notes-section-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.release-notes-card-date {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 15px;
+}
+
+.release-notes-list {
+  margin: 0;
+  padding-left: 22px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.release-notes-item {
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.release-notes-item:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .release-notes-container {
+    padding-top: 88px;
+  }
+
+  .release-notes-heading {
+    font-size: 32px;
+  }
+
+  .release-notes-featured {
+    padding: 22px;
+  }
+
+  .release-notes-card {
+    padding: 22px;
+  }
+}

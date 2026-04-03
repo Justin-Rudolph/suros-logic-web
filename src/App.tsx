@@ -31,6 +31,7 @@ import PriceEstimator from "./components/PriceEstimator";
 import PaymentSuccess from "./pages/Payments/PaymentSuccess";
 import PaymentFailure from "./pages/Payments/PaymentFailure";
 import ManageSubscription from "./pages/Payments/ManageSubscription";
+import ReleaseNotes from "./pages/ReleaseNotes/ReleaseNotes";
 
 const queryClient = new QueryClient();
 
@@ -134,6 +135,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <BidHistory />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/release-notes"
+              element={
+                <ProtectedRoute>
+                  <ReleaseNotes />
                 </ProtectedRoute>
               }
             />

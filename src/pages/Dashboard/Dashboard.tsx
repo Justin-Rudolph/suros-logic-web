@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import {
+  latestRelease,
+  RELEASE_NOTES_STORAGE_KEY,
+} from "@/data/releaseNotes";
 import "./Dashboard.css";
 
 export default function Dashboard() {
@@ -9,8 +13,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const [showBillingModal, setShowBillingModal] = useState(false);
+  const [hasUnreadReleaseNotes, setHasUnreadReleaseNotes] = useState(false);
 
   const hasActiveSubscription = profile?.isSubscribed === true;
+
+  useEffect(() => {
+    const lastSeenRelease = localStorage.getItem(RELEASE_NOTES_STORAGE_KEY);
+    setHasUnreadReleaseNotes(lastSeenRelease !== latestRelease.version);
+  }, []);
 
   const handleProtectedNav = (path: string) => {
     if (!hasActiveSubscription) {
@@ -70,6 +80,27 @@ export default function Dashboard() {
             </p>
 
             <div className="dashboard-card-button">Open History →</div>
+          </button>
+        </div>
+
+        <div
+          className={`dashboard-release-notes${hasUnreadReleaseNotes ? " dashboard-release-notes-unread" : ""}`}
+        >
+          <div>
+            <p className="dashboard-release-notes-label">
+              Latest release notes
+              {hasUnreadReleaseNotes && (
+                <span className="dashboard-release-notes-badge">New</span>
+              )}
+            </p>
+            <h2 className="dashboard-release-notes-title">See what changed in the newest update</h2>
+          </div>
+
+          <button
+            className={`dashboard-release-notes-button${hasUnreadReleaseNotes ? " dashboard-release-notes-button-unread" : " dashboard-release-notes-button-read"}`}
+            onClick={() => navigate("/release-notes")}
+          >
+            View release notes
           </button>
         </div>
       </div>
