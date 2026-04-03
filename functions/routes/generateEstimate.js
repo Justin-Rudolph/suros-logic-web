@@ -6,7 +6,7 @@ module.exports = async function generateEstimateHandler(
   OPENAI_API_KEY
 ) {
   try {
-    const { description, zipCode, bypass } = req.body || {};
+    const { description, zipCode, bypass, mode, responses } = req.body || {};
 
     if (!OPENAI_API_KEY) {
       return res.status(500).json({
@@ -17,6 +17,91 @@ module.exports = async function generateEstimateHandler(
     const openai = new OpenAI({
       apiKey: OPENAI_API_KEY,
     });
+
+    if (mode === "merge_scope") {
+      if (!description || !description.trim()) {
+        return res.status(400).json({
+          error: "A scope description is required to merge responses",
+        });
+      }
+
+      const answeredResponses = Array.isArray(responses)
+        ? responses.filter(
+            (entry) =>
+              entry &&
+              typeof entry.question === "string" &&
+              typeof entry.response === "string" &&
+              entry.response.trim()
+          )
+        : [];
+
+      if (!answeredResponses.length) {
+        return res.json({
+          merged_scope: description,
+        });
+      }
+
+      const mergeCompletion = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        reasoning_effort: "low",
+        messages: [
+          {
+            role: "system",
+            content: `
+You rewrite contractor scope of work text.
+
+Your job is to combine the existing scope of work with the user's clarification responses into one updated scope.
+
+Rules:
+- Use only information explicitly stated in the existing scope or clarification responses.
+- Do not hallucinate, infer, embellish, or add new tasks, materials, quantities, dimensions, sequencing, methods, brands, or assumptions.
+- If a clarification answer is vague, keep it vague instead of making it more specific.
+- Preserve all valid details already present in the existing scope.
+- You may correct obvious spelling mistakes and minor grammar issues so the final scope reads clearly, but you must not change the meaning or add new facts.
+- Return the final scope as clean plain text with one bullet item per line whenever possible.
+- Each line should begin with "- ".
+- Do not include headings, commentary, notes, or JSON outside the required format.
+
+Respond only in this JSON format:
+{
+  "merged_scope": "- first line\\n- second line"
+}
+            `,
+          },
+          {
+            role: "user",
+            content: `
+Existing scope of work:
+${description}
+
+Clarification responses:
+${answeredResponses
+  .map(
+    (entry) =>
+      `Question: ${entry.question.trim()}\nResponse: ${entry.response.trim()}`
+  )
+  .join("\n\n")}
+            `,
+          },
+        ],
+      });
+
+      const mergeContent = mergeCompletion.choices[0].message.content;
+
+      let parsedMerge;
+      try {
+        parsedMerge = JSON.parse(mergeContent);
+      } catch (err) {
+        return res.status(500).json({
+          error: "Invalid JSON returned from AI scope merge",
+          raw: mergeContent,
+        });
+      }
+
+      return res.json({
+        merged_scope: parsedMerge?.merged_scope || description,
+      });
+    }
 
     // Basic validation before calling OpenAI
     if (!bypass && (!description || description.trim().length < 15)) {

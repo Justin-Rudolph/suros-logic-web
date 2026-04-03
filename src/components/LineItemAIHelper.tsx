@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type EstimateTier = {
   material_cost: string;
@@ -12,6 +12,7 @@ type EstimateResponse = {
   questions?: string[];
   estimate?: EstimateTier;
   explanation?: string;
+  merged_scope?: string;
   estimates?: {
     average_price?: EstimateTier;
     high_tier_price?: EstimateTier;
@@ -22,19 +23,22 @@ interface Props {
   scope: string;
   zipCode: string | null;
   onApplyTotal?: (amount: number) => void;
+  onUpdateScope?: (scope: string) => void;
 }
 
 export default function LineItemAIHelper({
   scope,
   zipCode,
   onApplyTotal,
+  onUpdateScope,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<EstimateResponse | null>(null);
   const [open, setOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState<"average_price" | "high_tier_price">("average_price");
-
   const [showBypassWarning, setShowBypassWarning] = useState(false);
+  const [questionResponses, setQuestionResponses] = useState<Record<string, string>>({});
+  const [loadingMessage, setLoadingMessage] = useState("Generating Estimate...");
 
   const parseCurrencyToNumber = (value?: string) => {
     if (!value) return 0;
@@ -55,28 +59,61 @@ export default function LineItemAIHelper({
     return data.estimates?.high_tier_price || null;
   };
 
-  const generateEstimate = async () => {
-    if (!scope.trim()) return;
+  useEffect(() => {
+    if (response?.status === "incomplete" && response.questions?.length) {
+      setQuestionResponses(
+        response.questions.reduce<Record<string, string>>((acc, question) => {
+          acc[question] = "";
+          return acc;
+        }, {})
+      );
+    } else {
+      setQuestionResponses({});
+    }
+  }, [response]);
+
+  const requestEstimate = async ({
+    description,
+    bypass = false,
+    mode,
+    responses,
+  }: {
+    description: string;
+    bypass?: boolean;
+    mode?: "merge_scope";
+    responses?: Array<{ question: string; response: string }>;
+  }) => {
+    if (!description.trim()) return null;
+
+    const API_BASE = import.meta.env.DEV
+      ? "http://127.0.0.1:5001/suros-logic/us-central1"
+      : "https://us-central1-suros-logic.cloudfunctions.net";
+
+    const res = await fetch(`${API_BASE}/generateEstimate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description,
+        zipCode,
+        ...(mode ? { mode } : {}),
+        ...(responses ? { responses } : {}),
+        ...(bypass ? { bypass: true } : {}),
+      }),
+    });
+
+    return res.json();
+  };
+
+  const generateEstimate = async (overrideScope?: string) => {
+    const description = overrideScope ?? scope;
+    if (!description.trim()) return;
 
     try {
       setResponse(null); // clears previous estimate/questions
       setSelectedTier("average_price");
+      setLoadingMessage("Generating Estimate...");
       setLoading(true);
-
-      const API_BASE = import.meta.env.DEV
-        ? "http://127.0.0.1:5001/suros-logic/us-central1"
-        : "https://us-central1-suros-logic.cloudfunctions.net";
-
-      const res = await fetch(`${API_BASE}/generateEstimate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: scope,
-          zipCode: zipCode,
-        }),
-      });
-
-      const data = await res.json();
+      const data = await requestEstimate({ description });
       setResponse(data);
       setOpen(true);
     } catch (err) {
@@ -86,26 +123,19 @@ export default function LineItemAIHelper({
     }
   };
 
+  const handleGenerateEstimateClick = () => {
+    void generateEstimate();
+  };
+
   const bypassGenerate = async () => {
     try {
       setSelectedTier("average_price");
+      setLoadingMessage("Generating Estimate...");
       setLoading(true);
-
-      const API_BASE = import.meta.env.DEV
-        ? "http://127.0.0.1:5001/suros-logic/us-central1"
-        : "https://us-central1-suros-logic.cloudfunctions.net";
-
-      const res = await fetch(`${API_BASE}/generateEstimate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: scope,
-          zipCode: zipCode,
-          bypass: true,
-        }),
+      const data = await requestEstimate({
+        description: scope,
+        bypass: true,
       });
-
-      const data = await res.json();
 
       // Only update response
       setResponse(data);
@@ -117,6 +147,48 @@ export default function LineItemAIHelper({
     }
   };
 
+  const handleQuestionResponseChange = (question: string, value: string) => {
+    setQuestionResponses((prev) => ({
+      ...prev,
+      [question]: value,
+    }));
+  };
+
+  const handleAddResponses = async () => {
+    const answeredEntries = Object.entries(questionResponses).filter(([, value]) =>
+      value.trim()
+    );
+
+    if (!answeredEntries.length) return;
+
+    try {
+      setLoadingMessage("Updating scope of work and regenerating estimate...");
+      setLoading(true);
+
+      const mergeResult = await requestEstimate({
+        description: scope,
+        mode: "merge_scope",
+        responses: answeredEntries.map(([question, response]) => ({
+          question,
+          response: response.trim(),
+        })),
+      });
+
+      const updatedScope = mergeResult?.merged_scope?.trim() || scope;
+
+      onUpdateScope?.(updatedScope);
+      setQuestionResponses({});
+      await generateEstimate(updatedScope);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const hasResponsesToAdd = Object.values(questionResponses).some((value) =>
+    value.trim()
+  );
+
   return (
     <>
       {/* BUTTON ROW */}
@@ -127,43 +199,66 @@ export default function LineItemAIHelper({
           gap: "8px",
           alignItems: "center",
           marginLeft: "6px",
-          marginTop: "6px",
+          marginTop: "8px",
           marginBottom: "14px",
         }}
       >
         <button
           type="button"
-          onClick={generateEstimate}
+          onClick={handleGenerateEstimateClick}
+          disabled={loading}
           style={{
             flexShrink: 0,
-            height: "36px",
+            height: "40px",
             padding: "0 12px",
-            background: "#1e73be",
+            background: loading ? "#7aa8cf" : "#1e73be",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
             fontSize: "12px",
             whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            opacity: loading ? 0.9 : 1,
           }}
         >
-          {loading ? "Generating..." : "Generate Estimate"}
+          {loading && (
+            <span
+              style={{
+                width: "12px",
+                height: "12px",
+                border: "2px solid rgba(255,255,255,0.45)",
+                borderTop: "2px solid #fff",
+                borderRadius: "50%",
+                animation: "spin 0.85s linear infinite",
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span>{loading ? "Generating..." : "Generate Estimate"}</span>
         </button>
 
         {response && (
           <button
             type="button"
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              if (!loading) setOpen(true);
+            }}
+            disabled={loading}
             style={{
-              height: "36px",
+              height: "40px",
               padding: "0 12px",
-              background: "#444",
+              background: loading ? "#8c8c8c" : "#444",
               color: "#fff",
               border: "none",
               borderRadius: "4px",
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
               fontSize: "12px",
               whiteSpace: "nowrap",
+              opacity: loading ? 0.8 : 1,
             }}
           >
             View Estimate
@@ -240,14 +335,34 @@ export default function LineItemAIHelper({
                     <li
                       key={i}
                       style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        marginBottom: "8px",
+                        marginBottom: "14px",
                         lineHeight: 1.5,
                       }}
                     >
-                      <span style={{ marginRight: "8px" }}>-</span>
-                      <span>{q}</span>
+                      <div style={{ display: "flex", alignItems: "flex-start" }}>
+                        <span style={{ marginRight: "8px" }}>-</span>
+                        <span>{q}</span>
+                      </div>
+                      <textarea
+                        value={questionResponses[q] || ""}
+                        onChange={(e) =>
+                          handleQuestionResponseChange(q, e.target.value)
+                        }
+                        placeholder="Type your response here to add it to this line item..."
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          marginTop: "8px",
+                          padding: "10px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid #cfcfcf",
+                          resize: "vertical",
+                          fontFamily: "inherit",
+                          fontSize: "14px",
+                          color: "#000",
+                          boxSizing: "border-box",
+                        }}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -261,15 +376,33 @@ export default function LineItemAIHelper({
                 >
                   <button
                     type="button"
-                    onClick={() => setShowBypassWarning(true)}
+                    onClick={handleAddResponses}
+                    disabled={!hasResponsesToAdd || loading}
                     style={{
-                      background: "#e67e22",
+                      background: !hasResponsesToAdd || loading ? "#b9c3cc" : "#27ae60",
                       color: "#fff",
                       border: "none",
                       padding: "10px 16px",
                       borderRadius: "6px",
-                      cursor: "pointer",
+                      cursor: !hasResponsesToAdd || loading ? "not-allowed" : "pointer",
                       fontWeight: 600,
+                    }}
+                  >
+                    {loading ? "Working..." : "Add Responses & Re-Generate"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBypassWarning(true)}
+                    disabled={loading}
+                    style={{
+                      background: loading ? "#efb27a" : "#e67e22",
+                      color: "#fff",
+                      border: "none",
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      fontWeight: 600,
+                      opacity: loading ? 0.85 : 1,
                     }}
                   >
                     Bypass & Generate
@@ -315,7 +448,7 @@ export default function LineItemAIHelper({
                   }}
                 />
                 <div style={{ fontWeight: 600 }}>
-                  Generating Estimate...
+                  {loadingMessage}
                 </div>
               </div>
             )}
@@ -527,24 +660,43 @@ export default function LineItemAIHelper({
               <button
                 type="button"
                 onClick={(e) => {
+                  if (loading) return;
                   e.preventDefault();
                   e.stopPropagation();
 
                   setShowBypassWarning(false);
-                  bypassGenerate();
+                  void bypassGenerate();
                 }}
+                disabled={loading}
 
                 style={{
-                  background: "#e67e22",
+                  background: loading ? "#efb27a" : "#e67e22",
                   color: "#fff",
                   border: "none",
                   padding: "10px 16px",
                   borderRadius: "6px",
-                  cursor: "pointer",
+                  cursor: loading ? "not-allowed" : "pointer",
                   fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
                 }}
               >
-                Generate Estimate
+                {loading && (
+                  <span
+                    style={{
+                      width: "12px",
+                      height: "12px",
+                      border: "2px solid rgba(255,255,255,0.45)",
+                      borderTop: "2px solid #fff",
+                      borderRadius: "50%",
+                      animation: "spin 0.85s linear infinite",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <span>{loading ? "Generating..." : "Generate Estimate"}</span>
               </button>
             </div>
           </div>
