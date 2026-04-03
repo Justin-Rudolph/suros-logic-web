@@ -397,11 +397,20 @@ const BidForm: React.FC = () => {
             return;
         }
 
-        const items = Array.from({ length: count }, () => ({
-            ...emptyLineItem,
-        }));
+        setLineItems((prev) => {
+            if (count === prev.length) return prev;
 
-        setLineItems(items);
+            if (count < prev.length) {
+                return prev.slice(0, count);
+            }
+
+            const additionalItems = Array.from(
+                { length: count - prev.length },
+                () => ({ ...emptyLineItem })
+            );
+
+            return [...prev, ...additionalItems];
+        });
 
         // Clear line item validation errors when re-generating
         setErrors((prev) => {
