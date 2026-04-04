@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import demoVideoThumbnail from "@/assets/demo_video_thumbnail.png";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -245,6 +246,7 @@ const Index = () => {
                   controls
                   preload="metadata"
                   playsInline
+                  poster={demoVideoThumbnail}
                 >
                   <source src={DEMO_VIDEO_URL} type="video/mp4" />
                   Your browser does not support the video tag.
