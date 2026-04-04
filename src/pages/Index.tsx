@@ -1,15 +1,17 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
+const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%203.3.26.mp4?alt=media&token=4cee2203-9b28-4196-9581-5ace255efb32";
+
 const Index = () => {
-  const { user, loading, profile } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
   // AUTO-REDIRECT IF LOGGED IN
   useEffect(() => {
@@ -17,23 +19,12 @@ const Index = () => {
       navigate("/dashboard");
     }
   }, [user, loading, navigate]);
-  const [formData, setFormData] = useState({
-    name: "",
-    company: "",
-    email: "",
-    phone: "",
-    trades: "",
-    bidsPerMonth: "",
-
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Demo request:", formData);
-    // Handle form submission
-  };
 
   const makePayment = async () => {
+    if (isCheckoutLoading) return;
+
+    setIsCheckoutLoading(true);
+
     try {
       const apiBase = import.meta.env.DEV
         ? "http://127.0.0.1:5001/suros-logic/us-central1"
@@ -59,6 +50,7 @@ const Index = () => {
 
     } catch (err) {
       console.error("Payment error:", err);
+      setIsCheckoutLoading(false);
     }
   };
 
@@ -197,7 +189,7 @@ const Index = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Professional, industry-standard structure
+                        Professional, industry-standard language powered by AI
                       </div>
                     </div>
                   </div>
@@ -235,6 +227,56 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Demo Video Section */}
+      <section className="py-20 px-6 bg-card/30">
+        <div className="container mx-auto max-w-5xl">
+          <div className="text-center mb-10 space-y-4">
+            <h2 className="text-4xl font-bold">Watch the demo</h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              See the workflow from project details to finished proposal in one quick walkthrough.
+            </p>
+          </div>
+
+          <Card className="bg-card/80 backdrop-blur border-primary/20 shadow-xl shadow-primary/10 overflow-hidden">
+            <CardContent className="p-4 sm:p-6">
+              <div className="rounded-2xl overflow-hidden border border-border bg-black">
+                <video
+                  className="w-full h-auto"
+                  controls
+                  preload="metadata"
+                  playsInline
+                >
+                  <source src={DEMO_VIDEO_URL} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+              <p className="text-sm text-muted-foreground mt-4 text-center">
+                Having trouble with playback?{" "}
+                <a
+                  href={DEMO_VIDEO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-4 hover:text-primary/80"
+                >
+                  Open the demo video in a new tab
+                </a>
+                .
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Vision Section */}
+      <section className="py-20 px-6">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-4xl font-bold mb-6">Our Vision</h2>
+          <p className="text-xl text-muted-foreground leading-relaxed">
+            Suros Logic Systems was built by people who know the contracting world firsthand. We&apos;re building an AI-driven document automation suite that helps service businesses create quotes faster, stay organized, and spend more time winning and running jobs.
+          </p>
+        </div>
+      </section>
+
       {/* Problem Section */}
       <section className="py-20 px-6 bg-card/30">
         <div className="container mx-auto">
@@ -263,10 +305,10 @@ const Index = () => {
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">
-              Your bid, fully written, from one simple form
+              How it works
             </h2>
             <p className="text-muted-foreground text-lg">
-              No AI experience required. We handle the prompts, templates, and formatting for you.
+              A straightforward workflow for turning project notes into a client-ready proposal.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -279,17 +321,17 @@ const Index = () => {
               {
                 step: "2",
                 title: "AI Expands Content",
-                description: "Optimized AI prompts expand and structure the content like a human-written bid."
+                description: "Our workflow organizes the scope and builds out the language in a clear, usable format."
               },
               {
                 step: "3",
                 title: "Generate Document",
-                description: "The system generates a beautifully formatted Word document, keeping your style consistent."
+                description: "You get a polished Word document your team can review, edit, and send."
               },
               {
                 step: "4",
                 title: "Instant Delivery",
-                description: "The bid is emailed to you instantly, ready to edit or send to your client."
+                description: "Your proposal is delivered fast so you can move on to pricing, revisions, or sending."
               }
             ].map((step, idx) => (
               <div key={idx} className="relative">
@@ -305,18 +347,18 @@ const Index = () => {
       {/* Features Section */}
       <section className="py-20 px-6 bg-card/30">
         <div className="container mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">Built for real-world applications</h2>
+          <h2 className="text-4xl font-bold text-center mb-16">What you get</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
                 icon: <Zap className="text-primary" size={32} />,
                 title: "Industry-Tuned AI Prompts",
-                description: "AI workflows specifically optimized for trade specific bids, not generic text."
+                description: "Workflows shaped around construction scopes instead of generic AI writing."
               },
               {
                 icon: <FileText className="text-secondary" size={32} />,
                 title: "Clean, Consistent Templates",
-                description: "Same professional structure every time across all bids."
+                description: "A reliable layout your team can use across projects and clients."
               },
               {
                 icon: <Wrench className="text-primary" size={32} />,
@@ -331,12 +373,12 @@ const Index = () => {
               {
                 icon: <Clock className="text-primary" size={32} />,
                 title: "Time Savings",
-                description: "Replace hours of typing with a few minutes of form filling."
+                description: "Cut down admin work so more of your week goes to estimating and operations."
               },
               {
                 icon: <Shield className="text-secondary" size={32} />,
                 title: "No Complex Software",
-                description: "Just log in, fill out the form, and get your bid."
+                description: "Log in, complete the form, and review the finished document."
               }
             ].map((feature, idx) => (
               <Card key={idx} className="bg-card hover:bg-card/80 transition-colors border-border hover:border-primary/50">
@@ -416,8 +458,16 @@ const Index = () => {
                   className="w-full bg-primary hover:bg-primary/90"
                   size="lg"
                   onClick={makePayment}
+                  disabled={isCheckoutLoading}
                 >
-                  Get Started
+                  {isCheckoutLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Get Started"
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -457,82 +507,23 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Custom Automation Section */}
-      <section className="py-20 px-6">
-        <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-4xl font-bold mb-6">Beyond bids: full quoting and automation systems</h2>
-          <p className="text-xl text-muted-foreground mb-8">
-            Suros Logic Systems can also build tailored quoting systems that mirror your existing Excel/Word bids,
-            and automated workflows that push bid data into CRMs, email follow-ups, and project management tools.
-          </p>
-          <Button size="lg" variant="outline" className="border-primary/50 hover:bg-primary/10">
-            <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
-              Talk to us about custom automation
-            </a>
-          </Button>
-        </div>
-      </section>
-
-      {/* Results Section */}
-      <section className="py-20 px-6 bg-card/30">
-        <div className="container mx-auto">
-          <div className="grid md:grid-cols-3 gap-8 text-center">
-            {[
-              {
-                title: "Save hours on every bid",
-                description: "Stop spending nights and weekends on formatting"
-              },
-              {
-                title: "More consistent proposals",
-                description: "Professional structure across every bid you send"
-              },
-              {
-                title: "Focus on what matters",
-                description: "Free your team to focus on jobs, not documents"
-              }
-            ].map((result, idx) => (
-              <div key={idx} className="space-y-4">
-                <div className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  {idx + 1}
-                </div>
-                <h3 className="text-2xl font-semibold">{result.title}</h3>
-                <p className="text-muted-foreground">{result.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* About Section */}
-      <section className="py-20 px-6">
-        <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-4xl font-bold mb-6">Our Vision</h2>
-          <p className="text-xl text-muted-foreground leading-relaxed">
-            Suros Logic Systems was created by people who live in the contracting world. We know how much time
-            goes into every quote, every bid, every revision. Our vision is an AI-driven document automation suite
-            that handles not just bid creation, pricing estimates, file storage, and more – across industries like construction,
-            trades, and other service based industries.
-          </p>
-        </div>
-      </section>
-
       {/* Final CTA Section */}
       <section className="py-32 px-6 bg-gradient-to-br from-primary/20 via-background to-secondary/20">
         <div className="container mx-auto max-w-4xl text-center space-y-8">
           <h2 className="text-5xl font-bold">Ready to stop rewriting the same bid for the 100th time?</h2>
           <p className="text-xl text-muted-foreground">
-            Book a free 15-minute demo and see how Suros Logic Systems can automate your next bid.
+            Book a quick walkthrough and see whether Suros Logic fits the way your team already works.
           </p>
 
           <Card className="bg-card/80 backdrop-blur">
             <CardContent className="p-8">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-4">
                 <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
                   <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
                     Book My Demo <ArrowRight className="ml-2" />
                   </a>
                 </Button>
-              </form>
+              </div>
               <p className="mt-6 text-sm text-muted-foreground">
                 <a onClick={() => window.open("/sample_bid.pdf", "_blank")} className="underline hover:text-primary">See Sample Bid</a>
               </p>
