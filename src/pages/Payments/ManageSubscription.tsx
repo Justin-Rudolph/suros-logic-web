@@ -78,6 +78,7 @@ export default function ManageSubscription() {
                 body: JSON.stringify({
                     email: profile?.email,
                     uid: profile?.uid,
+                    stripeCustomerId: profile?.stripeCustomerId,
                 }),
             });
 

@@ -51,6 +51,10 @@ const getPriceId = () => {
     : process.env.STRIPE_PRICE_ID_MONTHLY_LIVE;
 };
 
+const QUICKSTART_TRIAL_DAYS = 30;
+const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
+const LANDING_PROMO_CODE = "SUROS50";
+
 /* ---------------------------------------------------------
    HELPER: RESET EMAIL
 --------------------------------------------------------- */
@@ -127,6 +131,52 @@ const updateSubscriptionStatus = async (stripeCustomerId, isSubscribed) => {
   await snap.docs[0].ref.update({ isSubscribed });
 };
 
+const getUserProfileByEmail = async (email) => {
+  if (!email) return null;
+
+  const snap = await db
+    .collection("users")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+
+  return {
+    id: snap.docs[0].id,
+    ref: snap.docs[0].ref,
+    data: snap.docs[0].data(),
+  };
+};
+
+const getPromotionCodeIdByCode = async (stripe, code) => {
+  const promotionCodes = await stripe.promotionCodes.list({
+    code,
+    active: true,
+    limit: 1,
+  });
+
+  if (!promotionCodes.data.length) {
+    return null;
+  }
+
+  return promotionCodes.data[0].id;
+};
+
+const getAuthUserByEmail = async (email) => {
+  if (!email) return null;
+
+  try {
+    return await auth().getUserByEmail(email);
+  } catch (err) {
+    if (err?.code === "auth/user-not-found") {
+      return null;
+    }
+
+    throw err;
+  }
+};
+
 /* ---------------------------------------------------------
    STRIPE WEBHOOK
 --------------------------------------------------------- */
@@ -162,7 +212,6 @@ app.post(
 
           const email = session.customer_details?.email;
           const stripeCustomerId = session.customer;
-
           if (!email || !stripeCustomerId) break;
 
           let userRecord;
@@ -255,16 +304,44 @@ app.post("/checkout", async (req, res) => {
   try {
     const stripe = getStripe();
 
-    const { stripeCustomerId, email, uid } = req.body || {};
+    const { stripeCustomerId, email, uid, source } = req.body || {};
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const isLandingCheckout = source === LANDING_CHECKOUT_SOURCE;
 
     let customerId = stripeCustomerId || null;
+    let shouldApplyLandingTrial = false;
+    let landingPromotionCodeId = null;
+
+    if (isLandingCheckout && normalizedEmail) {
+      const existingAuthUser = await getAuthUserByEmail(normalizedEmail);
+      const existingUser = normalizedEmail
+        ? await getUserProfileByEmail(normalizedEmail)
+        : null;
+
+      if (existingAuthUser) {
+        return res.status(409).json({
+          error: "User with this account already exists.",
+          existingAccount: true,
+        });
+      }
+
+      if (existingUser?.data?.stripeCustomerId) {
+        customerId = existingUser.data.stripeCustomerId;
+      }
+
+      shouldApplyLandingTrial = true;
+      landingPromotionCodeId = await getPromotionCodeIdByCode(
+        stripe,
+        LANDING_PROMO_CODE
+      );
+    }
 
     /* ---------------------------------------------------------
        CREATE CUSTOMER ONLY IF EMAIL EXISTS
     --------------------------------------------------------- */
-    if (!customerId && email) {
+    if (!customerId && normalizedEmail) {
       const customer = await stripe.customers.create({
-        email,
+        email: normalizedEmail,
         metadata: {
           uid: uid || "",
         },
@@ -285,11 +362,26 @@ app.post("/checkout", async (req, res) => {
       ...(customerId && { customer: customerId }),
 
       // ✅ OPTIONAL: prefill email if we have it
-      ...(email && !customerId && { customer_email: email }),
+      ...(normalizedEmail && !customerId && { customer_email: normalizedEmail }),
 
       line_items: [{ price: getPriceId(), quantity: 1 }],
+      ...(shouldApplyLandingTrial && {
+        subscription_data: {
+          trial_period_days: QUICKSTART_TRIAL_DAYS,
+        },
+      }),
+      ...(landingPromotionCodeId && {
+        discounts: [
+          {
+            promotion_code: landingPromotionCodeId,
+          },
+        ],
+      }),
+      metadata: {
+        checkoutSource: source || "",
+      },
 
-      allow_promotion_codes: true,
+      ...(!landingPromotionCodeId && { allow_promotion_codes: true }),
 
       success_url: `${BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${BASE_URL}/`,

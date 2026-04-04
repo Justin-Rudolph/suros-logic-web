@@ -1,5 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ArrowRight, Check, FileText, Zap, Shield, Clock, Wrench, Home, Hammer, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import demoVideoThumbnail from "@/assets/demo_video_thumbnail.png";
@@ -8,11 +11,16 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%203.3.26.mp4?alt=media&token=4cee2203-9b28-4196-9581-5ace255efb32";
+const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
 
 const Index = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [isTrialDialogOpen, setIsTrialDialogOpen] = useState(false);
+  const [checkoutEmail, setCheckoutEmail] = useState("");
+  const [checkoutError, setCheckoutError] = useState("");
+  const [existingAccount, setExistingAccount] = useState(false);
 
   // AUTO-REDIRECT IF LOGGED IN
   useEffect(() => {
@@ -24,7 +32,25 @@ const Index = () => {
   const makePayment = async () => {
     if (isCheckoutLoading) return;
 
+    const normalizedEmail = checkoutEmail.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setExistingAccount(false);
+      setCheckoutError("Enter your email to continue.");
+      return;
+    }
+
+    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+
+    if (!isValidEmail) {
+      setExistingAccount(false);
+      setCheckoutError("Enter a valid email address.");
+      return;
+    }
+
     setIsCheckoutLoading(true);
+    setCheckoutError("");
+    setExistingAccount(false);
 
     try {
       const apiBase = import.meta.env.DEV
@@ -34,14 +60,21 @@ const Index = () => {
       const response = await fetch(`${apiBase}/stripe/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-
-        // ❌ DO NOT send profile
         body: JSON.stringify({
-          // send nothing OR optional metadata
+          email: normalizedEmail,
+          source: LANDING_CHECKOUT_SOURCE,
         }),
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          const data = await response.json();
+          setExistingAccount(data.existingAccount === true);
+          setCheckoutError(data.error || "User with this account already exists.");
+          setIsCheckoutLoading(false);
+          return;
+        }
+
         throw new Error(`Checkout failed: ${response.status}`);
       }
 
@@ -51,6 +84,7 @@ const Index = () => {
 
     } catch (err) {
       console.error("Payment error:", err);
+      setCheckoutError("Unable to start checkout right now.");
       setIsCheckoutLoading(false);
     }
   };
@@ -436,17 +470,25 @@ const Index = () => {
             <h2 className="text-4xl font-bold mb-4">Simple pricing that pays for itself</h2>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            <Card className="bg-card border-primary/40 hover:border-primary/70 hover:shadow-xl hover:shadow-primary/30 transition-all">
+            <Card className="relative overflow-visible bg-card border-primary/40 hover:border-primary/70 hover:shadow-xl hover:shadow-primary/30 transition-all">
               <CardContent className="p-8 space-y-6">
+                <div className="pointer-events-none absolute -right-5 -top-5 z-10 rotate-[12deg] border border-primary/40 bg-primary px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-primary-foreground shadow-lg shadow-primary/30">
+                  Limited Offer:
+                  <br />
+                  1st month 50% off after trial
+                </div>
                 <h3 className="text-2xl font-bold text-primary">QuickStart Bid Templates</h3>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">$100<span className="text-lg text-muted-foreground">/month</span></div>
-                  <p className="text-muted-foreground">All your basic needs</p>
+                  <div className="flex items-end gap-3">
+                    <div className="text-2xl font-semibold text-muted-foreground line-through">$100/month</div>
+                    <div className="text-3xl font-bold text-primary">$50<span className="text-lg text-muted-foreground">/month</span></div>
+                  </div>
+                  <p className="font-medium text-primary">30-day free trial included</p>
                 </div>
                 <ul className="space-y-3">
                   {[
                     "Access to prebuilt, optimized bid templates",
-                    "Includes the key fields typically needed to produce a complete proposal",
+                    "Includes the key fields needed to produce a complete proposal",
                     "AI-tuned prompts for clean, detailed bids",
                     "Perfect for Immediate Use"
                   ].map((item, idx) => (
@@ -459,17 +501,14 @@ const Index = () => {
                 <Button
                   className="w-full bg-primary hover:bg-primary/90"
                   size="lg"
-                  onClick={makePayment}
+                  onClick={() => {
+                    setCheckoutError("");
+                    setExistingAccount(false);
+                    setIsTrialDialogOpen(true);
+                  }}
                   disabled={isCheckoutLoading}
                 >
-                  {isCheckoutLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    "Get Started"
-                  )}
+                  Start 30-Day Free Trial
                 </Button>
               </CardContent>
             </Card>
@@ -535,6 +574,69 @@ const Index = () => {
       </section>
 
       {/* Footer */}
+      <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enter your email to get started.</DialogTitle>
+            <DialogDescription>
+              We&apos;ll guide you through the next step.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="checkout-email">Email</Label>
+            <Input
+              id="checkout-email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@company.com"
+              value={checkoutEmail}
+              onChange={(e) => setCheckoutEmail(e.target.value)}
+              disabled={isCheckoutLoading}
+            />
+          </div>
+
+          {checkoutError && (
+            <p className="text-sm text-red-500">{checkoutError}</p>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (isCheckoutLoading) return;
+                setCheckoutError("");
+                setExistingAccount(false);
+                setIsTrialDialogOpen(false);
+              }}
+              disabled={isCheckoutLoading}
+            >
+              Cancel
+            </Button>
+            {existingAccount ? (
+              <Button
+                className="bg-[#1e73be] text-white hover:bg-[#175a94]"
+                onClick={() => navigate("/auth")}
+                disabled={isCheckoutLoading}
+              >
+                Go to Login
+              </Button>
+            ) : (
+              <Button className="bg-primary hover:bg-primary/90" onClick={makePayment} disabled={isCheckoutLoading}>
+                {isCheckoutLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Redirecting...
+                  </>
+                ) : (
+                  "Continue to Stripe"
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto text-center space-y-4">
           <img src={surosLogo} alt="Suros Logic Systems" className="h-10 mx-auto opacity-70" />
