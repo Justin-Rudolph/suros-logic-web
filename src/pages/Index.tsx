@@ -9,6 +9,7 @@ import demoVideoThumbnail from "@/assets/demo_video_thumbnail.png";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%203.3.26.mp4?alt=media&token=4cee2203-9b28-4196-9581-5ace255efb32";
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
@@ -53,11 +54,7 @@ const Index = () => {
     setExistingAccount(false);
 
     try {
-      const apiBase = import.meta.env.DEV
-        ? "http://127.0.0.1:5001/suros-logic/us-central1"
-        : "https://us-central1-suros-logic.cloudfunctions.net";
-
-      const response = await fetch(`${apiBase}/stripe/checkout`, {
+      const response = await fetch(`${getFunctionsBaseUrl()}/stripe/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

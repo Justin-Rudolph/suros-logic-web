@@ -1,0 +1,231 @@
+.bid-overview {
+  max-width: 1000px;
+  margin: 0 auto 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.bid-overview-loading {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.bid-overview-loading p {
+  margin: 0;
+}
+
+.bid-overview-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #ff4a3d;
+  animation: bid-overview-spin 0.8s linear infinite;
+}
+
+@keyframes bid-overview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bid-overview-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: auto;
+  height: auto;
+  padding: 28px;
+}
+
+.bid-overview-summary h2,
+.bid-overview-timeline-card h2 {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.bid-overview-summary p,
+.bid-overview-timeline-intro,
+.bid-overview-stage-note,
+.bid-overview-stage-meta,
+.bid-overview-feedback,
+.bid-overview-feedback-error {
+  margin: 0;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.bid-overview-timeline-card {
+  padding: 28px;
+}
+
+.bid-overview-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  width: 100%;
+}
+
+.bid-overview-timeline-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.bid-overview-progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.bid-overview-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #ff4a3d;
+  transition: width 200ms ease;
+}
+
+.bid-overview-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.bid-overview-stage-item {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 18px 20px;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.bid-overview-stage-item.is-reached {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.bid-overview-stage-item.is-current {
+  border-color: rgba(255, 74, 61, 0.5);
+  background:
+    radial-gradient(circle at top right, rgba(255, 74, 61, 0.18), transparent 44%),
+    rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 74, 61, 0.12);
+}
+
+.bid-overview-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bid-overview-stage-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.bid-overview-stage-item.is-reached .bid-overview-stage-marker {
+  background: rgba(255, 74, 61, 0.2);
+}
+
+.bid-overview-stage-item.is-current .bid-overview-stage-marker {
+  background: #ff4a3d;
+}
+
+.bid-overview-stage-content {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.bid-overview-stage-content strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.bid-overview-timeline-footer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+}
+
+.bid-overview-next-button {
+  border: none;
+  border-radius: 10px;
+  background: #ff4a3d;
+  color: #ffffff;
+  padding: 12px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+.bid-overview-next-button:hover {
+  transform: translateY(-1px);
+}
+
+.bid-overview-next-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+  transform: none;
+}
+
+.bid-overview-feedback {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.bid-overview-feedback-error {
+  color: #ffb4ae;
+}
+
+@media (max-width: 720px) {
+  .bid-overview-summary,
+  .bid-overview-timeline-card {
+    padding: 22px;
+  }
+
+  .bid-overview-timeline-header,
+  .bid-overview-stage-content,
+  .bid-overview-timeline-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

@@ -2,6 +2,19 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v2.0.0",
+    date: "April 13, 2026",
+    highlights: [
+      "Introduced bid workspaces so each bid now opens into a dedicated hub with Overview, Bid Form, Bid Proposal, Change Orders, Change Order Proposal, and Project Files tabs.",
+      "Added AI-generated project summaries and a project timeline in the workspace Overview so teams can quickly understand each bid and track it from created to approved, starting, midway, and completed.",
+      "Updated submitted bids to move directly into a generated proposal experience, with editable proposal fields, PDF downloads, and clear save states.",
+      "Expanded change orders into the workspace flow so users can create a change order, generate its proposal, review it, edit it, and download the PDF from the same bid workspace.",
+      "Added project file management inside each workspace, including grouped multi-file uploads, expandable file cards, individual file open/delete actions, and full group deletion.",
+      "Improved workspace access for inactive subscriptions so saved work can still be opened and reviewed, while editing, new uploads, and new form work guide users to manage their subscription.",
+      "Refined the My Bids screen with project status badges, safer workspace deletion confirmation, and clearer last-updated tracking as workspace items change.",
+    ],
+  },
+  {
     version: "v1.7.0",
     date: "April 2, 2026",
     highlights: [

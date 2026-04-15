@@ -20,7 +20,7 @@
 
 .past-bids-container {
   max-width: 1000px;
-  margin: 120px auto 40px;
+  margin: 72px auto 40px;
   color: #fff;
   text-align: center; /* centers title + subtitle */
 }
@@ -29,11 +29,16 @@
   font-size: 2.1rem;
   margin-bottom: 8px;
   font-weight: 700; /* makes title bold */
+  text-align: center;
 }
 
 .past-bids-subtitle {
   opacity: 0.85;
   margin-bottom: 28px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
 }
 
 .past-bids-empty {
@@ -113,6 +118,57 @@
   color: #ffffff;
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+.past-bid-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.past-bid-status-pill span {
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.past-bid-status-pill-created {
+  border-color: rgba(254, 231, 155, 0.48);
+  background: rgba(178, 158, 91, 0.26);
+}
+
+.past-bid-status-pill-approved {
+  border-color: rgba(147, 197, 253, 0.56);
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.past-bid-status-pill-starting {
+  border-color: rgba(126, 84, 253, 0.52);
+  background: rgba(29, 32, 244, 0.22);
+}
+
+.past-bid-status-pill-midway {
+  border-color: rgba(251, 146, 60, 0.5);
+  background: rgba(234, 88, 12, 0.2);
+}
+
+.past-bid-status-pill-completed {
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(22, 163, 74, 0.22);
 }
 
 .past-bid-toggle {
@@ -274,6 +330,31 @@
   margin-bottom: 24px;
 }
 
+.billing-modal-confirm-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.billing-modal-confirm-input {
+  width: 100%;
+  margin-bottom: 22px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #111827;
+  font-size: 15px;
+  outline: none;
+}
+
+.billing-modal-confirm-input:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
 .billing-modal-actions {
   display: flex;
   gap: 12px;
@@ -306,4 +387,9 @@
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
+}
+
+.billing-modal-actions .danger:disabled {
+  background: #b87979;
+  cursor: not-allowed;
 }

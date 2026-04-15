@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 type EstimateTier = {
   material_cost: string;
@@ -39,6 +40,7 @@ export default function LineItemAIHelper({
   const [showBypassWarning, setShowBypassWarning] = useState(false);
   const [questionResponses, setQuestionResponses] = useState<Record<string, string>>({});
   const [loadingMessage, setLoadingMessage] = useState("Generating Estimate...");
+  const [hasAskedInitialQuestions, setHasAskedInitialQuestions] = useState(false);
 
   const parseCurrencyToNumber = (value?: string) => {
     if (!value) return 0;
@@ -75,21 +77,21 @@ export default function LineItemAIHelper({
   const requestEstimate = async ({
     description,
     bypass = false,
+    forceQuestions = false,
+    questionsAlreadyAsked = false,
     mode,
     responses,
   }: {
     description: string;
     bypass?: boolean;
+    forceQuestions?: boolean;
+    questionsAlreadyAsked?: boolean;
     mode?: "merge_scope";
     responses?: Array<{ question: string; response: string }>;
   }) => {
     if (!description.trim()) return null;
 
-    const API_BASE = import.meta.env.DEV
-      ? "http://127.0.0.1:5001/suros-logic/us-central1"
-      : "https://us-central1-suros-logic.cloudfunctions.net";
-
-    const res = await fetch(`${API_BASE}/generateEstimate`, {
+    const res = await fetch(`${getFunctionsBaseUrl()}/generateEstimate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -98,6 +100,8 @@ export default function LineItemAIHelper({
         ...(mode ? { mode } : {}),
         ...(responses ? { responses } : {}),
         ...(bypass ? { bypass: true } : {}),
+        ...(forceQuestions ? { forceQuestions: true } : {}),
+        ...(questionsAlreadyAsked ? { questionsAlreadyAsked: true } : {}),
       }),
     });
 
@@ -109,11 +113,21 @@ export default function LineItemAIHelper({
     if (!description.trim()) return;
 
     try {
+      const shouldAskInitialQuestions = !hasAskedInitialQuestions;
+
+      if (shouldAskInitialQuestions) {
+        setHasAskedInitialQuestions(true);
+      }
+
       setResponse(null); // clears previous estimate/questions
       setSelectedTier("average_price");
       setLoadingMessage("Generating Estimate...");
       setLoading(true);
-      const data = await requestEstimate({ description });
+      const data = await requestEstimate({
+        description,
+        forceQuestions: shouldAskInitialQuestions,
+        questionsAlreadyAsked: !shouldAskInitialQuestions,
+      });
       setResponse(data);
       setOpen(true);
     } catch (err) {
@@ -129,6 +143,7 @@ export default function LineItemAIHelper({
 
   const bypassGenerate = async () => {
     try {
+      setHasAskedInitialQuestions(true);
       setSelectedTier("average_price");
       setLoadingMessage("Generating Estimate...");
       setLoading(true);

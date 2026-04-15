@@ -6,7 +6,15 @@ module.exports = async function generateEstimateHandler(
   OPENAI_API_KEY
 ) {
   try {
-    const { description, zipCode, bypass, mode, responses } = req.body || {};
+    const {
+      description,
+      zipCode,
+      bypass,
+      forceQuestions,
+      questionsAlreadyAsked,
+      mode,
+      responses,
+    } = req.body || {};
 
     if (!OPENAI_API_KEY) {
       return res.status(500).json({
@@ -104,7 +112,12 @@ ${answeredResponses
     }
 
     // Basic validation before calling OpenAI
-    if (!bypass && (!description || description.trim().length < 15)) {
+    if (
+      !bypass &&
+      !forceQuestions &&
+      !questionsAlreadyAsked &&
+      (!description || description.trim().length < 15)
+    ) {
       return res.json({
         status: "incomplete",
         questions: [
@@ -157,11 +170,14 @@ Requirements:
 
 - If BYPASS MODE is TRUE, you must generate a complete estimate even if information is missing.
 - When bypassing, use regional material and labor cost averages based on the provided zip code (ONLY if no zip code assume reasonable contractor industry averages for missing information).
-- Do NOT return "incomplete" when bypass mode is TRUE.
+- If FORCE QUESTION MODE is TRUE, you must return "status": "incomplete" with 3 to 6 useful clarification questions and you must not return an estimate.
+- FORCE QUESTION MODE takes priority over all other estimate-generation instructions.
+- If QUESTIONS ALREADY ASKED is TRUE, you must generate a complete estimate using the available details and reasonable contractor assumptions for missing information.
+- Do NOT return "incomplete" when bypass mode is TRUE or QUESTIONS ALREADY ASKED is TRUE.
 
-Normal behavior (when bypass mode is FALSE):
+Normal behavior (when bypass mode is FALSE and QUESTIONS ALREADY ASKED is FALSE):
 - If required information is missing, return "status": "incomplete" and include clarification questions inside the "questions" array.
-- A zip code is required to produce a complete estimate unless bypass mode is TRUE.
+- A zip code is required to produce a complete estimate unless bypass mode is TRUE or QUESTIONS ALREADY ASKED is TRUE.
 
 Other rules:
 - You may not ask the user to provide pricing. You must independently determine pricing based on the details given.
@@ -189,6 +205,8 @@ Do not include any additional commentary outside of the required JSON response.
           role: "user",
           content: `
 BYPASS MODE: ${bypass ? "TRUE" : "FALSE"}
+FORCE QUESTION MODE: ${forceQuestions ? "TRUE" : "FALSE"}
+QUESTIONS ALREADY ASKED: ${questionsAlreadyAsked ? "TRUE" : "FALSE"}
 
 Zip Code: ${zipCode || "Not Provided"}
 
@@ -208,6 +226,24 @@ ${description}
       return res.status(500).json({
         error: "Invalid JSON returned from AI",
         raw: content,
+      });
+    }
+
+    if (forceQuestions) {
+      const questions = Array.isArray(parsed?.questions)
+        ? parsed.questions.filter((question) => typeof question === "string" && question.trim())
+        : [];
+
+      return res.json({
+        status: "incomplete",
+        questions: questions.length
+          ? questions.slice(0, 6)
+          : [
+              "What materials should be used?",
+              "What are the approximate dimensions or square footage?",
+              "Are there any demolition, prep, or disposal needs?",
+              "Are there any access, timeline, or site conditions that could affect labor?",
+            ],
       });
     }
 

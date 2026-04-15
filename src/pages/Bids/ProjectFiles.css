@@ -1,0 +1,299 @@
+/* ============================
+   PAGE
+============================ */
+.viewbids-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+  position: relative;
+}
+
+/* ============================
+   CONTAINER
+============================ */
+.viewbids-container {
+  max-width: 1100px;
+  margin: 120px auto 40px;
+  text-align: center;
+  color: white;
+}
+
+.viewbids-title {
+  margin: 0 0 10px;
+  font-size: 2.25rem;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+}
+
+.viewbids-subtitle {
+  margin: 0 auto 40px;
+  max-width: 720px;
+  font-size: 1rem;
+  line-height: 1.6;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* ============================
+   EMPTY UPLOAD CENTER
+============================ */
+.empty-upload-center {
+  margin-top: 80px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ============================
+   UPLOAD BUTTONS
+============================ */
+.upload-btn {
+  background: #4ea8e4;
+  padding: 12px 22px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.upload-btn-large {
+  font-size: 1.1rem;
+  padding: 16px 36px;
+}
+
+.upload-btn:hover {
+  background: #3a98d0;
+}
+
+/* ============================
+   SUCCESS ALERT
+============================ */
+.alert-success {
+  background: #1f7a46;
+  padding: 12px 18px;
+  border-radius: 8px;
+  margin: 25px auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+}
+
+/* Fade-out animation */
+.fade-out {
+  animation: fadeOut 2s ease forwards;
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ============================
+   FILE LIST
+============================ */
+.past-bids-container.bid-workspace-project-files-page {
+  max-width: 1000px;
+  margin: 0 auto 40px;
+}
+
+.bid-workspace-project-files-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.bid-workspace-project-files-actions-empty {
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  margin-bottom: 0;
+}
+
+.bid-workspace-project-files-upload-note {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.bid-workspace-project-files-list {
+  margin-top: 0;
+}
+
+.bid-workspace-project-file-open {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.bid-workspace-project-file-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.bid-workspace-project-file-group-row,
+.bid-workspace-project-file-upload {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.bid-workspace-project-file-uploads {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  width: 100%;
+}
+
+.bid-workspace-project-file-upload {
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.09);
+  text-align: left;
+  width: 100%;
+}
+
+.bid-workspace-project-file-upload .change-order-content {
+  flex: 1;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.bid-workspace-project-file-upload .past-bid-actions {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.selected-files-summary {
+  margin: -4px 0 8px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.selected-files-list {
+  max-height: 132px;
+  margin: 0 0 16px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+}
+
+.selected-file-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.selected-file-row:last-child {
+  border-bottom: none;
+}
+
+.selected-file-row span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.selected-file-row span:last-child {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 720px) {
+  .bid-workspace-project-file-group-row,
+  .bid-workspace-project-file-upload {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bid-workspace-project-file-upload .past-bid-actions {
+    margin-left: 0;
+    justify-content: stretch;
+  }
+}
+
+/* ============================
+   MODAL BASE
+============================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #1c1c1c;
+  padding: 32px;
+  border-radius: 14px;
+  width: 420px;
+  color: white;
+}
+
+/* ============================
+   FORM INPUTS
+============================ */
+.modal-input,
+.modal-textarea {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #111;
+  color: white;
+}
+
+.modal-textarea {
+  height: 100px;
+}
+
+/* ============================
+   UPLOAD MODAL ACTIONS
+============================ */
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cancel-btn {
+  flex: 1;
+  background: #444;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+}
+
+.confirm-btn {
+  flex: 1;
+  background: #4ea8e4;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+}

@@ -10,6 +10,7 @@ setGlobalOptions({ maxInstances: 10 });
 -------------------------------------------------- */
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const CONVERTAPI_SECRET = defineSecret("CONVERTAPI_SECRET");
 
 const STRIPE_SECRET_KEY_LIVE = defineSecret("STRIPE_SECRET_KEY_LIVE");
 const STRIPE_WEBHOOK_SECRET_LIVE = defineSecret("STRIPE_WEBHOOK_SECRET_LIVE");
@@ -33,6 +34,98 @@ exports.generateEstimate = onRequest(
         req,
         res,
         OPENAI_API_KEY.value()
+      );
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE BID FORM PROPOSAL
+-------------------------------------------------- */
+
+exports.generateBidFormProposal = onRequest(
+  { secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateBidFormProposalHandler = require("./routes/generateBidFormProposal");
+
+      await generateBidFormProposalHandler(
+        req,
+        res,
+        OPENAI_API_KEY.value()
+      );
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE CHANGE ORDER PROPOSAL
+-------------------------------------------------- */
+
+exports.generateChangeOrderProposal = onRequest(
+  { secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateChangeOrderProposalHandler = require("./routes/generateChangeOrderProposal");
+
+      await generateChangeOrderProposalHandler(
+        req,
+        res,
+        OPENAI_API_KEY.value()
+      );
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE BID WORKSPACE OVERVIEW
+-------------------------------------------------- */
+
+exports.generateBidWorkspaceOverview = onRequest(
+  { secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateBidWorkspaceOverviewHandler = require("./routes/generateBidWorkspaceOverview");
+
+      await generateBidWorkspaceOverviewHandler(
+        req,
+        res,
+        OPENAI_API_KEY.value()
+      );
+    });
+  }
+);
+
+/* --------------------------------------------------
+   DOWNLOAD BID FORM PROPOSAL PDF
+-------------------------------------------------- */
+
+exports.downloadBidFormProposalPdf = onRequest(
+  { secrets: [CONVERTAPI_SECRET] },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const downloadBidFormProposalPdfHandler = require("./routes/downloadBidFormProposalPdf");
+
+      await downloadBidFormProposalPdfHandler(
+        req,
+        res,
+        CONVERTAPI_SECRET.value()
       );
     });
   }

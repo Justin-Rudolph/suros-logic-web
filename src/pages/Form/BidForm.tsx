@@ -13,10 +13,25 @@ import "./BidForm.css";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "@/styles/gradients.css";
-import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import {
+    addDoc,
+    collection,
+    doc,
+    getDocs,
+    onSnapshot,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
+} from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
+import { generateBidWorkspaceOverviewSummary } from "@/lib/bidWorkspaceOverview";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+import { BidProjectTimelineStage } from "@/models/BidForms";
+import { renderBidEditorHtml } from "@/lib/bidFormProposal/template";
+import { touchBidFormUpdatedAt } from "@/lib/touchBidForm";
 
 type FormErrors = Record<string, boolean>;
 
@@ -30,6 +45,7 @@ type BidRecordStatus = "draft" | "submitted";
 type PrefillBidState = {
     id?: string;
     status?: BidRecordStatus;
+    projectTimelineStage?: BidProjectTimelineStage;
     formSnapshot: ExtendedBidFormState;
     lineItems: LineItem[];
 };
@@ -70,6 +86,7 @@ const emptyLineItem: LineItem = {
 const BidForm: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { bidId } = useParams();
     const { profile, loading, user } = useAuth();
 
     const [form, setForm] = useState<ExtendedBidFormState>(initialFormState);
@@ -78,13 +95,16 @@ const BidForm: React.FC = () => {
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentBidId, setCurrentBidId] = useState<string | null>(null);
+    const [currentProjectTimelineStage, setCurrentProjectTimelineStage] = useState<BidProjectTimelineStage | undefined>(undefined);
     const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
 
-    const prefillBid = (location.state as {
-        prefillBid?: PrefillBidState;
-    } | null)?.prefillBid;
+    const [prefillBid, setPrefillBid] = useState<PrefillBidState | null>(
+        (location.state as {
+            prefillBid?: PrefillBidState;
+        } | null)?.prefillBid ?? null
+    );
 
-    const isPrefillMode = !!prefillBid;
+    const isPrefillMode = !!prefillBid || !!bidId;
 
     const isInvalid = (key: string) => !!errors[key];
 
@@ -95,6 +115,7 @@ const BidForm: React.FC = () => {
         type: ModalType;
         title: string;
         message: string;
+        successDestination?: string;
     }>({
         open: false,
         type: "info",
@@ -105,9 +126,21 @@ const BidForm: React.FC = () => {
     const showModal = (
         type: ModalType,
         title: string,
-        message: string
+        message: string,
+        successDestination?: string
     ) => {
-        setModal({ open: true, type, title, message });
+        setModal({ open: true, type, title, message, successDestination });
+    };
+
+    const navigateWithScrollReset = (path: string) => {
+        navigate(path);
+        window.setTimeout(() => {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        }, 0);
+    };
+
+    const navigateBack = () => {
+        navigateWithScrollReset(currentBidId || bidId ? `/bids/${currentBidId || bidId}` : "/dashboard");
     };
 
     /** --------------------------------------------------
@@ -138,9 +171,38 @@ const BidForm: React.FC = () => {
     }, [profile, isPrefillMode]);
 
     useEffect(() => {
+        if (!bidId) return;
+
+        const unsubscribe = onSnapshot(doc(firestore, "bidForms", bidId), (snapshot) => {
+            if (!snapshot.exists()) return;
+
+            const bid = {
+                id: snapshot.id,
+                ...(snapshot.data() as {
+                    status?: BidRecordStatus;
+                    projectTimelineStage?: BidProjectTimelineStage;
+                    formSnapshot: ExtendedBidFormState;
+                    lineItems: LineItem[];
+                }),
+            };
+
+            setPrefillBid({
+                id: bid.id,
+                status: bid.status,
+                projectTimelineStage: bid.projectTimelineStage,
+                formSnapshot: bid.formSnapshot,
+                lineItems: bid.lineItems,
+            });
+        });
+
+        return unsubscribe;
+    }, [bidId]);
+
+    useEffect(() => {
         if (!prefillBid) return;
 
         setCurrentBidId(prefillBid.id ?? null);
+        setCurrentProjectTimelineStage(prefillBid.projectTimelineStage);
 
         setForm((prev) => ({
             ...prev,
@@ -174,15 +236,32 @@ const BidForm: React.FC = () => {
         return titleParts.length > 0 ? titleParts.join(" - ") : "Draft";
     };
 
+    const resolveProjectTimelineStage = (status: BidRecordStatus): BidProjectTimelineStage => {
+        if (status === "draft") {
+            return "draft";
+        }
+
+        if (!currentProjectTimelineStage || currentProjectTimelineStage === "draft") {
+            return "created";
+        }
+
+        return currentProjectTimelineStage;
+    };
+
     const persistBidRecord = async (status: BidRecordStatus) => {
         if (!user) {
             throw new Error("User must be signed in to save a bid.");
         }
 
+        const nextProjectTimelineStage = resolveProjectTimelineStage(status);
+
         const bidData = {
             userId: user.uid,
             title: buildBidTitle(),
             status,
+            projectTimelineStage: nextProjectTimelineStage,
+            workspaceOverviewStatus: "generating" as const,
+            workspaceOverviewSummary: "",
             formSnapshot: form,
             lineItems,
             updatedAt: serverTimestamp(),
@@ -190,6 +269,7 @@ const BidForm: React.FC = () => {
 
         if (currentBidId) {
             await updateDoc(doc(firestore, "bidForms", currentBidId), bidData);
+            setCurrentProjectTimelineStage(nextProjectTimelineStage);
             return currentBidId;
         }
 
@@ -199,7 +279,116 @@ const BidForm: React.FC = () => {
         });
 
         setCurrentBidId(createdDoc.id);
+        setCurrentProjectTimelineStage(nextProjectTimelineStage);
         return createdDoc.id;
+    };
+
+    const refreshBidWorkspaceOverviewRecord = async (bidFormId: string) => {
+        try {
+            const summary = await generateBidWorkspaceOverviewSummary(
+                {
+                    title: buildBidTitle(),
+                    formSnapshot: form,
+                    lineItems,
+                }
+            );
+
+            await updateDoc(doc(firestore, "bidForms", bidFormId), {
+                workspaceOverviewSummary: summary,
+                workspaceOverviewStatus: "ready",
+                workspaceOverviewUpdatedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            });
+        } catch (error) {
+            console.error("Failed to refresh bid workspace overview:", error);
+
+            await updateDoc(doc(firestore, "bidForms", bidFormId), {
+                workspaceOverviewStatus: "error",
+                updatedAt: serverTimestamp(),
+            });
+        }
+    };
+
+    const persistBidFormProposalRecord = async (
+        bidFormId: string,
+        payload: Record<string, unknown>
+    ) => {
+        if (!user) {
+            throw new Error("User must be signed in to generate a proposal.");
+        }
+
+        const proposalData = {
+            userId: user.uid,
+            bidFormId,
+            title: buildBidTitle(),
+            status: "generating" as const,
+            sourcePayload: payload,
+            errorMessage: "",
+            updatedAt: serverTimestamp(),
+        };
+
+        const existingProposalQuery = query(
+            collection(firestore, "bidFormProposals"),
+            where("userId", "==", user.uid),
+            where("bidFormId", "==", bidFormId)
+        );
+        const existingProposalSnapshot = await getDocs(existingProposalQuery);
+        const existingProposalDoc = existingProposalSnapshot.docs[0];
+
+        if (existingProposalDoc) {
+            await updateDoc(doc(firestore, "bidFormProposals", existingProposalDoc.id), proposalData);
+            return existingProposalDoc.id;
+        }
+
+        const createdDoc = await addDoc(collection(firestore, "bidFormProposals"), {
+            ...proposalData,
+            createdAt: serverTimestamp(),
+        });
+
+        return createdDoc.id;
+    };
+
+    const generateBidFormProposalRecord = async (
+        bidFormId: string,
+        bidFormProposalId: string,
+        payload: Record<string, unknown>
+    ) => {
+        try {
+            const res = await fetch(`${getFunctionsBaseUrl()}/generateBidFormProposal`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ payload }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data?.documentData) {
+                throw new Error(
+                    data?.error || "We ran into an issue generating the proposal."
+                );
+            }
+
+            await updateDoc(doc(firestore, "bidFormProposals", bidFormProposalId), {
+                status: "ready",
+                documentData: data.documentData,
+                html: renderBidEditorHtml(data.documentData),
+                updatedAt: serverTimestamp(),
+                errorMessage: "",
+            });
+            await touchBidFormUpdatedAt(bidFormId);
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "We ran into an issue generating the proposal.";
+
+            await updateDoc(doc(firestore, "bidFormProposals", bidFormProposalId), {
+                status: "error",
+                errorMessage: message,
+                updatedAt: serverTimestamp(),
+            });
+            await touchBidFormUpdatedAt(bidFormId);
+        }
     };
 
     /** -------------------------------
@@ -327,7 +516,16 @@ const BidForm: React.FC = () => {
     };
 
     const handleSetTaxAmountNA = () => {
-        setIsTaxAmountNA((prev) => !prev);
+        setIsTaxAmountNA((prev) => {
+            const nextIsNA = !prev;
+
+            setForm((current) => ({
+                ...current,
+                tax_percentage: nextIsNA ? "N/A" : initialFormState.tax_percentage,
+            }));
+
+            return nextIsNA;
+        });
         setErrors((prev) => ({
             ...prev,
             tax_percentage: false,
@@ -603,7 +801,7 @@ const BidForm: React.FC = () => {
 
         const payload = {
             ...form,
-            tax_percentage: Number(initialFormState.tax_percentage),
+            tax_percentage: isTaxAmountNA ? "N/A" : taxPct,
             contingency_percentage: contingencyPct,
             tax_amount: isTaxAmountNA ? "N/A" : taxAmount,
             contingency_amount: contingencyAmount,
@@ -618,48 +816,27 @@ const BidForm: React.FC = () => {
         };
 
         try {
-            const res = await fetch(
-                "https://astutearc7.app.n8n.cloud/webhook/lastcall-bid",
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                }
-            );
+            const bidFormId = await persistBidRecord("submitted");
+            await refreshBidWorkspaceOverviewRecord(bidFormId);
+            const bidFormProposalId = await persistBidFormProposalRecord(bidFormId, payload);
 
             setIsSubmitting(false);
 
-            if (res.ok) {
-                await persistBidRecord("submitted");
+            void generateBidFormProposalRecord(bidFormId, bidFormProposalId, payload);
 
-                showModal(
-                    "success",
-                    "Bid Submitted Successfully",
-                    `
-                Your bid is being generated now.<br/><br/>
-                Please check your inbox shortly — delivery typically takes a few minutes while we finalize the document and send it over.
-                `
-                );
-
-                setForm(initialFormState);
-                setLineItems([]);
-                setNumLineItems("");
-                setErrors({});
-                setCurrentBidId(null);
-            } else {
-                showModal(
-                    "error",
-                    "Submission Failed",
-                    "We ran into an issue while submitting your bid. Please try again in a moment."
-                );
-            }
+            showModal(
+                "success",
+                "Bid Submitted Successfully",
+                "Your bid form has been saved and the proposal is being generated.",
+                `/bids/${bidFormId}/bid-proposal`
+            );
         } catch (err) {
             setIsSubmitting(false); // ✅ stop loading on error
 
             showModal(
                 "error",
                 "Network Error",
-                "We could not connect to our servers. Please check your connection and try again."
+                "We could not create your proposal. Please check your connection and try again."
             );
         }
     };
@@ -670,13 +847,15 @@ const BidForm: React.FC = () => {
         setIsSubmitting(true);
 
         try {
-            await persistBidRecord("draft");
+            const bidFormId = await persistBidRecord("draft");
+            await refreshBidWorkspaceOverviewRecord(bidFormId);
             setIsSubmitting(false);
 
             showModal(
                 "success",
                 "Draft Saved",
-                "Your bid draft has been saved. You can come back and finish it later from Bid History."
+                "Your bid draft has been saved. You can come back and finish it later from Bid History.",
+                `/bids/${bidFormId}`
             );
         } catch (err) {
             setIsSubmitting(false);
@@ -726,7 +905,7 @@ const BidForm: React.FC = () => {
             <div className="suros-gradient">
                 <div className="bid-form-page">
                     <button
-                        onClick={() => navigate("/dashboard")}
+                        onClick={navigateBack}
                         style={{
                             position: "fixed",
                             top: "20px",
@@ -976,7 +1155,10 @@ const BidForm: React.FC = () => {
                                         setNumLineItems(e.target.value);
                                         setErrors((prev) => ({ ...prev, line_items_missing: false }));
                                     }}
-                                    className={isInvalid("line_items_missing") ? "input-error" : ""}
+                                    className={[
+                                        "line-item-count-input",
+                                        isInvalid("line_items_missing") ? "input-error" : "",
+                                    ].filter(Boolean).join(" ")}
                                 />
 
                                 <button type="button" onClick={handleGenerateLineItems}>
@@ -1148,7 +1330,7 @@ const BidForm: React.FC = () => {
                                         <input
                                             type="text"
                                             id="tax_percentage"
-                                            value={form.tax_percentage}
+                                            value={isTaxAmountNA ? "0" : form.tax_percentage}
                                             readOnly
                                             placeholder="7"
                                             className={`${isInvalid("tax_percentage") ? "input-error" : ""} input-readonly`}
@@ -1257,7 +1439,7 @@ const BidForm: React.FC = () => {
                                         {isSubmitting ? (
                                             <span className="spinner" />
                                         ) : (
-                                            "Generate My Bid"
+                                            "Submit Bid"
                                         )}
                                     </button>
                                     <p className="powered">POWERED by Suros Logic Systems, LLC</p>
@@ -1306,7 +1488,11 @@ const BidForm: React.FC = () => {
                             <button
                                 onClick={() => {
                                     if (modal.type === "success") {
-                                        navigate("/dashboard");
+                                        const targetBidId = currentBidId || bidId;
+                                        navigateWithScrollReset(
+                                            modal.successDestination ||
+                                            (targetBidId ? `/bids/${targetBidId}/bid-proposal` : "/bids")
+                                        );
                                     } else {
                                         setModal((m) => ({ ...m, open: false }));
                                     }

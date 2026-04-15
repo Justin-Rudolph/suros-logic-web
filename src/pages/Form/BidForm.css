@@ -104,6 +104,17 @@
   line-height: 1.5;
 }
 
+.bid-form-page .line-item-count-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.bid-form-page .line-item-count-input::-webkit-outer-spin-button,
+.bid-form-page .line-item-count-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* BUTTON */
 .bid-form-page button {
   background: #1e73be;

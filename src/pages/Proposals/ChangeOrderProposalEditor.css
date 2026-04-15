@@ -1,0 +1,121 @@
+.change-order-editor-side-heading {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.change-order-editor-date-display {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.change-order-editor-date-display.is-right {
+  justify-content: flex-end;
+}
+
+.change-order-editor-date-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.change-order-editor-date-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.change-order-editor-spaced-card {
+  margin-top: 10px;
+}
+
+.bid-editor-document .change-order-editor-cost-table {
+  border-collapse: collapse;
+  border: 2px solid #2a3439;
+  margin-top: 24px;
+  margin-left: auto;
+  width: min(50%, 520px);
+  background: #fff;
+}
+
+.change-order-editor-cost-cell {
+  border: 2px solid #2a3439;
+  font-weight: 700;
+}
+
+.change-order-editor-tax-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.change-order-editor-tax-input {
+  width: 54px;
+}
+
+.change-order-editor-readonly-value {
+  display: inline-block;
+  min-height: 28px;
+}
+
+.change-order-editor-readonly-block {
+  margin-top: 6px;
+  min-height: 28px;
+ }
+
+.change-order-editor-signature {
+  margin-top: 50px;
+}
+
+.change-order-editor-signature-block {
+  margin-bottom: 40px;
+}
+
+.change-order-editor-signature-input {
+  display: block;
+  max-width: 420px;
+  margin-top: 18px;
+}
+
+.change-order-editor-signature-label {
+  display: block;
+}
+
+.change-order-editor-contract-copy {
+  margin-bottom: 40px;
+  font-size: 22px;
+}
+
+.change-order-editor-line {
+  margin-top: 20px;
+  width: 420px;
+  max-width: 100%;
+  border-bottom: 2px solid #2a3439;
+}
+
+.change-order-editor-date-line {
+  margin-top: 40px;
+  width: 260px;
+  max-width: 100%;
+  border-bottom: 2px solid #2a3439;
+}
+
+.change-order-editor-footer {
+  margin-top: 26px;
+  border-top: 3px solid #2a3439;
+  padding-top: 12px;
+}
+
+.change-order-editor-helper {
+  margin-top: 24px;
+  font-size: 14px;
+  color: #5a6268;
+}

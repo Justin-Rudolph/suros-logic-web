@@ -10,19 +10,27 @@ import {
   addDoc,
   collection,
   doc,
+  getDocs,
+  onSnapshot,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useAuth } from "@/context/AuthContext";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { firestore } from "@/lib/firebase";
+import { renderChangeOrderProposalHtml } from "@/lib/changeOrderProposal/template";
+import { touchBidFormUpdatedAt } from "@/lib/touchBidForm";
 import { BidFormRecord } from "@/models/BidForms";
 import {
   ChangeOrderFormState,
   ChangeOrderRecord,
 } from "@/models/ChangeOrder";
+import { ChangeOrderProposalDocument } from "@/models/ChangeOrderProposals";
 
 import "./BidForm.css";
 import "@/styles/gradients.css";
@@ -134,17 +142,21 @@ const addDaysToDate = (dateString: string, daysToAdd: number) => {
 const ChangeOrderForm: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { bidId, changeOrderId } = useParams();
   const { profile, loading, user } = useAuth();
 
   const state = location.state as LocationState;
-  const linkedBid = state?.bid;
-  const existingChangeOrder = state?.existingChangeOrder;
+  const [linkedBid, setLinkedBid] = useState<BidFormRecord | null>(state?.bid ?? null);
+  const [existingChangeOrder, setExistingChangeOrder] = useState<ChangeOrderRecord | null>(
+    state?.existingChangeOrder ?? null
+  );
   const viewOnly = !!state?.viewOnly;
 
   const [form, setForm] = useState<ChangeOrderFormState>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
+  const [successRedirectPath, setSuccessRedirectPath] = useState<string>("/bids");
   const [modal, setModal] = useState<{
     open: boolean;
     type: ModalType;
@@ -195,6 +207,40 @@ const ChangeOrderForm: React.FC = () => {
   const showModal = (type: ModalType, title: string, message: string) => {
     setModal({ open: true, type, title, message });
   };
+
+  const navigateBack = () => {
+    navigate(bidId ? `/bids/${bidId}/change-orders` : "/bids");
+  };
+
+  useEffect(() => {
+    if (!bidId) return;
+
+    const unsubscribe = onSnapshot(doc(firestore, "bidForms", bidId), (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      setLinkedBid({
+        id: snapshot.id,
+        ...(snapshot.data() as Omit<BidFormRecord, "id">),
+      });
+    });
+
+    return unsubscribe;
+  }, [bidId]);
+
+  useEffect(() => {
+    if (!changeOrderId) return;
+
+    const unsubscribe = onSnapshot(doc(firestore, "changeOrder", changeOrderId), (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      setExistingChangeOrder({
+        id: snapshot.id,
+        ...(snapshot.data() as Omit<ChangeOrderRecord, "id">),
+      });
+    });
+
+    return unsubscribe;
+  }, [changeOrderId]);
 
   useEffect(() => {
     if (existingChangeOrder) {
@@ -271,9 +317,9 @@ const ChangeOrderForm: React.FC = () => {
   }, [computedNewCompletionDate]);
 
   useEffect(() => {
-    if (linkedBid || existingChangeOrder || !profile) return;
-    navigate("/bids/history");
-  }, [existingChangeOrder, linkedBid, navigate, profile]);
+    if (bidId || changeOrderId || linkedBid || existingChangeOrder || !profile) return;
+    navigate("/bids");
+  }, [bidId, changeOrderId, existingChangeOrder, linkedBid, navigate, profile]);
 
   const handleFormChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -395,6 +441,121 @@ const ChangeOrderForm: React.FC = () => {
     return Object.keys(nextErrors).length === 0;
   };
 
+  const buildChangeOrderTitle = () => {
+    const jobName = form.job_name.trim();
+    const customerName = form.customer_name.trim();
+    const titleParts = [jobName, customerName].filter(Boolean);
+    return titleParts.length > 0 ? `Change Order - ${titleParts.join(" - ")}` : "Change Order";
+  };
+
+  const buildChangeOrderProposalDocument = (): ChangeOrderProposalDocument => ({
+    title: buildChangeOrderTitle(),
+    company_address: form.company_address,
+    company_phone: form.company_phone,
+    company_email: form.company_email,
+    company_name: form.company_name,
+    customer_name: form.customer_name,
+    job_name: form.job_name,
+    date_of_issue: form.date_of_issue,
+    reason_for_change_description: form.reason_for_change_description,
+    breakdown_material_labor_description: form.breakdown_material_labor_description,
+    tax_percentage: isTaxAmountNA ? 0 : TAX_PERCENTAGE,
+    tax_not_applicable: isTaxAmountNA,
+    original_contract_price: form.original_contract_price,
+    price_of_change: form.price_of_change,
+    tax_on_price_change: form.tax_on_price_change,
+    new_contract_price: form.new_contract_price,
+    original_completion_date: form.original_completion_date,
+    additional_time_for_change: form.additional_time_for_change,
+    new_completion_date: form.new_completion_date,
+    immediate_or_later_payment: form.immediate_or_later_payment,
+    full_name: form.full_name,
+  });
+
+  const persistChangeOrderProposalRecord = async (nextChangeOrderId: string) => {
+    if (!linkedBid || !user) {
+      throw new Error("Missing change order proposal context.");
+    }
+
+    const proposalData = {
+      userId: user.uid,
+      bidFormId: linkedBid.id,
+      changeOrderId: nextChangeOrderId,
+      title: buildChangeOrderTitle(),
+      status: "generating" as const,
+      errorMessage: "",
+      sourcePayload: {
+        formSnapshot: form,
+      },
+      updatedAt: serverTimestamp(),
+    };
+
+    const existingProposalQuery = query(
+      collection(firestore, "changeOrderProposals"),
+      where("userId", "==", user.uid),
+      where("changeOrderId", "==", nextChangeOrderId)
+    );
+    const existingProposalSnapshot = await getDocs(existingProposalQuery);
+    const existingProposalDoc = existingProposalSnapshot.docs[0];
+
+    if (existingProposalDoc) {
+      await updateDoc(doc(firestore, "changeOrderProposals", existingProposalDoc.id), proposalData);
+      await touchBidFormUpdatedAt(linkedBid.id);
+      return existingProposalDoc.id;
+    }
+
+    const createdDoc = await addDoc(collection(firestore, "changeOrderProposals"), {
+      ...proposalData,
+      createdAt: serverTimestamp(),
+    });
+    await touchBidFormUpdatedAt(linkedBid.id);
+
+    return createdDoc.id;
+  };
+
+  const generateChangeOrderProposalRecord = async (
+    bidFormId: string,
+    changeOrderProposalId: string,
+    payload: Record<string, unknown>
+  ) => {
+    try {
+      const res = await fetch(`${getFunctionsBaseUrl()}/generateChangeOrderProposal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.documentData) {
+        throw new Error(
+          data?.error || "We ran into an issue generating the change order proposal."
+        );
+      }
+
+      await updateDoc(doc(firestore, "changeOrderProposals", changeOrderProposalId), {
+        status: "ready",
+        documentData: data.documentData,
+        html: renderChangeOrderProposalHtml(data.documentData),
+        updatedAt: serverTimestamp(),
+        errorMessage: "",
+      });
+      await touchBidFormUpdatedAt(bidFormId);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "We ran into an issue generating the change order proposal.";
+
+      await updateDoc(doc(firestore, "changeOrderProposals", changeOrderProposalId), {
+        status: "error",
+        errorMessage: message,
+        updatedAt: serverTimestamp(),
+      });
+      await touchBidFormUpdatedAt(bidFormId);
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -423,7 +584,7 @@ const ChangeOrderForm: React.FC = () => {
     const payload = {
       ...form,
       bid_form_id: linkedBid.id,
-      tax_percentage: TAX_PERCENTAGE,
+      tax_percentage: isTaxAmountNA ? 0 : TAX_PERCENTAGE,
       original_contract_price: parseMoney(form.original_contract_price),
       price_of_change: parseMoney(form.price_of_change),
       tax_on_price_change: isTaxAmountNA ? TAX_NOT_APPLICABLE : taxOnPriceChangeAmount,
@@ -432,31 +593,14 @@ const ChangeOrderForm: React.FC = () => {
     };
 
     try {
-      const res = await fetch(
-        "https://astutearc7.app.n8n.cloud/webhook/change-order",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!res.ok) {
-        setIsSubmitting(false);
-        showModal(
-          "error",
-          "Submission Failed",
-          "We ran into an issue while submitting your change order. Please try again in a moment."
-        );
-        return;
-      }
-
       const recordPayload = {
         userId: user.uid,
         bidFormId: linkedBid.id,
-        title: "Change Order Form",
+        title: buildChangeOrderTitle(),
         formSnapshot: form,
       };
+
+      let savedChangeOrderId = existingChangeOrder?.id ?? "";
 
       if (existingChangeOrder?.id) {
         await updateDoc(doc(firestore, "changeOrder", existingChangeOrder.id), {
@@ -464,17 +608,32 @@ const ChangeOrderForm: React.FC = () => {
           updatedAt: serverTimestamp(),
         });
       } else {
-        await addDoc(collection(firestore, "changeOrder"), {
+        const createdDoc = await addDoc(collection(firestore, "changeOrder"), {
           ...recordPayload,
           createdAt: serverTimestamp(),
         });
+        savedChangeOrderId = createdDoc.id;
+      }
+      await touchBidFormUpdatedAt(linkedBid.id);
+
+      if (!savedChangeOrderId) {
+        savedChangeOrderId = existingChangeOrder?.id || "";
       }
 
+      const changeOrderProposalId = await persistChangeOrderProposalRecord(savedChangeOrderId);
+      setSuccessRedirectPath(
+        `/bids/${linkedBid.id}/change-orders/${savedChangeOrderId}/proposal`
+      );
+
       setIsSubmitting(false);
+      void generateChangeOrderProposalRecord(linkedBid.id, changeOrderProposalId, {
+        ...payload,
+        title: buildChangeOrderTitle(),
+      });
       showModal(
         "success",
         "Change Order Submitted Successfully",
-        "Your change order form has been saved and sent for processing."
+        "Your change order form has been saved and the proposal is being generated."
       );
     } catch (error) {
       setIsSubmitting(false);
@@ -522,7 +681,7 @@ const ChangeOrderForm: React.FC = () => {
     <div className="suros-gradient">
       <div className="bid-form-page">
         <button
-          onClick={() => navigate("/bids/history")}
+          onClick={navigateBack}
           style={{
             position: "fixed",
             top: "20px",
@@ -866,7 +1025,11 @@ const ChangeOrderForm: React.FC = () => {
             }}
           >
             <h2 style={{ marginBottom: "12px", color: "#000", fontWeight: "bold" }}>
-              {modal.type === "success" ? modal.title || "Change Order Submitted" : modal.title}
+              {modal.type === "success" && "✅ "}
+              {modal.type === "error" && "❌ "}
+              {modal.type === "warning" && "⚠️ "}
+              {modal.type === "info" && "ℹ️ "}
+              {modal.title}
             </h2>
 
             <p style={{ color: "#000", lineHeight: 1.6, marginBottom: "22px" }}>
@@ -876,7 +1039,7 @@ const ChangeOrderForm: React.FC = () => {
             <button
               onClick={() => {
                 if (modal.type === "success") {
-                  navigate("/bids/history");
+                  navigate(successRedirectPath);
                 } else {
                   setModal((prev) => ({ ...prev, open: false }));
                 }

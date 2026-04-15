@@ -36,51 +36,39 @@ export default function Dashboard() {
       <Navbar />
 
       <div className="dashboard-container">
-        <h1 className="dashboard-title">Welcome to Your Dashboard</h1>
+        <h1 className="dashboard-title">Dashboard</h1>
 
         <p className="dashboard-subtitle">
-          Create bids, manage submissions, and track related change orders in one place.
+          Start new bids, reopen active workspaces, and manage every proposal and change order from one place.
         </p>
 
         <div className="dashboard-card-wrapper">
-          {/* CARD 1 */}
           <button
-            className="dashboard-card"
+            className="dashboard-card dashboard-card-priority"
             onClick={() => handleProtectedNav("/form/bid_form")}
           >
-            <h2 className="dashboard-card-title">Create New Bid</h2>
+            <p className="dashboard-card-kicker">Create</p>
+            <h2 className="dashboard-card-title">Start New Bid</h2>
             <p className="dashboard-card-description">
-              Generate a new automated bid using your Suros Logic bid builder.
+              Create a new bid, define scope, and generate the foundation for a polished customer bid.
             </p>
 
             <div className="dashboard-card-button">Start Bid →</div>
           </button>
 
-          {/* CARD 2 */}
           <button
             className="dashboard-card"
-            onClick={() => navigate("/view-bids")}
+            onClick={() => navigate("/bids")}
           >
+            <p className="dashboard-card-kicker">Workspace</p>
             <h2 className="dashboard-card-title">My Bids</h2>
             <p className="dashboard-card-description">
-              A centralized place to store, organize, and access all of your bids.
+              Reopen saved bids, track proposal status, and manage linked change orders inside each bid workspace.
             </p>
 
-            <div className="dashboard-card-button">View Bids →</div>
+            <div className="dashboard-card-button">Open Workspaces →</div>
           </button>
 
-          {/* CARD 3 */}
-          <button
-            className="dashboard-card"
-            onClick={() => navigate("/bids/history")}
-          >
-            <h2 className="dashboard-card-title">Bid & Change Order History</h2>
-            <p className="dashboard-card-description">
-              Reopen submitted bids, create linked change orders, and review prior change order forms.
-            </p>
-
-            <div className="dashboard-card-button">Open History →</div>
-          </button>
         </div>
 
         <div
@@ -93,7 +81,7 @@ export default function Dashboard() {
                 <span className="dashboard-release-notes-badge">New</span>
               )}
             </p>
-            <h2 className="dashboard-release-notes-title">See what changed in the newest update</h2>
+            <h2 className="dashboard-release-notes-title">See what changed in the latest update</h2>
           </div>
 
           <button

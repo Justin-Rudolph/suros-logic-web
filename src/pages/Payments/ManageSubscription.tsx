@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "@/styles/gradients.css";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 export default function ManageSubscription() {
     const { profile } = useAuth();
@@ -19,10 +20,6 @@ export default function ManageSubscription() {
         profile?.isSubscribed === true &&
         (!profile?.stripeCustomerId || profile.stripeCustomerId.trim() === "");
 
-    const API_BASE = import.meta.env.DEV
-        ? "http://127.0.0.1:5001/suros-logic/us-central1"
-        : "https://us-central1-suros-logic.cloudfunctions.net";
-
     /* ----------------------------------------------------------
        OPEN STRIPE BILLING PORTAL (ACTIVE SUBS)
     ---------------------------------------------------------- */
@@ -36,7 +33,7 @@ export default function ManageSubscription() {
             setLoading(true);
             setError("");
 
-            const res = await fetch(`${API_BASE}/stripe/portal`, {
+            const res = await fetch(`${getFunctionsBaseUrl()}/stripe/portal`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -72,7 +69,7 @@ export default function ManageSubscription() {
             setLoading(true);
             setError("");
 
-            const res = await fetch(`${API_BASE}/stripe/checkout`, {
+            const res = await fetch(`${getFunctionsBaseUrl()}/stripe/checkout`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

@@ -3,10 +3,7 @@ import { useNavigate } from "react-router-dom";
 import surosLogo from "@/assets/suros-logo-new.png";
 import "@/styles/gradients.css";
 import "../Profile/EditProfile.css";
-
-const API_BASE = import.meta.env.DEV
-  ? "http://127.0.0.1:5001/suros-logic/us-central1"
-  : "https://us-central1-suros-logic.cloudfunctions.net";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -29,7 +26,7 @@ export default function ForgotPassword() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const response = await fetch(`${getFunctionsBaseUrl()}/auth/forgot-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

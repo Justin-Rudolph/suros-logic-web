@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getAuth } from "firebase/auth";
 import { useAuth } from "@/context/AuthContext";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
@@ -19,10 +20,6 @@ const PaymentSuccess = () => {
   const [error, setError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState(false);
 
-  const API_BASE = import.meta.env.DEV
-    ? "http://127.0.0.1:5001/suros-logic/us-central1"
-    : "https://us-central1-suros-logic.cloudfunctions.net";
-
   useEffect(() => {
     const fetchEmail = async () => {
       if (!sessionId) {
@@ -31,7 +28,7 @@ const PaymentSuccess = () => {
       }
 
       try {
-        const res = await fetch(`${API_BASE}/stripe/session/${sessionId}`);
+        const res = await fetch(`${getFunctionsBaseUrl()}/stripe/session/${sessionId}`);
 
         if (!res.ok) {
           throw new Error(`API error ${res.status}`);
@@ -59,7 +56,7 @@ const PaymentSuccess = () => {
     };
 
     fetchEmail();
-  }, [sessionId, API_BASE]);
+  }, [sessionId]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">

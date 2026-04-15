@@ -6,11 +6,24 @@ export type StoredBidFormState = BidFormState & {
   contingency_percentage: string;
 };
 
+export type BidProjectTimelineStage =
+  | "draft"
+  | "created"
+  | "approved"
+  | "starting"
+  | "midway"
+  | "completed";
+
 export interface BidFormRecord {
   id: string;
   userId: string;
   title: string;
   status?: "draft" | "submitted";
+  workspaceOverviewSummary?: string;
+  workspaceOverviewStatus?: "generating" | "ready" | "error";
+  workspaceOverviewUpdatedAt?: Timestamp;
+  projectTimelineStage?: BidProjectTimelineStage;
+  projectTimelineUpdatedAt?: Timestamp;
   formSnapshot: StoredBidFormState;
   lineItems: LineItem[];
   createdAt?: Timestamp;
