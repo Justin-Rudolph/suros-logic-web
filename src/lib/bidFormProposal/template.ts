@@ -86,8 +86,7 @@ const buildCompanySloganMarkup = (value: string) => {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
 
-  return `<br>
-      <em style="font-size:22px;">&ldquo;${escapeHtml(trimmed)}&rdquo;</em>`;
+  return `<em style="font-size:22px;">&ldquo;${escapeHtml(trimmed)}&rdquo;</em>`;
 };
 
 const buildExpandedScopeLines = (lineItem: BidFormProposalLineItem) => {
@@ -190,12 +189,18 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
 <!-- INVOICE META -->
 <table cellpadding="8" cellspacing="0">
   <tr>
-    <td>
-      <strong style="font-size:26px; color:#2A3439;">Invoice Date</strong><br>
+    <td style="padding-bottom:0;">
+      <strong style="font-size:26px; color:#2A3439;">Invoice Date</strong>
+    </td>
+    <td style="text-align:right; padding-bottom:0;">
+      <strong style="font-size:26px; color:#2A3439;">INVOICE #${escapeHtml(document.invoice_number)}</strong>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-top:0;">
       ${escapeHtml(formatInvoiceDate(document.invoice_date))}
     </td>
-    <td style="text-align:right;">
-      <strong style="font-size:26px; color:#2A3439;">INVOICE #${escapeHtml(document.invoice_number)}</strong><br>
+    <td style="text-align:right; padding-top:0;">
       ${buildCompanySloganMarkup(document.company_slogan)}
     </td>
   </tr>

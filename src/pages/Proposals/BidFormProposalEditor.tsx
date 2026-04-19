@@ -517,7 +517,11 @@ export default function BidFormProposalEditor() {
       const saved = await persistProposalChanges();
       if (!saved) return;
 
-      const pdfFileName = (saved.documentData.invoice_number || record?.title || "invoice")
+      const invoiceNumber = saved.documentData.invoice_number?.trim();
+      const rawPdfFileName = invoiceNumber
+        ? `Invoice # ${invoiceNumber}`
+        : record?.title || "invoice";
+      const pdfFileName = rawPdfFileName
         .trim()
         .replace(/[^a-zA-Z0-9-_]+/g, "-")
         .replace(/^-+|-+$/g, "") || "invoice";
@@ -744,6 +748,9 @@ export default function BidFormProposalEditor() {
                         onChange={(value) => updateField("invoice_number", value)}
                         className="bid-editor-meta-input bid-editor-meta-input-right bid-editor-invoice-number-input"
                         align="right"
+                        style={{
+                          width: `${Math.max(documentData.invoice_number.length || 0, 1)}ch`,
+                        }}
                       />
                     </div>
                     <div className="bid-editor-slogan-wrap">
@@ -754,10 +761,6 @@ export default function BidFormProposalEditor() {
                         multiline
                         rows={1}
                         align="right"
-                        style={{
-                          width: `${Math.max(documentData.company_slogan.length + 4, 4)}ch`,
-                          maxWidth: "100%",
-                        }}
                       />
                     </div>
                   </td>
