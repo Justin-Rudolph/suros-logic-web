@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
-const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%203.3.26.mp4?alt=media&token=4cee2203-9b28-4196-9581-5ace255efb32";
+const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%204.14.26.mp4?alt=media&token=950c161a-e3ad-4413-8e34-757dcb59b667";
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
 
 const Index = () => {
@@ -140,8 +140,8 @@ const Index = () => {
                 </span>
               </h1>
               <p className="text-xl text-muted-foreground">
-                Suros Logic Systems turns a simple project form into a fully formatted,
-                professional bid document – in minutes, not hours.
+                Suros Logic Systems turns each project into a dedicated workspace where your bid,
+                proposal, change orders, files, and project status stay connected.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg" asChild>
@@ -202,22 +202,22 @@ const Index = () => {
                         <FileText className="text-secondary" size={24} />
                       </div>
                       <h3 className="text-lg font-semibold text-secondary">
-                        Step 2: Receive a Professional Bid Document
+                        Step 2: Generate and Manage the Proposal
                       </h3>
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        A fully formatted Word document
+                        Editable bid form and proposal tabs
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Clean layout with your personalized information
+                        Clean documents with your project details
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Editable line items & payment summary
+                        Downloadable proposal files
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
@@ -233,14 +233,22 @@ const Index = () => {
                         <FileText className="text-secondary" size={24} />
                       </div>
                       <h3 className="text-lg font-semibold text-secondary">
-                        Step 3: Sit Back and Pretend You Did All the Work
+                        Step 3: Track the Job After the Bid
                       </h3>
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Don’t worry, we won’t tell anyone our software did 90% of it.
+                        Project status timeline from created to completed
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Linked change orders and change order proposals
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                        Project files stored with the bid they belong to
                       </div>
                     </div>
                   </div>
@@ -253,7 +261,7 @@ const Index = () => {
           </div>
           <div className="mt-12 text-center">
             <p className="text-muted-foreground max-w-3xl mx-auto">
-              Built for contractors, remodelers, and trade professionals who are tired of typing the same bid 100 different ways.
+              Built for contractors, remodelers, and trade professionals who need one place for the bid, the follow-up work, and the files that keep the job moving.
             </p>
           </div>
         </div>
@@ -265,7 +273,7 @@ const Index = () => {
           <div className="text-center mb-10 space-y-4">
             <h2 className="text-4xl font-bold">Watch the demo</h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              See the workflow from project details to finished proposal in one quick walkthrough.
+              See how a project moves from bid details into a workspace with proposal tools, change orders, and project files.
             </p>
           </div>
 
@@ -305,7 +313,7 @@ const Index = () => {
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-4xl font-bold mb-6">Our Vision</h2>
           <p className="text-xl text-muted-foreground leading-relaxed">
-            Suros Logic Systems was built by people who know the contracting world firsthand. We&apos;re building an AI-driven document automation suite that helps service businesses create quotes faster, stay organized, and spend more time winning and running jobs.
+            Suros Logic Systems was built by people who know the contracting world firsthand. We&apos;re building an AI-driven workspace for service businesses that helps teams create quotes faster, keep project documents organized, and spend more time winning and running jobs.
           </p>
         </div>
       </section>
@@ -344,11 +352,11 @@ const Index = () => {
               A straightforward workflow for turning project notes into a client-ready proposal.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8">
             {[
               {
                 step: "1",
-                title: "Fill Out Simple Form",
+                title: "Create the Bid",
                 description: "You fill out a simple online form with project details and line items."
               },
               {
@@ -358,13 +366,18 @@ const Index = () => {
               },
               {
                 step: "3",
-                title: "Generate Document",
-                description: "You get a polished Word document your team can review, edit, and send."
+                title: "Open the Workspace",
+                description: "Your bid becomes a dedicated hub with an overview, project summary, and status timeline."
               },
               {
                 step: "4",
-                title: "Instant Delivery",
-                description: "Your proposal is delivered fast so you can move on to pricing, revisions, or sending."
+                title: "Generate Documents",
+                description: "Review the bid form, generate the proposal, and download polished client-ready documents."
+              },
+              {
+                step: "5",
+                title: "Manage the Follow-Up",
+                description: "Create change orders, generate change order proposals, and keep project files with the original bid."
               }
             ].map((step, idx) => (
               <div key={idx} className="relative">
@@ -394,25 +407,25 @@ const Index = () => {
                 description: "A reliable layout your team can use across projects and clients."
               },
               {
+                icon: <Zap className="text-primary" size={32} />,
+                title: "AI Workspace Summary",
+                description: "Quickly understand the project scope, key details, and next steps from the workspace overview."
+              },
+              {
                 icon: <Wrench className="text-primary" size={32} />,
-                title: "Trade & Scope Line Items",
-                description: "Plumbing, Electrical, Drywall, HVAC, Painting, Flooring, etc., with space for detailed scopes."
+                title: "Change Order Flow",
+                description: "Create change orders and generate linked change order proposals inside the same bid workspace."
               },
               {
                 icon: <FileText className="text-secondary" size={32} />,
-                title: "Word Docs, Not Lock-in",
-                description: "You get an editable Word document you can tweak, save, or reuse."
+                title: "Project File Storage",
+                description: "Upload, open, and manage job files in organized groups tied directly to the bid."
               },
               {
                 icon: <Clock className="text-primary" size={32} />,
                 title: "Time Savings",
                 description: "Cut down admin work so more of your week goes to estimating and operations."
               },
-              {
-                icon: <Shield className="text-secondary" size={32} />,
-                title: "No Complex Software",
-                description: "Log in, complete the form, and review the finished document."
-              }
             ].map((feature, idx) => (
               <Card key={idx} className="bg-card hover:bg-card/80 transition-colors border-border hover:border-primary/50">
                 <CardContent className="p-6 space-y-4">
@@ -440,12 +453,12 @@ const Index = () => {
               {
                 icon: <Wrench className="text-secondary" size={48} />,
                 title: "Specialty Trades",
-                description: "Plumbing, electrical, HVAC, flooring, tile, painting - we've got your scope covered."
+                description: "Plumbing, electrical, HVAC, flooring, tile, painting - keep scope and follow-up documents in one place."
               },
               {
                 icon: <Hammer className="text-primary" size={48} />,
                 title: "Estimators & Office Managers",
-                description: "Free up your team to focus on project management, not document formatting."
+                description: "Spend less time tracking down versions and more time getting clean documents out the door."
               }
             ].map((item, idx) => (
               <Card key={idx} className="bg-gradient-to-br from-card to-card/50 border-primary/20 text-center">
@@ -484,10 +497,10 @@ const Index = () => {
                 </div>
                 <ul className="space-y-3">
                   {[
-                    "Access to prebuilt, optimized bid templates",
-                    "Includes the key fields needed to produce a complete proposal",
+                    "Access to bid workspaces for each saved project",
+                    "Workspace overview, bid form, proposal, change orders, and project files",
                     "AI-tuned prompts for clean, detailed bids",
-                    "Perfect for Immediate Use"
+                    "Project status tracking from bid creation through completion"
                   ].map((item, idx) => (
                     <li key={idx} className="flex items-start gap-3">
                       <Check className="text-primary mt-1 flex-shrink-0" size={20} />
@@ -510,27 +523,29 @@ const Index = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-card to-secondary/10 border-secondary/40 hover:border-secondary/70 hover:shadow-xl hover:shadow-secondary/30 transition-all">
-              <CardContent className="p-8 space-y-6">
-                <h3 className="text-2xl font-bold text-secondary">Custom Workflow Build</h3>
-                <div className="space-y-2">
-                  <div className="text-3xl font-bold">Custom<span className="text-lg text-muted-foreground"> pricing</span></div>
-                  <p className="text-muted-foreground">Setup & monthly based on complexity</p>
+            <Card className="h-full bg-gradient-to-br from-card to-secondary/10 border-secondary/40 hover:border-secondary/70 hover:shadow-xl hover:shadow-secondary/30 transition-all">
+              <CardContent className="flex h-full flex-col justify-between p-8">
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold text-secondary">Custom Workflow Build</h3>
+                  <div className="space-y-2">
+                    <div className="text-3xl font-bold">Custom<span className="text-lg text-muted-foreground"> pricing</span></div>
+                    <p className="text-muted-foreground">Setup & monthly based on complexity</p>
+                  </div>
+                  <ul className="space-y-3">
+                    {[
+                      "Everything from QuickStart subscription",
+                      "Customized form matching your exact bid structure",
+                      "Tailored prompts for your trades & regions",
+                      "Custom workspace flows for multiple document types",
+                      "Perfect for multi-location companies"
+                    ].map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-3">
+                        <Check className="text-secondary mt-1 flex-shrink-0" size={20} />
+                        <span className="text-muted-foreground">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-3">
-                  {[
-                    "Everything from QuickStart subscription",
-                    "Customized form matching your exact bid structure",
-                    "Tailored prompts for your trades & regions",
-                    "Multiple document types (bids, change orders)",
-                    "Perfect for multi-location companies"
-                  ].map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <Check className="text-secondary mt-1 flex-shrink-0" size={20} />
-                      <span className="text-muted-foreground">{item}</span>
-                    </li>
-                  ))}
-                </ul>
                 <Button className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground" size="lg">
                   <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
                     Schedule a Meeting
@@ -548,7 +563,7 @@ const Index = () => {
       {/* Final CTA Section */}
       <section className="py-32 px-6 bg-gradient-to-br from-primary/20 via-background to-secondary/20">
         <div className="container mx-auto max-w-4xl text-center space-y-8">
-          <h2 className="text-5xl font-bold">Ready to stop rewriting the same bid for the 100th time?</h2>
+          <h2 className="text-5xl font-bold">Ready to stop wasting time rewriting the same bid for the 100th time?</h2>
           <p className="text-xl text-muted-foreground">
             Book a quick walkthrough and see whether Suros Logic fits the way your team already works.
           </p>
