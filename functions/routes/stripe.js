@@ -444,7 +444,18 @@ app.get("/session/:sessionId", async (req, res) => {
     let justCreated = false;
 
     if (!snap.empty) {
-      justCreated = snap.docs[0].data().justCreated === true;
+      const userDoc = snap.docs[0];
+      justCreated = userDoc.data().justCreated === true;
+
+      if (session.status === "complete" && session.customer) {
+        await userDoc.ref.set(
+          {
+            stripeCustomerId: session.customer,
+            isSubscribed: true,
+          },
+          { merge: true }
+        );
+      }
     }
 
     res.json({ email, justCreated });

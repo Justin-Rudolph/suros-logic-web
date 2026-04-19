@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useCallback,
   useState,
   ReactNode,
 } from "react";
@@ -16,7 +17,7 @@ import {
   UserCredential,
 } from "firebase/auth";
 
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDocFromServer, onSnapshot } from "firebase/firestore";
 import { auth, firestore } from "@/lib/firebase";
 import { UserProfile } from "@/models/UserProfile";
 
@@ -31,6 +32,7 @@ type AuthContextValue = {
 
   // 🔥 Correct setter typing (allows function updater)
   setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
+  refreshProfile: (firebaseUser?: User | null) => Promise<UserProfile | null>;
 
   login: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
@@ -47,42 +49,75 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshProfile = useCallback(
+    async (firebaseUser: User | null = auth.currentUser) => {
+      if (!firebaseUser) {
+        setProfile(null);
+        return null;
+      }
+
+      const ref = doc(firestore, "users", firebaseUser.uid);
+      const snap = await getDocFromServer(ref);
+      const nextProfile = snap.exists()
+        ? (snap.data() as UserProfile)
+        : null;
+
+      setProfile(nextProfile);
+      return nextProfile;
+    },
+    []
+  );
+
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
+    let unsubscribeAuth: (() => void) | undefined;
+    let unsubscribeProfile: (() => void) | undefined;
+
+    const stopProfileListener = () => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = undefined;
+      }
+    };
 
     const initAuth = async () => {
       await setPersistence(auth, browserLocalPersistence);
 
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
         setLoading(true);
         setUser(firebaseUser);
+        stopProfileListener();
 
         if (firebaseUser) {
-          try {
-            const ref = doc(firestore, "users", firebaseUser.uid);
-            const snap = await getDoc(ref);
+          const ref = doc(firestore, "users", firebaseUser.uid);
 
-            setProfile(
-              snap.exists()
-                ? (snap.data() as UserProfile)
-                : null
-            );
-          } catch (err) {
-            console.error("Failed to load user profile:", err);
-            setProfile(null);
-          }
+          unsubscribeProfile = onSnapshot(
+            ref,
+            (snap) => {
+              setProfile(
+                snap.exists()
+                  ? (snap.data() as UserProfile)
+                  : null
+              );
+              setLoading(false);
+            },
+            (err) => {
+              console.error("Failed to listen to user profile:", err);
+              setProfile(null);
+              setLoading(false);
+            }
+          );
         } else {
           setProfile(null);
+          setLoading(false);
         }
-
-        setLoading(false);
       });
     };
 
     initAuth();
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (unsubscribeAuth) unsubscribeAuth();
+      stopProfileListener();
     };
   }, []);
 
@@ -114,6 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         profile,
         loading,
         setProfile,
+        refreshProfile,
         login,
         logout,
       }}

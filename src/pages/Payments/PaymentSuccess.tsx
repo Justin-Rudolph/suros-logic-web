@@ -2,16 +2,18 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle, Mail } from "lucide-react";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getAuth } from "firebase/auth";
 import { useAuth } from "@/context/AuthContext";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
 
   const sessionId = searchParams.get("session_id");
 
@@ -19,6 +21,35 @@ const PaymentSuccess = () => {
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState(false);
+  const [refreshingProfile, setRefreshingProfile] = useState(false);
+
+  const refreshUntilSubscribed = useCallback(async () => {
+    setRefreshingProfile(true);
+
+    try {
+      const auth = getAuth();
+
+      if (!auth.currentUser) {
+        return null;
+      }
+
+      await auth.currentUser.reload();
+
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const nextProfile = await refreshProfile();
+
+        if (nextProfile?.isSubscribed === true) {
+          return nextProfile;
+        }
+
+        await wait(1000);
+      }
+
+      return await refreshProfile();
+    } finally {
+      setRefreshingProfile(false);
+    }
+  }, [refreshProfile]);
 
   useEffect(() => {
     const fetchEmail = async () => {
@@ -44,10 +75,7 @@ const PaymentSuccess = () => {
         setEmailSent(true);
         setJustCreated(data.justCreated === true);
 
-        const auth = getAuth();
-        if (auth.currentUser) {
-          await auth.currentUser.reload();
-        }
+        await refreshUntilSubscribed();
 
       } catch (err) {
         console.error("Session fetch failed:", err);
@@ -56,7 +84,7 @@ const PaymentSuccess = () => {
     };
 
     fetchEmail();
-  }, [sessionId]);
+  }, [refreshUntilSubscribed, sessionId]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
@@ -90,15 +118,21 @@ const PaymentSuccess = () => {
         <Button
           size="lg"
           className="w-full bg-primary hover:bg-primary/90"
-          onClick={() => {
+          disabled={refreshingProfile}
+          onClick={async () => {
             if (user) {
+              await refreshUntilSubscribed();
               navigate("/dashboard"); // ✅ FIXED
             } else {
               navigate("/auth");
             }
           }}
         >
-          {user ? "Go to Dashboard" : "Go to Login"}
+          {refreshingProfile
+            ? "Updating Subscription..."
+            : user
+              ? "Go to Dashboard"
+              : "Go to Login"}
         </Button>
 
       </div>
