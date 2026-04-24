@@ -1259,6 +1259,7 @@ const BidForm: React.FC = () => {
                                                     />
 
                                                     <LineItemAIHelper
+                                                        tradeName={item.trade}
                                                         scope={item.scope}
                                                         zipCode={extractZipCode(form.company_address)}
                                                         onUpdateScope={(updatedScope) =>

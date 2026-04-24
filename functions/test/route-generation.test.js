@@ -5,6 +5,7 @@ const Module = require("node:module");
 const ROUTE_MODULES = {
   changeOrder: "../routes/generateChangeOrderProposal",
   bidForm: "../routes/generateBidFormProposal",
+  estimate: "../routes/generateEstimate",
 };
 
 const createMockResponse = () => {
@@ -24,22 +25,27 @@ const createMockResponse = () => {
   return response;
 };
 
-const withMockedOpenAI = async (completionContent, run) => {
+const withMockedOpenAI = async (completionContent, run, options = {}) => {
   const originalLoad = Module._load;
+  const { onCreate } = options;
 
   class MockOpenAI {
     constructor() {
       this.chat = {
         completions: {
-          create: async () => ({
-            choices: [
-              {
-                message: {
-                  content: completionContent,
+          create: async (payload) => {
+            onCreate?.(payload);
+
+            return {
+              choices: [
+                {
+                  message: {
+                    content: completionContent,
+                  },
                 },
-              },
-            ],
-          }),
+              ],
+            };
+          },
         },
       };
     }
@@ -229,6 +235,88 @@ test("generateBidFormProposal rejects missing line items", async () => {
   assert.equal(res.statusCode, 400);
   assert.deepEqual(res.body, {
     error: "At least one line item is required.",
+  });
+});
+
+test("generateEstimate includes trade name in the pricing prompt", async () => {
+  let createPayload;
+
+  await withMockedOpenAI(
+    JSON.stringify({
+      status: "complete",
+      questions: [],
+      estimate: {
+        material_cost: "$0",
+        labor_cost: "$250",
+        total_cost: "$250",
+        description: "Demo pricing applied.",
+      },
+      explanation: "Demo pricing applied.",
+      estimates: {
+        average_price: {
+          material_cost: "$0",
+          labor_cost: "$250",
+          total_cost: "$250",
+          description: "Demo pricing applied.",
+        },
+        high_tier_price: {
+          material_cost: "$0",
+          labor_cost: "$400",
+          total_cost: "$400",
+          description: "Higher demo pricing applied.",
+        },
+      },
+    }),
+    async () => {
+      const handler = loadHandler("estimate");
+      const req = {
+        body: {
+          description: "3 5x7 cabinets",
+          tradeName: "Demo",
+          zipCode: "10001",
+          bypass: true,
+        },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res, "fake-key");
+
+      assert.equal(res.statusCode, 200);
+      assert.match(
+        createPayload.messages[0].content,
+        /trade name is "Demo" and the scope mentions cabinets/i
+      );
+      assert.match(createPayload.messages[1].content, /Trade Name: Demo/);
+    },
+    {
+      onCreate: (payload) => {
+        createPayload = payload;
+      },
+    }
+  );
+});
+
+test("generateEstimate uses trade-aware fallback questions for short scopes", async () => {
+  const handler = loadHandler("estimate");
+  const req = {
+    body: {
+      description: "cabinets",
+      tradeName: "Demo",
+    },
+  };
+  const res = createMockResponse();
+
+  await handler(req, res, "fake-key");
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    status: "incomplete",
+    questions: [
+      "For the Demo trade, what specific work is included?",
+      "What are the approximate quantities, dimensions, or square footage?",
+      "For the Demo work, what materials, fixtures, or items are involved?",
+      "Where is the project located?",
+    ],
   });
 });
 

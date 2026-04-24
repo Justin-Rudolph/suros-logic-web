@@ -1240,6 +1240,7 @@ const TestBidForm: React.FC = () => {
                         />
 
                         <LineItemAIHelper
+                          tradeName={item.trade}
                           scope={item.scope}
                           zipCode={extractZipCode(form.company_address)}
                           onApplyTotal={(amount) =>

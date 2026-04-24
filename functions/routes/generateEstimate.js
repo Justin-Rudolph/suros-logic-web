@@ -8,6 +8,7 @@ module.exports = async function generateEstimateHandler(
   try {
     const {
       description,
+      tradeName,
       zipCode,
       bypass,
       forceQuestions,
@@ -15,6 +16,8 @@ module.exports = async function generateEstimateHandler(
       mode,
       responses,
     } = req.body || {};
+    const normalizedTradeName =
+      typeof tradeName === "string" ? tradeName.trim() : "";
 
     if (!OPENAI_API_KEY) {
       return res.status(500).json({
@@ -82,6 +85,9 @@ Respond only in this JSON format:
 Existing scope of work:
 ${description}
 
+Trade name:
+${tradeName || "Not Provided"}
+
 Clarification responses:
 ${answeredResponses
   .map(
@@ -120,12 +126,19 @@ ${answeredResponses
     ) {
       return res.json({
         status: "incomplete",
-        questions: [
-          "What type of project is this?",
-          "What is the square footage?",
-          "What materials are being used?",
-          "Where is the project located?",
-        ],
+        questions: normalizedTradeName
+          ? [
+              `For the ${normalizedTradeName} trade, what specific work is included?`,
+              "What are the approximate quantities, dimensions, or square footage?",
+              `For the ${normalizedTradeName} work, what materials, fixtures, or items are involved?`,
+              "Where is the project located?",
+            ]
+          : [
+              "What type of project is this?",
+              "What is the square footage?",
+              "What materials are being used?",
+              "Where is the project located?",
+            ],
       });
     }
 
@@ -174,6 +187,9 @@ Requirements:
 - FORCE QUESTION MODE takes priority over all other estimate-generation instructions.
 - If QUESTIONS ALREADY ASKED is TRUE, you must generate a complete estimate using the available details and reasonable contractor assumptions for missing information.
 - Do NOT return "incomplete" when bypass mode is TRUE or QUESTIONS ALREADY ASKED is TRUE.
+- If a trade name is provided, treat it as the controlling trade context for interpreting the scope of work and pricing the job.
+- Use the trade name to decide whether the work is demolition, installation, repair, finishing, etc. Do not price the scope as a different trade just because the scope mentions an item that could belong to multiple trades.
+- Example: if the trade name is "Demo" and the scope mentions cabinets, estimate demolition/removal/disposal pricing for cabinets, not cabinet installation pricing.
 
 Normal behavior (when bypass mode is FALSE and QUESTIONS ALREADY ASKED is FALSE):
 - If required information is missing, return "status": "incomplete" and include clarification questions inside the "questions" array.
@@ -209,6 +225,7 @@ FORCE QUESTION MODE: ${forceQuestions ? "TRUE" : "FALSE"}
 QUESTIONS ALREADY ASKED: ${questionsAlreadyAsked ? "TRUE" : "FALSE"}
 
 Zip Code: ${zipCode || "Not Provided"}
+Trade Name: ${tradeName || "Not Provided"}
 
 Scope of Work:
 ${description}

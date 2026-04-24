@@ -21,6 +21,7 @@ type EstimateResponse = {
 };
 
 interface Props {
+  tradeName?: string | null;
   scope: string;
   zipCode: string | null;
   onApplyTotal?: (amount: number) => void;
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function LineItemAIHelper({
+  tradeName,
   scope,
   zipCode,
   onApplyTotal,
@@ -76,6 +78,7 @@ export default function LineItemAIHelper({
 
   const requestEstimate = async ({
     description,
+    tradeName,
     bypass = false,
     forceQuestions = false,
     questionsAlreadyAsked = false,
@@ -83,6 +86,7 @@ export default function LineItemAIHelper({
     responses,
   }: {
     description: string;
+    tradeName?: string | null;
     bypass?: boolean;
     forceQuestions?: boolean;
     questionsAlreadyAsked?: boolean;
@@ -96,6 +100,7 @@ export default function LineItemAIHelper({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         description,
+        ...(tradeName?.trim() ? { tradeName: tradeName.trim() } : {}),
         zipCode,
         ...(mode ? { mode } : {}),
         ...(responses ? { responses } : {}),
@@ -125,6 +130,7 @@ export default function LineItemAIHelper({
       setLoading(true);
       const data = await requestEstimate({
         description,
+        tradeName,
         forceQuestions: shouldAskInitialQuestions,
         questionsAlreadyAsked: !shouldAskInitialQuestions,
       });
@@ -149,6 +155,7 @@ export default function LineItemAIHelper({
       setLoading(true);
       const data = await requestEstimate({
         description: scope,
+        tradeName,
         bypass: true,
       });
 
@@ -182,6 +189,7 @@ export default function LineItemAIHelper({
 
       const mergeResult = await requestEstimate({
         description: scope,
+        tradeName,
         mode: "merge_scope",
         responses: answeredEntries.map(([question, response]) => ({
           question,
