@@ -36,7 +36,7 @@ export default function PrivacyPolicy() {
                 <h1 className="text-3xl font-bold mb-2">
                     Privacy Policy – Suros Logic Systems, LLC
                 </h1>
-                <p className="text-sm text-gray-600 mb-8">Last updated: 12/12/2025</p>
+                <p className="text-sm text-gray-600 mb-8">Last updated: 04/30/2026</p>
 
                 {/* ---------------- SECTION 1 ---------------- */}
                 <h2 className="text-xl font-semibold mt-6 mb-2">1. Who We Are</h2>
@@ -154,8 +154,8 @@ export default function PrivacyPolicy() {
 
                 <ul className="list-disc ml-8 mb-4">
                     <li>Providing and operating the Service</li>
-                    <li>Generating automated, formatted bids based on your inputs</li>
-                    <li>Sending you bid documents via email or through our platform</li>
+                    <li>Generating estimates, formatted bids, proposals, plan analyzer results, summaries, and other automated project-related outputs based on your inputs</li>
+                    <li>Sending you generated documents and outputs via email or through our platform</li>
                     <li>Managing your account and authentication</li>
                     <li>Improving and developing our Service</li>
                     <li>Analyzing feature usage</li>
@@ -166,7 +166,7 @@ export default function PrivacyPolicy() {
                 <p className="font-semibold mb-1">Using Customer Data to optimize our systems and AI models:</p>
 
                 <ul className="list-disc ml-8 mb-4">
-                    <li>Improve the quality of AI-generated bids</li>
+                    <li>Improve the quality of AI-generated estimates, bids, plan analyzer outputs, and other generated project content</li>
                     <li>Enhance templates and automation logic</li>
                     <li>Develop better formatting, language, and structure for output</li>
                 </ul>
@@ -190,12 +190,20 @@ export default function PrivacyPolicy() {
                 <h2 className="text-xl font-semibold mt-6 mb-2">5. AI Processing and Model Improvement</h2>
 
                 <p className="mb-4">
-                    Our Service uses AI to transform your input (bid notes, client details, project descriptions, etc.) into structured, formatted bid documents.
+                    Our Service uses AI to process your input (such as bid notes, client details, project descriptions, plan text, scopes, pricing context, and related project data) into generated or assisted outputs such as estimates, formatted bids, proposals, plan analyzer results, summaries, verification items, safety reviews, conflict reports, RFIs, and other structured project content.
+                </p>
+
+                <p className="mb-4">
+                    Our AI-enabled features may combine proprietary prompts, templates, instructions, workflows, and application logic developed by Suros Logic Systems with third-party model and infrastructure providers, including services made available through OpenAI APIs.
+                </p>
+
+                <p className="mb-4">
+                    In connection with providing the Service, your submitted data may be processed by our internal systems and by third-party infrastructure or model providers acting on our behalf. AI-generated results are intended to support your workflow and should be independently reviewed by you before they are relied upon in professional use.
                 </p>
 
                 <p className="font-semibold mb-1">We may use your Customer Data to:</p>
                 <ul className="list-disc ml-8 mb-4">
-                    <li>Train, fine-tune, or configure internal models and templates</li>
+                    <li>Train, fine-tune, or configure internal models, prompts, workflows, and templates</li>
                     <li>Test new features, patches, and updates</li>
                     <li>Use aggregated or de-identified data for model improvement where practical</li>
                 </ul>
@@ -205,7 +213,7 @@ export default function PrivacyPolicy() {
                 </p>
 
                 <p className="mb-4">
-                    If you require limitations on data use (e.g., exclusion from model improvement), contact us to discuss options.
+                    Because the Service may rely on third-party service providers in order to process your requests, you should not submit information unless you are authorized to share it and are comfortable having it processed by us and those providers for purposes of operating the Service. If you require limitations on data use (e.g., exclusion from model improvement), contact us to discuss options.
                 </p>
 
                 {/* ---------------- SECTION 6 ---------------- */}

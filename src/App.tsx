@@ -17,6 +17,8 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
+import PlanAnalyzer from "./pages/PlanAnalyzer/PlanAnalyzer";
+import PlanAnalyzerRun from "./pages/PlanAnalyzer/PlanAnalyzerRun";
 import EditProfile from "./pages/Profile/EditProfile";
 import ChangePassword from "./pages/Profile/ChangePassword";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
@@ -78,6 +80,24 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ManageSubscription />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/plan-analyzer"
+              element={
+                <ProtectedRoute>
+                  <PlanAnalyzer />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/plan-analyzer/:projectId"
+              element={
+                <ProtectedRoute>
+                  <PlanAnalyzerRun />
                 </ProtectedRoute>
               }
             />

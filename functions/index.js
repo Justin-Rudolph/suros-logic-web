@@ -109,6 +109,29 @@ exports.generateBidWorkspaceOverview = onRequest(
 );
 
 /* --------------------------------------------------
+   FORMAT PLAN SCOPE SELECTIONS FOR BID
+-------------------------------------------------- */
+
+exports.formatPlanScopeSelectionsForBid = onRequest(
+  { secrets: [OPENAI_API_KEY] },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const formatPlanScopeSelectionsForBidHandler = require("./routes/formatPlanScopeSelectionsForBid");
+
+      await formatPlanScopeSelectionsForBidHandler(
+        req,
+        res,
+        OPENAI_API_KEY.value()
+      );
+    });
+  }
+);
+
+/* --------------------------------------------------
    DOWNLOAD BID FORM PROPOSAL PDF
 -------------------------------------------------- */
 
@@ -127,6 +150,144 @@ exports.downloadBidFormProposalPdf = onRequest(
         res,
         CONVERTAPI_SECRET.value()
       );
+    });
+  }
+);
+
+/* --------------------------------------------------
+   ANALYZE PLAN FILES
+-------------------------------------------------- */
+
+exports.analyzePlanFiles = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 720,
+    memory: "2GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const analyzePlanFilesHandler = require("./routes/analyzePlanFiles");
+
+      await analyzePlanFilesHandler(req, res, OPENAI_API_KEY.value());
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE SCOPES
+-------------------------------------------------- */
+
+exports.generateScopes = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateScopesHandler = require("./routes/generateScopes");
+
+      await generateScopesHandler(req, res, OPENAI_API_KEY.value());
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE VERIFICATION CHECKLIST
+-------------------------------------------------- */
+
+exports.generateVerificationChecklist = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateVerificationChecklistHandler = require("./routes/generateVerificationChecklist");
+
+      await generateVerificationChecklistHandler(req, res, OPENAI_API_KEY.value());
+    });
+  }
+);
+
+/* --------------------------------------------------
+   ANALYZE SAFETY
+-------------------------------------------------- */
+
+exports.analyzeSafety = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const analyzeSafetyHandler = require("./routes/analyzeSafety");
+
+      await analyzeSafetyHandler(req, res, OPENAI_API_KEY.value());
+    });
+  }
+);
+
+/* --------------------------------------------------
+   DETECT CONFLICTS
+-------------------------------------------------- */
+
+exports.detectConflicts = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const detectConflictsHandler = require("./routes/detectConflicts");
+
+      await detectConflictsHandler(req, res, OPENAI_API_KEY.value());
+    });
+  }
+);
+
+/* --------------------------------------------------
+   GENERATE RFIS
+-------------------------------------------------- */
+
+exports.generateRFIs = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const generateRFIsHandler = require("./routes/generateRFIs");
+
+      await generateRFIsHandler(req, res, OPENAI_API_KEY.value());
     });
   }
 );

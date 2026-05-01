@@ -6,6 +6,7 @@ const ROUTE_MODULES = {
   changeOrder: "../routes/generateChangeOrderProposal",
   bidForm: "../routes/generateBidFormProposal",
   estimate: "../routes/generateEstimate",
+  planScopeSelections: "../routes/formatPlanScopeSelectionsForBid",
 };
 
 const createMockResponse = () => {
@@ -318,6 +319,113 @@ test("generateEstimate uses trade-aware fallback questions for short scopes", as
       "Where is the project located?",
     ],
   });
+});
+
+test("formatPlanScopeSelectionsForBid groups selected scope items by trade", async () => {
+  await withMockedOpenAI(
+    JSON.stringify({
+      line_items: [
+        {
+          trade: "Demo",
+          scope_lines: [
+            "- Remove existing cabinetry",
+            "- Haul off demolition debris",
+          ],
+        },
+        {
+          trade: "HVAC",
+          scope_lines: [
+            "- Install new supply grille",
+          ],
+        },
+      ],
+    }),
+    async () => {
+      const handler = loadHandler("planScopeSelections");
+      const req = {
+        body: {
+          selections: [
+            {
+              trade: "Demo",
+              title: "Remove cabinets",
+              description: "Demo and dispose of existing upper cabinets.",
+            },
+            {
+              trade: "Demo",
+              title: "Remove countertops",
+              description: "Demo laminate tops and remove debris.",
+            },
+            {
+              trade: "HVAC",
+              title: "New grille",
+              description: "Provide and install one new ceiling grille.",
+            },
+          ],
+        },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res, "fake-key");
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body.line_items, [
+        {
+          trade: "Demo",
+          scope_lines: [
+            "- Remove existing cabinetry",
+            "- Haul off demolition debris",
+          ],
+        },
+        {
+          trade: "HVAC",
+          scope_lines: [
+            "- Install new supply grille",
+          ],
+        },
+      ]);
+    }
+  );
+});
+
+test("formatPlanScopeSelectionsForBid falls back to normalized source lines when AI omits a trade", async () => {
+  await withMockedOpenAI(
+    JSON.stringify({
+      line_items: [
+        {
+          trade: "Demo",
+          scope_lines: [],
+        },
+      ],
+    }),
+    async () => {
+      const handler = loadHandler("planScopeSelections");
+      const req = {
+        body: {
+          selections: [
+            {
+              trade: "Demo",
+              title: "Remove cabinets",
+              description: "Demo and dispose of existing upper cabinets.",
+            },
+          ],
+        },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res, "fake-key");
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body.line_items, [
+        {
+          trade: "Demo",
+          scope_lines: [
+            "- Remove cabinets",
+            "- Demo and dispose of existing upper cabinets.",
+          ],
+        },
+      ]);
+    }
+  );
 });
 
 test("renderBidEditorHtml reflects 0 percent tax with N/A tax dollars", async () => {

@@ -55,7 +55,7 @@
 /* ==== CARD WRAPPER ==== */
 .dashboard-card-wrapper {
   display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 360px));
+  grid-template-columns: repeat(3, minmax(280px, 360px));
   gap: 22px;
   margin-top: 10px;
   margin-bottom: 34px;

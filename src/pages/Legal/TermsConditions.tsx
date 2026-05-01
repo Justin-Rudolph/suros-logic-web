@@ -36,7 +36,7 @@ export default function TermsConditions() {
                 <h1 className="text-3xl font-bold mb-2">
                     Terms & Conditions (Terms of Service) – Suros Logic Systems, LLC
                 </h1>
-                <p className="text-sm text-gray-600 mb-8">Last updated: 12/12/2025</p>
+                <p className="text-sm text-gray-600 mb-8">Last updated: 04/30/2026</p>
 
                 {/* ---------------- SECTION 1 ---------------- */}
                 <h2 className="text-xl font-semibold mt-6 mb-2">1. Acceptance of Terms</h2>
@@ -75,9 +75,13 @@ export default function TermsConditions() {
 
                 <ul className="list-disc ml-8 mb-4">
                     <li>Enter basic bid data and project details (including client information and pricing),</li>
-                    <li>Use AI-powered processing to expand and format that information into professional, structured bid documents,</li>
-                    <li>Receive those bid documents via email or other delivery methods.</li>
+                    <li>Use AI-powered processing to generate, expand, analyze, summarize, estimate, structure, or format project-related content and documents,</li>
+                    <li>Receive generated outputs through the platform, by email, or through other delivery methods.</li>
                 </ul>
+
+                <p className="mb-4">
+                    The Service may include proprietary prompts, templates, logic, workflows, and other internal methods developed by Suros Logic Systems and may use third-party artificial intelligence infrastructure, including models and services made available through OpenAI APIs, to process inputs and generate Output.
+                </p>
 
                 <p className="mb-4">
                     We may update, modify, or discontinue features from time to time as part of ongoing improvements and “rollout patches.”
@@ -135,6 +139,7 @@ export default function TermsConditions() {
                 <ul className="list-disc ml-8 mb-4">
                     <li>Provide only accurate and lawful information in the Service.</li>
                     <li>Ensure that you have all necessary permissions to submit any personal or project data (including your clients’ data).</li>
+                    <li>Submit only information that you are authorized to disclose and have the right to have processed by us and our service providers.</li>
                     <li>Use the Service in compliance with applicable laws and regulations.</li>
                 </ul>
 
@@ -185,21 +190,31 @@ export default function TermsConditions() {
                     You represent and warrant that you have all necessary rights to provide Customer Data and that our use will not violate any third-party rights or laws.
                 </p>
 
+                <p className="mb-4">
+                    You should not upload any information that you are not authorized to share, that you do not want processed by us or our service providers, or that is subject to confidentiality, trade secret, export-control, privacy, or other restrictions unless you have independently determined that such submission is permitted and appropriate for your use of the Service.
+                </p>
+
                 {/* ---------------- SECTION 8 ---------------- */}
-                <h2 className="text-xl font-semibold mt-6 mb-2">8. Output and Use of AI-Generated Bids</h2>
+                <h2 className="text-xl font-semibold mt-6 mb-2">8. Output and Use of AI-Generated Content</h2>
 
                 <p className="mb-4">
-                    The Service generates bid documents and related outputs (“Output”) based on your inputs and our AI systems.
+                    The Service may generate or assist with a variety of outputs (“Output”) based on your inputs and our AI systems, including, by way of example, estimates, pricing suggestions, scope language, formatted bid documents, proposals, change-order content, project summaries, plan analyzer outputs, verification items, safety reviews, conflict detection results, RFIs, qualifications, contingency notes, and related project or workflow content.
                 </p>
 
                 <ul className="list-disc ml-8 mb-4">
-                    <li>Output may contain errors or omissions.</li>
-                    <li>You remain solely responsible for reviewing all Output.</li>
-                    <li>Suros Logic Systems is not a contractor, engineer, or legal advisor.</li>
+                    <li>Output is AI-generated and is provided as a drafting, formatting, and workflow support tool.</li>
+                    <li>Output may contain errors, omissions, inconsistencies, or unsupported conclusions.</li>
+                    <li>Output may not be complete, accurate, project-specific, code-compliant, or suitable for your intended use.</li>
+                    <li>You remain solely responsible for independently reviewing, validating, and approving all Output before relying on it or using it in your business.</li>
+                    <li>Suros Logic Systems is not acting as your contractor, engineer, architect, estimator, attorney, or other licensed advisor.</li>
                 </ul>
 
                 <p className="mb-4">
-                    You are responsible for how you use Output in your business.
+                    The Service is intended to support your internal process and professional judgment, not replace your own review, research, field verification, code review, pricing judgment, or decision-making. You are solely responsible for how you use Output in your business and for any bids, estimates, proposals, scopes, RFIs, qualifications, or other documents or decisions based on Output.
+                </p>
+
+                <p className="mb-4">
+                    Without limiting the foregoing, you acknowledge that Customer Data may be processed through third-party AI and cloud service providers engaged by us to operate the Service. You are solely responsible for deciding whether any particular information is appropriate to upload to the Service.
                 </p>
 
                 {/* ---------------- SECTION 9 ---------------- */}
@@ -236,12 +251,12 @@ export default function TermsConditions() {
 
                 <ul className="list-disc ml-8 mb-4">
                     <li>That the Service will be uninterrupted, timely, secure, or error-free;</li>
-                    <li>That Output will be accurate or suitable for your purposes;</li>
+                    <li>That Output will be accurate, complete, reliable, current, code-compliant, or suitable for your purposes;</li>
                     <li>That the Service will meet your requirements or regulatory obligations.</li>
                 </ul>
 
                 <p className="mb-4">
-                    You are responsible for verifying all bid documents before using them professionally.
+                    You are responsible for verifying all Output and all bid documents before using them professionally or relying on them in any business, contractual, financial, operational, safety, permitting, or legal context.
                 </p>
 
                 {/* ---------------- SECTION 13 ---------------- */}
@@ -253,6 +268,8 @@ export default function TermsConditions() {
 
                 <ul className="list-disc ml-8 mb-4">
                     <li>Suros Logic Systems is not liable for indirect, incidental, special, consequential, or punitive damages.</li>
+                    <li>Suros Logic Systems is not liable for any loss, claim, cost, error, omission, business interruption, pricing issue, estimating discrepancy, project delay, code issue, scope gap, or other damage arising out of or related to AI-generated Output or your reliance on Output.</li>
+                    <li>Suros Logic Systems is not liable for Customer Data that you choose to submit to the Service in violation of your own confidentiality, privacy, contractual, professional, or legal obligations, or for consequences arising from your decision to upload information you were not authorized to disclose.</li>
                     <li>Our total liability will not exceed the amounts paid in the previous 12 months.</li>
                 </ul>
 

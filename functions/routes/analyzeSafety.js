@@ -1,0 +1,204 @@
+const admin = require("firebase-admin");
+const { FieldValue } = require("firebase-admin/firestore");
+const OpenAI = require("openai");
+const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
+const firestore = admin.firestore();
+
+const ALLOWED_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
+const MAX_PLAN_CONTEXT_LENGTH = 100000;
+
+const normalizeWhitespace = (value) =>
+  String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const buildPlanContext = (files) => {
+  const sections = files.map((file) => {
+    const headerParts = [
+      file.fileName ? `FILE: ${file.fileName}` : null,
+      file.detectedSheetNumber ? `SHEET: ${file.detectedSheetNumber}` : null,
+      file.detectedTitle ? `TITLE: ${file.detectedTitle}` : null,
+      file.discipline ? `DISCIPLINE: ${file.discipline}` : null,
+    ].filter(Boolean);
+
+    return `${headerParts.join(" | ")}\n${normalizeWhitespace(file.rawText || "")}`.trim();
+  });
+
+  return sections.join("\n\n====================\n\n").slice(0, MAX_PLAN_CONTEXT_LENGTH);
+};
+
+const sanitizeSafetyItem = (item) => {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const issue = String(item.issue || "").trim();
+  const severity = String(item.severity || "").trim().toLowerCase();
+
+  if (!issue || !ALLOWED_SEVERITIES.has(severity)) {
+    return null;
+  }
+
+  return {
+    issue,
+    severity,
+    requiresReview: true,
+  };
+};
+
+const generateSafetyAnalysis = async (files, openAiApiKey) => {
+  if (!openAiApiKey) {
+    throw new Error("OPENAI_API_KEY not found in environment");
+  }
+
+  const planContext = buildPlanContext(files);
+  if (!planContext) {
+    throw new Error("No extracted plan text is available for this project");
+  }
+
+  const openai = new OpenAI({ apiKey: openAiApiKey });
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5",
+    reasoning_effort: "medium",
+    messages: [
+      {
+        role: "system",
+        content: buildEstimatorSystemPrompt(`
+Analyze the OCR-extracted plan text for safety and code-risk items that should be reviewed before
+construction, pricing, permitting, or bid submission.
+
+Focus only on:
+- exits and egress paths
+- ADA accessibility issues
+- stairs, guards, handrails, ramps, and landings
+- clearance issues
+- life-safety notes
+- occupancy or path-of-travel concerns
+- door swing or opening width concerns
+
+Additional task rules:
+- Do not make final code compliance conclusions.
+- If something appears unclear, constrained, missing, or potentially noncompliant, include it as requiring review.
+- If uncertain, it still requires review.
+- Every returned item must have requiresReview set to true.
+- Severity must be one of: "low", "medium", "high", "critical".
+- Do not include generic safety boilerplate.
+- Do not cite code sections unless explicitly present in the extracted plan text.
+
+Return exactly:
+[
+  {
+    "issue": "string",
+    "severity": "low" | "medium" | "high" | "critical",
+    "requiresReview": true
+  }
+]
+        `),
+      },
+      {
+        role: "user",
+        content: planContext,
+      },
+    ],
+  });
+
+  const content = completion.choices[0]?.message?.content;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`Invalid JSON returned from AI safety analysis: ${content || "empty response"}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("AI safety analysis did not return an array");
+  }
+
+  return parsed.map(sanitizeSafetyItem).filter(Boolean);
+};
+
+module.exports = async function analyzeSafetyHandler(req, res, openAiApiKey) {
+  const projectId = String(req.body?.projectId || "").trim();
+
+  try {
+    if (!projectId) {
+      return res.status(400).json({ error: "projectId is required." });
+    }
+
+    await firestore.doc(`planProjects/${projectId}`).set(
+      {
+        safetyStatus: "processing",
+        safetyRequestedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const fileSnapshot = await firestore.collection(`planProjects/${projectId}/files`).get();
+    if (fileSnapshot.empty) {
+      return res.status(404).json({
+        error: "No analyzed plan files found for this project.",
+      });
+    }
+
+    const files = fileSnapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }))
+      .filter((file) => typeof file.rawText === "string" && normalizeWhitespace(file.rawText).length > 0)
+      .sort((left, right) => {
+        const leftSheet = String(left.detectedSheetNumber || "");
+        const rightSheet = String(right.detectedSheetNumber || "");
+        return leftSheet.localeCompare(rightSheet) || String(left.fileName || "").localeCompare(String(right.fileName || ""));
+      });
+
+    if (!files.length) {
+      return res.status(400).json({
+        error: "Analyzed files exist, but no extracted plan text is available.",
+      });
+    }
+
+    const safety = await generateSafetyAnalysis(files, openAiApiKey);
+
+    await firestore.doc(`planProjects/${projectId}`).set(
+      {
+        safety,
+        safetyStatus: "completed",
+        safetyGeneratedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      projectId,
+      safety,
+    });
+  } catch (error) {
+    console.error("Safety analysis failed:", error);
+
+    if (projectId) {
+      await firestore.doc(`planProjects/${projectId}`).set(
+        {
+          safetyStatus: "failed",
+          safetyGeneratedAt: FieldValue.serverTimestamp(),
+          safetyError: error instanceof Error ? error.message : "Unknown error",
+        },
+        { merge: true }
+      );
+    }
+
+    return res.status(500).json({
+      error: "Failed to analyze safety.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};

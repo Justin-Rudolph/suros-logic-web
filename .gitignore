@@ -20,6 +20,9 @@ dist
 dist-ssr
 *.local
 
+# Tesseract OCR language data
+functions/*.traineddata
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

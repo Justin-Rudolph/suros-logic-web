@@ -69,6 +69,19 @@ export default function Dashboard() {
             <div className="dashboard-card-button">Open Workspaces →</div>
           </button>
 
+          <button
+            className="dashboard-card"
+            onClick={() => handleProtectedNav("/plan-analyzer")}
+          >
+            <p className="dashboard-card-kicker">Analyze</p>
+            <h2 className="dashboard-card-title">Plan Analyzer</h2>
+            <p className="dashboard-card-description">
+              Upload one plan PDF or image, run the analyzer, and keep the project ready to reopen later.
+            </p>
+
+            <div className="dashboard-card-button">Upload Plan →</div>
+          </button>
+
         </div>
 
         <div

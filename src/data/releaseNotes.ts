@@ -2,6 +2,16 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.0.0",
+    date: "April 30, 2026",
+    highlights: [
+      "Launched Plan Analyzer so teams can upload a plan PDF or image, process it as a saved project, and reopen results later from the dashboard.",
+      "Added AI-generated project overview, trade scopes, verification checklist, safety review, conflict detection, and RFI package outputs within the new Plan Analyzer workflow.",
+      "Introduced saved favorites across scopes, verification items, safety issues, conflicts, and RFIs, plus a faster path to send selected scope items into a new bid.",
+      "Improved upload and processing behavior with clearer single-file messaging, progress feedback, and smarter failure handling when readable text cannot be extracted from a file.",
+    ],
+  },
+  {
     version: "v2.0.0",
     date: "April 13, 2026",
     highlights: [
