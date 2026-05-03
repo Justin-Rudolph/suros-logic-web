@@ -143,8 +143,8 @@ ${answeredResponses
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      reasoning_effort: "low",
+      model: "gpt-5",
+      reasoning_effort: "medium",
       messages: [
         {
           role: "system",

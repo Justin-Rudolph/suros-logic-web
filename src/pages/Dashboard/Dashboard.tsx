@@ -71,15 +71,17 @@ export default function Dashboard() {
 
           <button
             className="dashboard-card"
-            onClick={() => handleProtectedNav("/plan-analyzer")}
+            onClick={() => navigate("/plan-analyzer")}
           >
             <p className="dashboard-card-kicker">Analyze</p>
             <h2 className="dashboard-card-title">Plan Analyzer</h2>
             <p className="dashboard-card-description">
-              Upload one plan PDF or image, run the analyzer, and keep the project ready to reopen later.
+              Upload one plan PDF or image, run the analyzer, and reopen saved plan projects later from one place.
             </p>
 
-            <div className="dashboard-card-button">Upload Plan →</div>
+            <div className="dashboard-card-button">
+              {hasActiveSubscription ? "Open Plan Analyzer →" : "View Existing Plans →"}
+            </div>
           </button>
 
         </div>

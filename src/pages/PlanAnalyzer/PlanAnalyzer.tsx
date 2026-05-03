@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { FileImage, FileText, Loader2, Trash2, UploadCloud } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -207,6 +207,7 @@ export default function PlanAnalyzer() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const hasActiveSubscription = profile?.isSubscribed === true;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -272,6 +273,15 @@ export default function PlanAnalyzer() {
   };
 
   const addFiles = (incomingFiles: File[]) => {
+    if (!hasActiveSubscription) {
+      toast({
+        title: "Subscription required",
+        description: "Reactivate your subscription to upload a new plan file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { validFiles, rejectedFiles } = validateFiles(incomingFiles);
 
     if (rejectedFiles.length > 0) {
@@ -297,6 +307,11 @@ export default function PlanAnalyzer() {
   };
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (!hasActiveSubscription) {
+      event.target.value = "";
+      return;
+    }
+
     const files = Array.from(event.target.files || []);
     addFiles(files);
     event.target.value = "";
@@ -304,6 +319,7 @@ export default function PlanAnalyzer() {
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    if (!hasActiveSubscription) return;
     setIsDragging(true);
   };
 
@@ -318,6 +334,7 @@ export default function PlanAnalyzer() {
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
+    if (!hasActiveSubscription) return;
     addFiles(Array.from(event.dataTransfer.files || []));
   };
 
@@ -387,7 +404,7 @@ export default function PlanAnalyzer() {
   };
 
   const toggleAnalysisOption = (key: AnalysisToggleKey) => {
-    if (isUploading) return;
+    if (isUploading || !hasActiveSubscription) return;
 
     setAnalysisToggles((current) => ({
       ...current,
@@ -396,7 +413,7 @@ export default function PlanAnalyzer() {
   };
 
   const enableFullAnalysis = () => {
-    if (isUploading) return;
+    if (isUploading || !hasActiveSubscription) return;
 
     setAnalysisToggles({
       verification: true,
@@ -417,6 +434,14 @@ export default function PlanAnalyzer() {
 
   const startUpload = async () => {
     const trimmedProjectTitle = projectTitle.trim();
+
+    if (!user) {
+      throw new Error("Please sign in before uploading a plan file.");
+    }
+
+    if (!hasActiveSubscription) {
+      throw new Error("An active subscription is required to upload plan files.");
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -564,13 +589,32 @@ export default function PlanAnalyzer() {
       <main className="plan-analyzer-container">
         <section className="plan-analyzer-hero">
           <p className="plan-analyzer-kicker">Plan Analyzer</p>
-          <h1 className="plan-analyzer-title">Upload a Plan File for Analysis</h1>
+          <h1 className="plan-analyzer-title">
+            {hasActiveSubscription ? "Upload a Plan File for Analysis" : "Open Saved Plan Analyses"}
+          </h1>
           <p className="plan-analyzer-subtitle">
-            Upload one plan PDF or image, run the analyzer, and reopen the saved project later from the list below.
+            {hasActiveSubscription
+              ? "Upload one plan PDF or image, run the analyzer, and reopen the saved project later from the list below."
+              : "Your saved plan projects and analysis results are still available below. New uploads stay locked until your subscription is active again."}
           </p>
         </section>
 
         <section className="plan-analyzer-panel">
+          {!hasActiveSubscription ? (
+            <div className="plan-readonly-banner">
+              <div>
+                <span className="plan-summary-label">Read-only access</span>
+                <p className="plan-readonly-copy">
+                  Your existing plan projects are still available to open and review. Reactivate your subscription to upload a new plan file.
+                </p>
+              </div>
+
+              <Link to="/billing" className="plan-readonly-link">
+                Manage Subscription
+              </Link>
+            </div>
+          ) : null}
+
           <div ref={titleFieldRef} className="plan-title-field">
             <label htmlFor="plan-project-title" className="plan-summary-label">
               Project Title (Required)
@@ -583,28 +627,31 @@ export default function PlanAnalyzer() {
               placeholder="Project Title..."
               value={projectTitle}
               onChange={(event) => setProjectTitle(event.target.value)}
-              disabled={isUploading}
+              disabled={isUploading || !hasActiveSubscription}
               required
             />
             <p className="plan-title-note">
-              This title will be used in your project list and processing view.
+              {hasActiveSubscription
+                ? "This title will be used in your project list and processing view."
+                : "Upload controls are disabled while your subscription is inactive."}
             </p>
           </div>
 
           <div
-            className={`plan-dropzone${isDragging ? " plan-dropzone-active" : ""}${isUploading ? " plan-dropzone-disabled" : ""}`}
+            className={`plan-dropzone${isDragging && hasActiveSubscription ? " plan-dropzone-active" : ""}${isUploading || !hasActiveSubscription ? " plan-dropzone-disabled" : ""}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => {
-              if (!isUploading) {
+              if (!isUploading && hasActiveSubscription) {
                 fileInputRef.current?.click();
               }
             }}
             role="button"
-            tabIndex={0}
+            tabIndex={hasActiveSubscription ? 0 : -1}
+            aria-disabled={!hasActiveSubscription}
             onKeyDown={(event) => {
-              if ((event.key === "Enter" || event.key === " ") && !isUploading) {
+              if ((event.key === "Enter" || event.key === " ") && !isUploading && hasActiveSubscription) {
                 event.preventDefault();
                 fileInputRef.current?.click();
               }
@@ -616,6 +663,7 @@ export default function PlanAnalyzer() {
               accept=".pdf,image/*"
               className="plan-dropzone-input"
               onChange={handleFileInputChange}
+              disabled={!hasActiveSubscription}
             />
 
             <div className="plan-dropzone-icon">
@@ -634,9 +682,11 @@ export default function PlanAnalyzer() {
               className="plan-dropzone-button"
               onClick={(event) => {
                 event.stopPropagation();
-                fileInputRef.current?.click();
+                if (hasActiveSubscription) {
+                  fileInputRef.current?.click();
+                }
               }}
-              disabled={isUploading}
+              disabled={isUploading || !hasActiveSubscription}
             >
               Select File
             </Button>
@@ -672,7 +722,7 @@ export default function PlanAnalyzer() {
                         type="button"
                         className="plan-file-remove"
                         onClick={() => removeFile(selectedFile)}
-                        disabled={isUploading}
+                        disabled={isUploading || !hasActiveSubscription}
                       >
                         Remove
                       </button>
@@ -700,7 +750,7 @@ export default function PlanAnalyzer() {
                   Object.values(analysisToggles).every(Boolean) ? " plan-analysis-toggle-active" : ""
                 }`}
                 onClick={enableFullAnalysis}
-                disabled={isUploading}
+                disabled={isUploading || !hasActiveSubscription}
               >
                 <span className="plan-analysis-toggle-title">Full Analysis</span>
                 <span className="plan-analysis-toggle-state">
@@ -712,7 +762,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.verification ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("verification")}
-                disabled={isUploading}
+                disabled={isUploading || !hasActiveSubscription}
               >
                 <span className="plan-analysis-toggle-title">Verification</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.verification ? "On" : "Off"}</span>
@@ -722,7 +772,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.safety ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("safety")}
-                disabled={isUploading}
+                disabled={isUploading || !hasActiveSubscription}
               >
                 <span className="plan-analysis-toggle-title">Safety</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.safety ? "On" : "Off"}</span>
@@ -732,7 +782,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.conflicts ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("conflicts")}
-                disabled={isUploading}
+                disabled={isUploading || !hasActiveSubscription}
               >
                 <span className="plan-analysis-toggle-title">Conflicts</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.conflicts ? "On" : "Off"}</span>
@@ -742,7 +792,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.rfi ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("rfi")}
-                disabled={isUploading}
+                disabled={isUploading || !hasActiveSubscription}
               >
                 <span className="plan-analysis-toggle-title">RFI Package</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.rfi ? "On" : "Off"}</span>
@@ -799,14 +849,19 @@ export default function PlanAnalyzer() {
           )}
 
           <div className="plan-actions">
-            <Button type="button" variant="outline" onClick={clearSelection} disabled={isUploading}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={clearSelection}
+              disabled={isUploading || !hasActiveSubscription}
+            >
               Clear Selection
             </Button>
 
             <Button
               type="button"
               onClick={handleUpload}
-              disabled={isUploading || !selectedFile}
+              disabled={isUploading || !selectedFile || !hasActiveSubscription}
             >
               {isUploading ? (
                 <>
