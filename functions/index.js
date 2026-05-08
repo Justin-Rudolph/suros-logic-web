@@ -161,7 +161,7 @@ exports.downloadBidFormProposalPdf = onRequest(
 exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 720,
+    timeoutSeconds: 420,
     memory: "2GiB",
   },
   async (req, res) => {
@@ -184,7 +184,7 @@ exports.analyzePlanFiles = onRequest(
 exports.generateScopes = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 540,
+    timeoutSeconds: 900,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -207,7 +207,7 @@ exports.generateScopes = onRequest(
 exports.generateVerificationChecklist = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 540,
+    timeoutSeconds: 600,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -230,7 +230,7 @@ exports.generateVerificationChecklist = onRequest(
 exports.analyzeSafety = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 540,
+    timeoutSeconds: 600,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -253,7 +253,7 @@ exports.analyzeSafety = onRequest(
 exports.detectConflicts = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 540,
+    timeoutSeconds: 720,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -276,7 +276,7 @@ exports.detectConflicts = onRequest(
 exports.generateRFIs = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 540,
+    timeoutSeconds: 900,
     memory: "1GiB",
   },
   async (req, res) => {

@@ -2,6 +2,15 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const {
+  createJsonCompletion,
+  createPlanContextChunks,
+  loadProjectPlanFiles,
+  logUsageTotals,
+  mapWithConcurrency,
+  serializeChunkResults,
+  sumUsage,
+} = require("./lib/planAnalyzerContext");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -10,29 +19,38 @@ if (!admin.apps.length) {
 const firestore = admin.firestore();
 
 const ALLOWED_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
-const MAX_PLAN_CONTEXT_LENGTH = 100000;
+const MAX_PLAN_CONTEXT_LENGTH = 75000;
 
-const normalizeWhitespace = (value) =>
-  String(value || "")
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-const buildPlanContext = (files) => {
-  const sections = files.map((file) => {
-    const headerParts = [
-      file.fileName ? `FILE: ${file.fileName}` : null,
-      file.detectedSheetNumber ? `SHEET: ${file.detectedSheetNumber}` : null,
-      file.detectedTitle ? `TITLE: ${file.detectedTitle}` : null,
-      file.discipline ? `DISCIPLINE: ${file.discipline}` : null,
-    ].filter(Boolean);
-
-    return `${headerParts.join(" | ")}\n${normalizeWhitespace(file.rawText || "")}`.trim();
-  });
-
-  return sections.join("\n\n====================\n\n").slice(0, MAX_PLAN_CONTEXT_LENGTH);
-};
+const getSafetyResponseFormat = () => ({
+  type: "json_schema",
+  json_schema: {
+    name: "plan_safety_findings",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              issue: { type: "string" },
+              severity: {
+                type: "string",
+                enum: ["low", "medium", "high", "critical"],
+              },
+              requiresReview: { type: "boolean" },
+            },
+            required: ["issue", "severity", "requiresReview"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+});
 
 const sanitizeSafetyItem = (item) => {
   if (!item || typeof item !== "object") {
@@ -53,26 +71,39 @@ const sanitizeSafetyItem = (item) => {
   };
 };
 
+const parseSafetyPayload = (parsed) => {
+  const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+  if (!items.length) {
+    return [];
+  }
+
+  return items.map(sanitizeSafetyItem).filter(Boolean);
+};
+
 const generateSafetyAnalysis = async (files, openAiApiKey) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
-  const planContext = buildPlanContext(files);
-  if (!planContext) {
+  const contextChunks = createPlanContextChunks(files, MAX_PLAN_CONTEXT_LENGTH, {
+    includeRevisionDate: false,
+  });
+  if (!contextChunks.length) {
     throw new Error("No extracted plan text is available for this project");
   }
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5",
-    reasoning_effort: "medium",
-    messages: [
-      {
-        role: "system",
-        content: buildEstimatorSystemPrompt(`
-Analyze the OCR-extracted plan text for safety and code-risk items that should be reviewed before
+  const chunkUsages = [];
+  const chunkFindings = await mapWithConcurrency(
+    contextChunks,
+    async (chunk, index) => {
+      const { parsed, usage } = await createJsonCompletion({
+        openai,
+        model: "gpt-5",
+        reasoningEffort: "medium",
+        responseFormat: getSafetyResponseFormat(),
+        systemPrompt: buildEstimatorSystemPrompt(`
+Analyze one chunk of OCR-extracted plan text for safety and code-risk items that should be reviewed before
 construction, pricing, permitting, or bid submission.
 
 Focus only on:
@@ -94,36 +125,64 @@ Additional task rules:
 - Do not cite code sections unless explicitly present in the extracted plan text.
 
 Return exactly:
-[
-  {
-    "issue": "string",
-    "severity": "low" | "medium" | "high" | "critical",
-    "requiresReview": true
-  }
-]
-        `),
-      },
-      {
-        role: "user",
-        content: planContext,
-      },
-    ],
+{
+  "items": [
+    {
+      "issue": "string",
+      "severity": "low" | "medium" | "high" | "critical",
+      "requiresReview": true
+    }
+  ]
+}
+      `),
+        userContent: chunk.text,
+      });
+      chunkUsages[index] = usage;
+
+      return {
+        data: parseSafetyPayload(parsed),
+        usage,
+      };
+    },
+    { label: "analyzeSafety" }
+  );
+
+  const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
+    openai,
+    model: "gpt-5",
+    reasoningEffort: "medium",
+    responseFormat: getSafetyResponseFormat(),
+    systemPrompt: buildEstimatorSystemPrompt(`
+Combine chunk-level safety findings from a full plan set into one final review list.
+
+Additional task rules:
+- Deduplicate materially similar issues across chunks.
+- Keep the most specific wording supported by the chunk findings.
+- Every returned item must have requiresReview set to true.
+- Severity must be one of: "low", "medium", "high", "critical".
+- Do not add generic boilerplate or unsupported issues.
+
+Return exactly:
+{
+  "items": [
+    {
+      "issue": "string",
+      "severity": "low" | "medium" | "high" | "critical",
+      "requiresReview": true
+    }
+  ]
+}
+    `),
+    userContent: serializeChunkResults(contextChunks, chunkFindings, "SAFETY CHUNK"),
   });
 
-  const content = completion.choices[0]?.message?.content;
+  logUsageTotals("analyzeSafety", [
+    { title: "chunks", usage: sumUsage(chunkUsages) },
+    { title: "aggregation", usage: aggregationUsage },
+    { title: "overall", usage: sumUsage([...chunkUsages, aggregationUsage]) },
+  ]);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`Invalid JSON returned from AI safety analysis: ${content || "empty response"}`);
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error("AI safety analysis did not return an array");
-  }
-
-  return parsed.map(sanitizeSafetyItem).filter(Boolean);
+  return parseSafetyPayload(aggregated);
 };
 
 module.exports = async function analyzeSafetyHandler(req, res, openAiApiKey) {
@@ -142,28 +201,10 @@ module.exports = async function analyzeSafetyHandler(req, res, openAiApiKey) {
       { merge: true }
     );
 
-    const fileSnapshot = await firestore.collection(`planProjects/${projectId}/files`).get();
-    if (fileSnapshot.empty) {
+    const files = await loadProjectPlanFiles(firestore, projectId);
+    if (!files.length) {
       return res.status(404).json({
         error: "No analyzed plan files found for this project.",
-      });
-    }
-
-    const files = fileSnapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }))
-      .filter((file) => typeof file.rawText === "string" && normalizeWhitespace(file.rawText).length > 0)
-      .sort((left, right) => {
-        const leftSheet = String(left.detectedSheetNumber || "");
-        const rightSheet = String(right.detectedSheetNumber || "");
-        return leftSheet.localeCompare(rightSheet) || String(left.fileName || "").localeCompare(String(right.fileName || ""));
-      });
-
-    if (!files.length) {
-      return res.status(400).json({
-        error: "Analyzed files exist, but no extracted plan text is available.",
       });
     }
 

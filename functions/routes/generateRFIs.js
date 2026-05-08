@@ -2,6 +2,16 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const {
+  createJsonCompletion,
+  createPlanContextChunks,
+  loadProjectPlanFiles,
+  logUsageTotals,
+  mapWithConcurrency,
+  serializeChunkResults,
+  sumUsage,
+  uniqueStrings,
+} = require("./lib/planAnalyzerContext");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -9,65 +19,68 @@ if (!admin.apps.length) {
 
 const firestore = admin.firestore();
 
-const MAX_PLAN_CONTEXT_LENGTH = 120000;
+const MAX_PLAN_CONTEXT_LENGTH = 80000;
 
-const normalizeWhitespace = (value) =>
-  String(value || "")
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+const getRfiResponseFormat = () => ({
+  type: "json_schema",
+  json_schema: {
+    name: "plan_rfi_package",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rfis: {
+          type: "array",
+          items: { type: "string" },
+        },
+        assumptions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        estimatorQuestions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        contingencyNotes: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+      required: ["rfis", "assumptions", "estimatorQuestions", "contingencyNotes"],
+    },
+  },
+});
 
-const buildPlanContext = (files) => {
-  const sections = files.map((file) => {
-    const headerParts = [
-      file.fileName ? `FILE: ${file.fileName}` : null,
-      file.detectedSheetNumber ? `SHEET: ${file.detectedSheetNumber}` : null,
-      file.detectedTitle ? `TITLE: ${file.detectedTitle}` : null,
-      file.discipline ? `DISCIPLINE: ${file.discipline}` : null,
-      file.revisionDate ? `REVISION DATE: ${file.revisionDate}` : null,
-    ].filter(Boolean);
-
-    return `${headerParts.join(" | ")}\n${normalizeWhitespace(file.rawText || "")}`.trim();
-  });
-
-  return sections.join("\n\n====================\n\n").slice(0, MAX_PLAN_CONTEXT_LENGTH);
-};
-
-const sanitizeStringList = (value) => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      value
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
-    )
-  );
-};
+const parseRfiPayload = (parsed) => ({
+  rfis: uniqueStrings(parsed?.rfis),
+  assumptions: uniqueStrings(parsed?.assumptions),
+  estimatorQuestions: uniqueStrings(parsed?.estimatorQuestions),
+  contingencyNotes: uniqueStrings(parsed?.contingencyNotes),
+});
 
 const generateRfiPackage = async (files, openAiApiKey) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
-  const planContext = buildPlanContext(files);
-  if (!planContext) {
+  const contextChunks = createPlanContextChunks(files, MAX_PLAN_CONTEXT_LENGTH);
+  if (!contextChunks.length) {
     throw new Error("No extracted plan text is available for this project");
   }
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5",
-    reasoning_effort: "medium",
-    messages: [
-      {
-        role: "system",
-        content: buildEstimatorSystemPrompt(`
-Review the OCR-extracted plan text before bid submission and identify missing information, unclear
+  const chunkUsages = [];
+  const chunkPackages = await mapWithConcurrency(
+    contextChunks,
+    async (chunk, index) => {
+      const { parsed, usage } = await createJsonCompletion({
+        openai,
+        model: "gpt-5",
+        reasoningEffort: "medium",
+        responseFormat: getRfiResponseFormat(),
+        systemPrompt: buildEstimatorSystemPrompt(`
+Review one chunk of OCR-extracted plan text before bid submission and identify missing information, unclear
 assemblies, incomplete details, and coordination risks that should affect bid qualifications.
 
 Additional task rules:
@@ -87,30 +100,51 @@ Return exactly this JSON shape:
   "estimatorQuestions": [],
   "contingencyNotes": []
 }
-        `),
-      },
-      {
-        role: "user",
-        content: planContext,
-      },
-    ],
+      `),
+        userContent: chunk.text,
+      });
+      chunkUsages[index] = usage;
+
+      return {
+        data: parseRfiPayload(parsed),
+        usage,
+      };
+    },
+    { label: "generateRFIs" }
+  );
+
+  const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
+    openai,
+    model: "gpt-5",
+    reasoningEffort: "medium",
+    responseFormat: getRfiResponseFormat(),
+    systemPrompt: buildEstimatorSystemPrompt(`
+Combine chunk-level bid-risk findings from a full plan set into one final RFI package.
+
+Additional task rules:
+- Each array must contain plain strings only.
+- Deduplicate materially similar items across chunks.
+- Preserve the most specific, best-supported wording.
+- Do not add generic boilerplate or unsupported items.
+
+Return exactly this JSON shape:
+{
+  "rfis": [],
+  "assumptions": [],
+  "estimatorQuestions": [],
+  "contingencyNotes": []
+}
+    `),
+    userContent: serializeChunkResults(contextChunks, chunkPackages, "RFI CHUNK"),
   });
 
-  const content = completion.choices[0]?.message?.content;
+  logUsageTotals("generateRFIs", [
+    { title: "chunks", usage: sumUsage(chunkUsages) },
+    { title: "aggregation", usage: aggregationUsage },
+    { title: "overall", usage: sumUsage([...chunkUsages, aggregationUsage]) },
+  ]);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`Invalid JSON returned from AI RFI generation: ${content || "empty response"}`);
-  }
-
-  return {
-    rfis: sanitizeStringList(parsed?.rfis),
-    assumptions: sanitizeStringList(parsed?.assumptions),
-    estimatorQuestions: sanitizeStringList(parsed?.estimatorQuestions),
-    contingencyNotes: sanitizeStringList(parsed?.contingencyNotes),
-  };
+  return parseRfiPayload(aggregated);
 };
 
 module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
@@ -129,28 +163,10 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
       { merge: true }
     );
 
-    const fileSnapshot = await firestore.collection(`planProjects/${projectId}/files`).get();
-    if (fileSnapshot.empty) {
+    const files = await loadProjectPlanFiles(firestore, projectId);
+    if (!files.length) {
       return res.status(404).json({
         error: "No analyzed plan files found for this project.",
-      });
-    }
-
-    const files = fileSnapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }))
-      .filter((file) => typeof file.rawText === "string" && normalizeWhitespace(file.rawText).length > 0)
-      .sort((left, right) => {
-        const leftSheet = String(left.detectedSheetNumber || "");
-        const rightSheet = String(right.detectedSheetNumber || "");
-        return leftSheet.localeCompare(rightSheet) || String(left.fileName || "").localeCompare(String(right.fileName || ""));
-      });
-
-    if (!files.length) {
-      return res.status(400).json({
-        error: "Analyzed files exist, but no extracted plan text is available.",
       });
     }
 

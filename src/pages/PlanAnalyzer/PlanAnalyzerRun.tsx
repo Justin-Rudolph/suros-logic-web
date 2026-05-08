@@ -245,17 +245,19 @@ type FormattedBidLineItem = {
 
 const SCOPE_TRADE_LABELS: Array<{ key: string; label: string }> = [
   { key: "demo", label: "Demo" },
+  { key: "structural", label: "Structural" },
   { key: "framing", label: "Framing" },
-  { key: "drywall", label: "Drywall" },
-  { key: "flooring", label: "Flooring" },
-  { key: "doors/windows", label: "Doors/Windows" },
-  { key: "paint", label: "Paint" },
+  { key: "exterior_envelope", label: "Exterior Envelope" },
+  { key: "doors_windows", label: "Doors/Windows" },
+  { key: "roofing", label: "Roofing" },
   { key: "plumbing", label: "Plumbing" },
   { key: "electrical", label: "Electrical" },
+  { key: "concrete_masonry", label: "Concrete/Masonry" },
+  { key: "drywall_insulation", label: "Drywall/Insulation" },
+  { key: "flooring_tile", label: "Flooring/Tile" },
+  { key: "paint_finishes", label: "Paint/Finishes" },
+  { key: "millwork_cabinets", label: "Millwork/Cabinets" },
   { key: "HVAC", label: "HVAC" },
-  { key: "concrete/masonry", label: "Concrete/Masonry" },
-  { key: "roofing", label: "Roofing" },
-  { key: "specialty/site", label: "Specialty/Site" },
 ];
 
 const VERIFICATION_CATEGORY_ORDER: VerificationItem["category"][] = [
