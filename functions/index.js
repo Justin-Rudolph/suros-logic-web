@@ -21,7 +21,10 @@ const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 -------------------------------------------------- */
 
 exports.generateEstimate = onRequest(
-  { secrets: [OPENAI_API_KEY] },
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 300,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -44,7 +47,10 @@ exports.generateEstimate = onRequest(
 -------------------------------------------------- */
 
 exports.generateBidFormProposal = onRequest(
-  { secrets: [OPENAI_API_KEY] },
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 300,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -67,7 +73,10 @@ exports.generateBidFormProposal = onRequest(
 -------------------------------------------------- */
 
 exports.generateChangeOrderProposal = onRequest(
-  { secrets: [OPENAI_API_KEY] },
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 240,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -90,7 +99,10 @@ exports.generateChangeOrderProposal = onRequest(
 -------------------------------------------------- */
 
 exports.generateBidWorkspaceOverview = onRequest(
-  { secrets: [OPENAI_API_KEY] },
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 180,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -113,7 +125,10 @@ exports.generateBidWorkspaceOverview = onRequest(
 -------------------------------------------------- */
 
 exports.formatPlanScopeSelectionsForBid = onRequest(
-  { secrets: [OPENAI_API_KEY] },
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 240,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -136,7 +151,10 @@ exports.formatPlanScopeSelectionsForBid = onRequest(
 -------------------------------------------------- */
 
 exports.downloadBidFormProposalPdf = onRequest(
-  { secrets: [CONVERTAPI_SECRET] },
+  {
+    secrets: [CONVERTAPI_SECRET],
+    timeoutSeconds: 180,
+  },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {
       if (req.method !== "POST") {
@@ -303,6 +321,7 @@ exports.stripe = onRequest(
       STRIPE_WEBHOOK_SECRET_LIVE,
       SENDGRID_API_KEY,
     ],
+    timeoutSeconds: 180,
   },
   (req, res) => {
     const stripeRoute = require("./routes/stripe");
@@ -317,6 +336,7 @@ exports.stripe = onRequest(
 exports.auth = onRequest(
   {
     secrets: [SENDGRID_API_KEY],
+    timeoutSeconds: 90,
   },
   (req, res) => {
     const authRoute = require("./routes/auth");
