@@ -5,8 +5,10 @@ const pdfParse = require("pdf-parse");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
+  buildPlanModuleSummaryData,
   createJsonCompletion,
   createPlanContextChunks,
+  getPlanModuleDocPath,
   logUsageTotals,
   mapWithConcurrency,
   normalizeWhitespace,
@@ -211,91 +213,6 @@ const detectRevisionDate = (lines, rawText) => {
   return anyDateMatch ? parseDate(anyDateMatch[1]) : null;
 };
 
-const parseSheetKey = (sheetNumber) => {
-  const normalized = String(sheetNumber || "").trim().toUpperCase();
-  const match = normalized.match(/^([A-Z]{1,3})[-.]?(\d{1,4})(?:\.(\d{1,3}))?/);
-  if (!match) return null;
-
-  return {
-    discipline: match[1],
-    major: Number(match[2]),
-    minor: match[3] ? Number(match[3]) : 0,
-    normalized,
-  };
-};
-
-const detectProjectIssues = (files) => {
-  const duplicateSheets = [];
-  const conflictingRevisions = [];
-  const missingSheetNumbers = [];
-
-  const bySheetNumber = new Map();
-  const byDiscipline = new Map();
-
-  files.forEach((file) => {
-    if (file.detectedSheetNumber) {
-      const normalizedSheetNumber = String(file.detectedSheetNumber).toUpperCase();
-      const sheetGroup = bySheetNumber.get(normalizedSheetNumber) || [];
-      sheetGroup.push(file);
-      bySheetNumber.set(normalizedSheetNumber, sheetGroup);
-
-      const parsed = parseSheetKey(normalizedSheetNumber);
-      if (parsed) {
-        const disciplineGroup = byDiscipline.get(parsed.discipline) || [];
-        disciplineGroup.push(parsed);
-        byDiscipline.set(parsed.discipline, disciplineGroup);
-      }
-    }
-  });
-
-  bySheetNumber.forEach((group, sheetNumber) => {
-    if (group.length > 1) {
-      duplicateSheets.push({
-        sheetNumber,
-        fileNames: group.map((entry) => entry.fileName),
-      });
-    }
-
-    const revisionDates = Array.from(
-      new Set(
-        group
-          .map((entry) => entry.revisionDate)
-          .filter(Boolean)
-      )
-    );
-
-    if (revisionDates.length > 1) {
-      conflictingRevisions.push({
-        sheetNumber,
-        revisions: revisionDates,
-        fileNames: group.map((entry) => entry.fileName),
-      });
-    }
-  });
-
-  byDiscipline.forEach((entries, discipline) => {
-    const uniqueNumbers = Array.from(new Set(entries.map((entry) => entry.major))).sort((a, b) => a - b);
-    if (uniqueNumbers.length < 2) return;
-
-    for (let index = 1; index < uniqueNumbers.length; index += 1) {
-      const previous = uniqueNumbers[index - 1];
-      const current = uniqueNumbers[index];
-
-      if (current - previous <= 1) continue;
-
-      for (let missing = previous + 1; missing < current; missing += 1) {
-        missingSheetNumbers.push(`${discipline}${missing}`);
-      }
-    }
-  });
-
-  return {
-    duplicateSheets,
-    conflictingRevisions,
-    missingSheetNumbers,
-  };
-};
-
 const downloadFile = async (fileUrl) => {
   const response = await fetch(fileUrl);
   if (!response.ok) {
@@ -392,12 +309,12 @@ const buildAnalyzedFileId = (file, index) => {
 const buildAnalyzedFileDocData = ({
   fileId,
   file,
-  duplicateSheetDetected,
-  conflictingRevisionDetected,
 }) => ({
   fileId,
+  projectId: file.projectId,
   fileName: file.fileName,
   sourceFileName: file.sourceFileName,
+  fileUrl: file.fileUrl,
   fileKind: file.fileKind,
   sourcePageNumber: file.sourcePageNumber,
   sourcePageCount: file.sourcePageCount,
@@ -406,16 +323,12 @@ const buildAnalyzedFileDocData = ({
   discipline: file.discipline,
   revisionDate: file.revisionDate,
   rawText: file.rawText,
-  duplicateSheetDetected,
-  conflictingRevisionDetected,
   analyzedAt: FieldValue.serverTimestamp(),
 });
 
 const writeAnalyzedFiles = async ({
   projectId,
   analyzedFiles,
-  duplicateSheetSet,
-  conflictingRevisionSet,
 }) => {
   const writesPerGroup = 20;
 
@@ -431,9 +344,10 @@ const writeAnalyzedFiles = async ({
         return fileRef.set(
           buildAnalyzedFileDocData({
             fileId,
-            file,
-            duplicateSheetDetected: duplicateSheetSet.has(file.fileName),
-            conflictingRevisionDetected: conflictingRevisionSet.has(file.fileName),
+            file: {
+              ...file,
+              projectId,
+            },
           })
         );
       })
@@ -666,11 +580,28 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       return res.status(400).json({ error: "fileUrl is required." });
     }
 
+    const startedAt = FieldValue.serverTimestamp();
+
     await firestore.doc(`planProjects/${projectId}`).set(
       {
         projectId,
-        analysisStatus: "processing",
-        analysisStartedAt: FieldValue.serverTimestamp(),
+        status: "processing",
+        modules: {
+          overview: buildPlanModuleSummaryData(projectId, "overview", "processing", {
+            startedAt,
+            error: null,
+          }),
+        },
+      },
+      { merge: true }
+    );
+    await firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+      {
+        projectId,
+        moduleType: "overview",
+        status: "processing",
+        startedAt,
+        error: null,
       },
       { merge: true }
     );
@@ -695,39 +626,48 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       throw new Error("No uploaded files could be analyzed.");
     }
 
-    const projectIssues = detectProjectIssues(analyzedFiles);
     const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey);
-
-    const duplicateSheetSet = new Set(
-      projectIssues.duplicateSheets.flatMap((entry) => entry.fileNames)
-    );
-
-    const conflictingRevisionSet = new Set(
-      projectIssues.conflictingRevisions.flatMap((entry) => entry.fileNames)
-    );
 
     await writeAnalyzedFiles({
       projectId,
       analyzedFiles,
-      duplicateSheetSet,
-      conflictingRevisionSet,
     });
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        analysisStatus: fileErrors.length ? "completed_with_errors" : "completed",
-        analysisCompletedAt: FieldValue.serverTimestamp(),
-        analyzedFileCount: analyzedFiles.length,
-        failedFileCount: fileErrors.length,
-        projectType: projectSummary.projectType,
-        areas: projectSummary.affectedAreas,
-        summary: projectSummary.summary,
-        duplicateSheets: projectIssues.duplicateSheets,
-        missingSheetNumbers: projectIssues.missingSheetNumbers,
-        conflictingRevisions: projectIssues.conflictingRevisions,
-      },
-      { merge: true }
-    );
+    const overviewStatus = fileErrors.length ? "completed_with_errors" : "completed";
+    const completedAt = FieldValue.serverTimestamp();
+    const overviewResult = {
+      projectType: projectSummary.projectType,
+      areas: projectSummary.affectedAreas,
+      summary: projectSummary.summary,
+    };
+
+    await Promise.all([
+      firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+        {
+          projectId,
+          moduleType: "overview",
+          status: overviewStatus,
+          completedAt,
+          error: null,
+          result: overviewResult,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: fileErrors.length ? "completed_with_errors" : "processing",
+          modules: {
+            overview: buildPlanModuleSummaryData(projectId, "overview", overviewStatus, {
+              completedAt,
+              error: null,
+            }),
+          },
+          analyzedFileCount: analyzedFiles.length,
+          failedFileCount: fileErrors.length,
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -745,25 +685,41 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
         revisionDate: file.revisionDate,
         rawText: file.rawText,
       })),
-      duplicateSheets: projectIssues.duplicateSheets,
-      missingSheetNumbers: projectIssues.missingSheetNumbers,
-      conflictingRevisions: projectIssues.conflictingRevisions,
       fileErrors,
     });
   } catch (error) {
     console.error("Plan file analysis failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          analysisStatus: "failed",
-          analysisCompletedAt: FieldValue.serverTimestamp(),
-          failedFileCount: fileErrors.length,
-          analysisError: error instanceof Error ? error.message : "Unknown error",
-          analysisFileErrors: fileErrors,
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+      await Promise.all([
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              overview: buildPlanModuleSummaryData(projectId, "overview", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+            failedFileCount: fileErrors.length,
+            analysisFileErrors: fileErrors,
+          },
+          { merge: true }
+        ),
+        firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+          {
+            projectId,
+            moduleType: "overview",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
     return res.status(500).json({

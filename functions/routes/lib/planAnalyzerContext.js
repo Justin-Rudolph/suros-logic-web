@@ -416,6 +416,56 @@ const loadProjectPlanFiles = async (firestore, projectId) => {
   );
 };
 
+const getPlanModuleDocPath = (projectId, moduleType) =>
+  `planProjects/${projectId}/modules/${moduleType}`;
+
+const buildPlanModuleSummaryData = (projectId, moduleType, status, extra = {}) => ({
+  moduleType,
+  docPath: getPlanModuleDocPath(projectId, moduleType),
+  status,
+  ...extra,
+});
+
+const isOptionalPlanModuleEnabled = (analysisOptions, key) => {
+  if (!analysisOptions || typeof analysisOptions !== "object") {
+    return true;
+  }
+
+  return analysisOptions[key] === true;
+};
+
+const getProjectStatusAfterModuleUpdate = (projectData, moduleType, nextStatus) => {
+  if (nextStatus === "failed") {
+    return "failed";
+  }
+
+  const overviewStatus = projectData?.modules?.overview?.status;
+  const overviewDone = overviewStatus === "completed" || overviewStatus === "completed_with_errors";
+
+  if (!overviewDone || nextStatus !== "completed") {
+    return "processing";
+  }
+
+  const modules = {
+    ...(projectData?.modules || {}),
+    [moduleType]: {
+      ...(projectData?.modules?.[moduleType] || {}),
+      status: nextStatus,
+    },
+  };
+  const analysisOptions = projectData?.analysisOptions || {};
+  const moduleDone = (key) => modules[key]?.status === "completed" || modules[key]?.status === "skipped";
+
+  const allModulesDone =
+    modules.scopes?.status === "completed" &&
+    (!isOptionalPlanModuleEnabled(analysisOptions, "verification") || moduleDone("verification")) &&
+    (!isOptionalPlanModuleEnabled(analysisOptions, "safety") || moduleDone("safety")) &&
+    (!isOptionalPlanModuleEnabled(analysisOptions, "conflicts") || moduleDone("conflicts")) &&
+    (!isOptionalPlanModuleEnabled(analysisOptions, "rfi") || moduleDone("rfi"));
+
+  return allModulesDone ? "completed" : "processing";
+};
+
 module.exports = {
   DEFAULT_CHUNK_CHAR_LIMIT,
   DEFAULT_CHUNK_CONCURRENCY,
@@ -425,6 +475,9 @@ module.exports = {
   createPlanContextChunks,
   formatUsageMetrics,
   getChunkProcessingConcurrency,
+  buildPlanModuleSummaryData,
+  getProjectStatusAfterModuleUpdate,
+  getPlanModuleDocPath,
   loadProjectPlanFiles,
   logUsageTotals,
   mapWithConcurrency,

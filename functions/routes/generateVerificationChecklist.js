@@ -4,8 +4,11 @@ const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
   buildScopeContext,
+  buildPlanModuleSummaryData,
   createJsonCompletion,
   createPlanContextChunks,
+  getPlanModuleDocPath,
+  getProjectStatusAfterModuleUpdate,
   loadProjectPlanFiles,
   logUsageTotals,
   mapWithConcurrency,
@@ -220,40 +223,88 @@ module.exports = async function generateVerificationChecklistHandler(req, res, o
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        verificationStatus: "processing",
-        verificationRequestedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "verification"));
+    const startedAt = FieldValue.serverTimestamp();
 
-    const [projectSnap, files] = await Promise.all([
+    await Promise.all([
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: "processing",
+          modules: {
+            verification: buildPlanModuleSummaryData(projectId, "verification", "processing", {
+              startedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "verification",
+          status: "processing",
+          error: null,
+          startedAt,
+        },
+        { merge: true }
+      ),
+    ]);
+
+    const [projectSnap, scopesSnap, files] = await Promise.all([
       firestore.doc(`planProjects/${projectId}`).get(),
+      firestore.doc(getPlanModuleDocPath(projectId, "scopes")).get(),
       loadProjectPlanFiles(firestore, projectId),
     ]);
 
     if (!projectSnap.exists) {
-      return res.status(404).json({ error: "Project not found." });
+      const projectNotFoundError = new Error("Project not found.");
+      projectNotFoundError.statusCode = 404;
+      throw projectNotFoundError;
     }
 
     if (!files.length) {
-      return res.status(404).json({
-        error: "No analyzed plan files found for this project.",
-      });
+      const missingFilesError = new Error("No analyzed plan files found for this project.");
+      missingFilesError.statusCode = 404;
+      throw missingFilesError;
     }
 
-    const projectData = projectSnap.data() || {};
-    const verification = await generateChecklist(files, projectData.scopes || {}, openAiApiKey);
+    const scopesData = scopesSnap.data() || {};
+    const verification = await generateChecklist(files, scopesData.result || {}, openAiApiKey);
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        verification,
-        verificationStatus: "completed",
-        verificationGeneratedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const completedAt = FieldValue.serverTimestamp();
+
+    const nextProjectStatus = getProjectStatusAfterModuleUpdate(
+      projectSnap.data() || {},
+      "verification",
+      "completed"
     );
+
+    await Promise.all([
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "verification",
+          status: "completed",
+          error: null,
+          completedAt,
+          result: verification,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: nextProjectStatus,
+          modules: {
+            verification: buildPlanModuleSummaryData(projectId, "verification", "completed", {
+              completedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -263,17 +314,35 @@ module.exports = async function generateVerificationChecklistHandler(req, res, o
     console.error("Verification checklist generation failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          verificationStatus: "failed",
-          verificationGeneratedAt: FieldValue.serverTimestamp(),
-          verificationError: error instanceof Error ? error.message : "Unknown error",
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await Promise.all([
+        firestore.doc(getPlanModuleDocPath(projectId, "verification")).set(
+          {
+            projectId,
+            moduleType: "verification",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              verification: buildPlanModuleSummaryData(projectId, "verification", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Failed to generate verification checklist.",
       details: error instanceof Error ? error.message : "Unknown error",
     });

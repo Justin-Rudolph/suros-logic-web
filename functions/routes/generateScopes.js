@@ -3,8 +3,11 @@ const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
+  buildPlanModuleSummaryData,
   createJsonCompletion,
   createPlanContextChunks,
+  getPlanModuleDocPath,
+  getProjectStatusAfterModuleUpdate,
   loadProjectPlanFiles,
   logUsageTotals,
   mapWithConcurrency,
@@ -293,31 +296,77 @@ module.exports = async function generateScopesHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        scopeGenerationStatus: "processing",
-        scopesRequestedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "scopes"));
+    const startedAt = FieldValue.serverTimestamp();
+
+    await Promise.all([
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: "processing",
+          modules: {
+            scopes: buildPlanModuleSummaryData(projectId, "scopes", "processing", {
+              startedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "scopes",
+          status: "processing",
+          error: null,
+          startedAt,
+        },
+        { merge: true }
+      ),
+    ]);
 
     const files = await loadProjectPlanFiles(firestore, projectId);
     if (!files.length) {
-      return res.status(404).json({
-        error: "No analyzed plan files found for this project.",
-      });
+      const missingFilesError = new Error("No analyzed plan files found for this project.");
+      missingFilesError.statusCode = 404;
+      throw missingFilesError;
     }
 
     const scopes = await generateTradeScopesFromPlans(files, openAiApiKey);
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        scopes,
-        scopeGenerationStatus: "completed",
-        scopesGeneratedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const completedAt = FieldValue.serverTimestamp();
+
+    const projectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    const nextProjectStatus = getProjectStatusAfterModuleUpdate(
+      projectSnap.data() || {},
+      "scopes",
+      "completed"
     );
+
+    await Promise.all([
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "scopes",
+          status: "completed",
+          error: null,
+          completedAt,
+          result: scopes,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: nextProjectStatus,
+          modules: {
+            scopes: buildPlanModuleSummaryData(projectId, "scopes", "completed", {
+              completedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -327,17 +376,35 @@ module.exports = async function generateScopesHandler(req, res, openAiApiKey) {
     console.error("Scope generation failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          scopeGenerationStatus: "failed",
-          scopesGeneratedAt: FieldValue.serverTimestamp(),
-          scopeGenerationError: error instanceof Error ? error.message : "Unknown error",
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await Promise.all([
+        firestore.doc(getPlanModuleDocPath(projectId, "scopes")).set(
+          {
+            projectId,
+            moduleType: "scopes",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              scopes: buildPlanModuleSummaryData(projectId, "scopes", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Failed to generate scopes.",
       details: error instanceof Error ? error.message : "Unknown error",
     });

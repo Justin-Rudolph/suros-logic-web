@@ -19,50 +19,29 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { firestore, storage } from "@/lib/firebase";
+import { PlanModuleSummary, PlanModuleStatus, UploadedPlanFile } from "@/models/PlanAnalyzerShared";
+import { PlanProjectRecord } from "@/models/PlanProjects";
 
 import "./PlanAnalyzer.css";
-
-type UploadedPlanFile = {
-  name: string;
-  type: string;
-  size: number;
-  downloadURL: string;
-  storagePath: string;
-};
 
 type FirestoreTimestampLike = {
   seconds?: number;
   toDate?: () => Date;
 };
 
-type PlanProjectRecord = {
-  id: string;
-  projectId: string;
-  userId: string;
-  title?: string;
-  fileCount: number;
-  status?: string;
-  createdAt?: FirestoreTimestampLike;
-  updatedAt?: FirestoreTimestampLike;
-  uploadedFiles?: UploadedPlanFile[];
-  analysisStatus?: string;
-  scopeGenerationStatus?: string;
-  verificationStatus?: string;
-  safetyStatus?: string;
-  conflictStatus?: string;
-  rfiStatus?: string;
-  projectType?: string;
-  analysisOptions?: {
-    verification?: boolean;
-    safety?: boolean;
-    conflicts?: boolean;
-    rfi?: boolean;
-  };
-};
-
 type AnalysisToggleKey = "verification" | "safety" | "conflicts" | "rfi";
 
 type AnalysisToggleState = Record<AnalysisToggleKey, boolean>;
+
+const buildPlanModuleSummary = (
+  projectId: string,
+  moduleType: "overview" | "scopes" | "verification" | "safety" | "conflicts" | "rfi",
+  status: PlanModuleStatus
+): PlanModuleSummary => ({
+  moduleType,
+  docPath: `planProjects/${projectId}/modules/${moduleType}`,
+  status,
+});
 
 const ACCEPTED_FILE_TYPES = [
   "application/pdf",
@@ -110,67 +89,62 @@ const isOptionalStepEnabled = (
   return project.analysisOptions[step] === true;
 };
 
+const getOverviewStatus = (project: Pick<PlanProjectRecord, "modules">) =>
+  project.modules?.overview?.status;
+
+const getModuleStatus = (
+  project: Pick<PlanProjectRecord, "modules">,
+  moduleType: AnalysisToggleKey | "scopes"
+) => project.modules?.[moduleType]?.status;
+
 const isProjectFullyAnalyzed = (
-  project: Pick<
-    PlanProjectRecord,
-    | "analysisStatus"
-    | "scopeGenerationStatus"
-    | "verificationStatus"
-    | "safetyStatus"
-    | "conflictStatus"
-    | "rfiStatus"
-    | "analysisOptions"
-  >
+  project: Pick<PlanProjectRecord, "modules" | "analysisOptions">
 ) => {
   const analysisDone =
-    project.analysisStatus === "completed" || project.analysisStatus === "completed_with_errors";
-  const scopesDone = project.scopeGenerationStatus === "completed";
+    getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors";
+  const scopesDone = getModuleStatus(project, "scopes") === "completed";
   const verificationDone =
     !isOptionalStepEnabled(project, "verification") ||
-    project.verificationStatus === "completed" ||
-    project.verificationStatus === "skipped";
+    getModuleStatus(project, "verification") === "completed" ||
+    getModuleStatus(project, "verification") === "skipped";
   const safetyDone =
     !isOptionalStepEnabled(project, "safety") ||
-    project.safetyStatus === "completed" ||
-    project.safetyStatus === "skipped";
+    getModuleStatus(project, "safety") === "completed" ||
+    getModuleStatus(project, "safety") === "skipped";
   const conflictsDone =
     !isOptionalStepEnabled(project, "conflicts") ||
-    project.conflictStatus === "completed" ||
-    project.conflictStatus === "skipped";
+    getModuleStatus(project, "conflicts") === "completed" ||
+    getModuleStatus(project, "conflicts") === "skipped";
   const rfiDone =
     !isOptionalStepEnabled(project, "rfi") ||
-    project.rfiStatus === "completed" ||
-    project.rfiStatus === "skipped";
+    getModuleStatus(project, "rfi") === "completed" ||
+    getModuleStatus(project, "rfi") === "skipped";
 
   return analysisDone && scopesDone && verificationDone && safetyDone && conflictsDone && rfiDone;
 };
 
 const getProjectStatusLabel = (project: PlanProjectRecord) => {
   if (isProjectFullyAnalyzed(project)) return "Fully Analyzed";
-  if (project.rfiStatus === "processing") return "Generating RFIs";
-  if (project.conflictStatus === "completed") return "Conflict Checked";
-  if (project.conflictStatus === "processing") return "Detecting Conflicts";
-  if (project.safetyStatus === "completed") return "Safety Reviewed";
-  if (project.safetyStatus === "processing") return "Analyzing Safety";
-  if (project.verificationStatus === "completed") return "Verified";
-  if (project.verificationStatus === "processing") return "Generating Verification";
-  if (project.scopeGenerationStatus === "completed") return "Scoped";
-  if (project.scopeGenerationStatus === "processing") return "Generating Scopes";
-  if (project.analysisStatus === "completed" || project.analysisStatus === "completed_with_errors") {
+  if (getModuleStatus(project, "rfi") === "processing") return "Generating RFIs";
+  if (getModuleStatus(project, "conflicts") === "completed") return "Conflict Checked";
+  if (getModuleStatus(project, "conflicts") === "processing") return "Detecting Conflicts";
+  if (getModuleStatus(project, "safety") === "completed") return "Safety Reviewed";
+  if (getModuleStatus(project, "safety") === "processing") return "Analyzing Safety";
+  if (getModuleStatus(project, "verification") === "completed") return "Verified";
+  if (getModuleStatus(project, "verification") === "processing") return "Generating Verification";
+  if (getModuleStatus(project, "scopes") === "completed") return "Scoped";
+  if (getModuleStatus(project, "scopes") === "processing") return "Generating Scopes";
+  if (getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors") {
     return "Analyzed";
   }
-  if (project.analysisStatus === "processing") return "Analyzing";
-  if (project.analysisStatus === "failed") return "Analysis Failed";
+  if (getOverviewStatus(project) === "processing") return "Analyzing";
+  if (getOverviewStatus(project) === "failed") return "Analysis Failed";
   return project.status === "uploaded" ? "Uploaded" : project.status || "Uploaded";
 };
 
-const getProjectTitle = (project: Pick<PlanProjectRecord, "title" | "projectType">) => {
+const getProjectTitle = (project: Pick<PlanProjectRecord, "title">) => {
   if (project.title?.trim()) {
     return project.title.trim();
-  }
-
-  if (project.projectType?.trim()) {
-    return project.projectType.trim();
   }
 
   return "Untitled plan analysis";
@@ -371,6 +345,7 @@ export default function PlanAnalyzer() {
     try {
       const projectRef = doc(firestore, "planProjects", projectPendingDelete.id);
       const projectFilesSnapshot = await getDocs(collection(projectRef, "files"));
+      const projectModulesSnapshot = await getDocs(collection(projectRef, "modules"));
 
       await Promise.all(
         (projectPendingDelete.uploadedFiles || []).map((file) =>
@@ -380,6 +355,7 @@ export default function PlanAnalyzer() {
 
       await Promise.all([
         ...projectFilesSnapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)),
+        ...projectModulesSnapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)),
         deleteDoc(projectRef),
       ]);
 
@@ -508,14 +484,70 @@ export default function PlanAnalyzer() {
         fileCount: 1,
         status: "uploaded",
         uploadedFiles: [uploadedResult],
-        analysisStatus: "queued",
-        scopeGenerationStatus: "queued",
-        verificationStatus: analysisToggles.verification ? "queued" : "skipped",
-        safetyStatus: analysisToggles.safety ? "queued" : "skipped",
-        conflictStatus: analysisToggles.conflicts ? "queued" : "skipped",
-        rfiStatus: analysisToggles.rfi ? "queued" : "skipped",
         analysisOptions: analysisToggles,
+        modules: {
+          overview: buildPlanModuleSummary(projectId, "overview", "queued"),
+          scopes: buildPlanModuleSummary(projectId, "scopes", "queued"),
+          verification: buildPlanModuleSummary(
+            projectId,
+            "verification",
+            analysisToggles.verification ? "queued" : "skipped"
+          ),
+          safety: buildPlanModuleSummary(
+            projectId,
+            "safety",
+            analysisToggles.safety ? "queued" : "skipped"
+          ),
+          conflicts: buildPlanModuleSummary(
+            projectId,
+            "conflicts",
+            analysisToggles.conflicts ? "queued" : "skipped"
+          ),
+          rfi: buildPlanModuleSummary(
+            projectId,
+            "rfi",
+            analysisToggles.rfi ? "queued" : "skipped"
+          ),
+        },
       });
+
+      await Promise.all([
+        setDoc(doc(projectRef, "modules", "overview"), {
+          projectId,
+          moduleType: "overview",
+          status: "queued",
+        }),
+        setDoc(doc(projectRef, "modules", "scopes"), {
+          projectId,
+          moduleType: "scopes",
+          status: "queued",
+          favoriteItemIds: [],
+        }),
+        setDoc(doc(projectRef, "modules", "verification"), {
+          projectId,
+          moduleType: "verification",
+          status: analysisToggles.verification ? "queued" : "skipped",
+          favoriteItemIds: [],
+        }),
+        setDoc(doc(projectRef, "modules", "safety"), {
+          projectId,
+          moduleType: "safety",
+          status: analysisToggles.safety ? "queued" : "skipped",
+          favoriteItemIds: [],
+        }),
+        setDoc(doc(projectRef, "modules", "conflicts"), {
+          projectId,
+          moduleType: "conflicts",
+          status: analysisToggles.conflicts ? "queued" : "skipped",
+          favoriteItemIds: [],
+        }),
+        setDoc(doc(projectRef, "modules", "rfi"), {
+          projectId,
+          moduleType: "rfi",
+          status: analysisToggles.rfi ? "queued" : "skipped",
+          favoriteItemIds: [],
+        }),
+      ]);
 
       toast({
         title: "Plan file uploaded",
@@ -813,7 +845,7 @@ export default function PlanAnalyzer() {
               </li>
               <li>
                 <strong>Conflicts:</strong> Cross-sheet coordination issues like trade clashes,
-                mismatched dimensions, and revision conflicts.
+                mismatched dimensions, and cross-discipline coordination concerns.
               </li>
               <li>
                 <strong>RFI Package:</strong> Questions, assumptions, and contingency notes to help

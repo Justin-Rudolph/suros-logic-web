@@ -3,8 +3,11 @@ const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
+  buildPlanModuleSummaryData,
   createJsonCompletion,
   createPlanContextChunks,
+  getPlanModuleDocPath,
+  getProjectStatusAfterModuleUpdate,
   loadProjectPlanFiles,
   logUsageTotals,
   mapWithConcurrency,
@@ -124,7 +127,7 @@ Focus on:
 - finish schedule vs room tag conflicts
 - door/window schedule vs opening notes conflicts
 - structural vs architectural conflicts
-- revision conflicts
+- unclear cross-discipline coordination notes
 
 Additional task rules:
 - Only return meaningful conflicts supported by this chunk.
@@ -205,31 +208,77 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        conflictStatus: "processing",
-        conflictRequestedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "conflicts"));
+    const startedAt = FieldValue.serverTimestamp();
+
+    await Promise.all([
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: "processing",
+          modules: {
+            conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "processing", {
+              startedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "conflicts",
+          status: "processing",
+          error: null,
+          startedAt,
+        },
+        { merge: true }
+      ),
+    ]);
 
     const files = await loadProjectPlanFiles(firestore, projectId);
     if (!files.length) {
-      return res.status(404).json({
-        error: "No analyzed plan files found for this project.",
-      });
+      const missingFilesError = new Error("No analyzed plan files found for this project.");
+      missingFilesError.statusCode = 404;
+      throw missingFilesError;
     }
 
     const conflicts = await generateConflictAnalysis(files, openAiApiKey);
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        conflicts,
-        conflictStatus: "completed",
-        conflictGeneratedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const completedAt = FieldValue.serverTimestamp();
+
+    const projectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    const nextProjectStatus = getProjectStatusAfterModuleUpdate(
+      projectSnap.data() || {},
+      "conflicts",
+      "completed"
     );
+
+    await Promise.all([
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "conflicts",
+          status: "completed",
+          error: null,
+          completedAt,
+          result: conflicts,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: nextProjectStatus,
+          modules: {
+            conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "completed", {
+              completedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -239,17 +288,35 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
     console.error("Conflict detection failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          conflictStatus: "failed",
-          conflictGeneratedAt: FieldValue.serverTimestamp(),
-          conflictError: error instanceof Error ? error.message : "Unknown error",
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await Promise.all([
+        firestore.doc(getPlanModuleDocPath(projectId, "conflicts")).set(
+          {
+            projectId,
+            moduleType: "conflicts",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Failed to detect conflicts.",
       details: error instanceof Error ? error.message : "Unknown error",
     });

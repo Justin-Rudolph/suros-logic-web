@@ -3,8 +3,11 @@ const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
+  buildPlanModuleSummaryData,
   createJsonCompletion,
   createPlanContextChunks,
+  getPlanModuleDocPath,
+  getProjectStatusAfterModuleUpdate,
   loadProjectPlanFiles,
   logUsageTotals,
   mapWithConcurrency,
@@ -155,31 +158,77 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        rfiStatus: "processing",
-        rfiRequestedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "rfi"));
+    const startedAt = FieldValue.serverTimestamp();
+
+    await Promise.all([
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: "processing",
+          modules: {
+            rfi: buildPlanModuleSummaryData(projectId, "rfi", "processing", {
+              startedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "rfi",
+          status: "processing",
+          error: null,
+          startedAt,
+        },
+        { merge: true }
+      ),
+    ]);
 
     const files = await loadProjectPlanFiles(firestore, projectId);
     if (!files.length) {
-      return res.status(404).json({
-        error: "No analyzed plan files found for this project.",
-      });
+      const missingFilesError = new Error("No analyzed plan files found for this project.");
+      missingFilesError.statusCode = 404;
+      throw missingFilesError;
     }
 
     const rfiPackage = await generateRfiPackage(files, openAiApiKey);
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        ...rfiPackage,
-        rfiStatus: "completed",
-        rfiGeneratedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const completedAt = FieldValue.serverTimestamp();
+
+    const projectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    const nextProjectStatus = getProjectStatusAfterModuleUpdate(
+      projectSnap.data() || {},
+      "rfi",
+      "completed"
     );
+
+    await Promise.all([
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "rfi",
+          status: "completed",
+          error: null,
+          completedAt,
+          result: rfiPackage,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: nextProjectStatus,
+          modules: {
+            rfi: buildPlanModuleSummaryData(projectId, "rfi", "completed", {
+              completedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -189,17 +238,35 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
     console.error("RFI generation failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          rfiStatus: "failed",
-          rfiGeneratedAt: FieldValue.serverTimestamp(),
-          rfiError: error instanceof Error ? error.message : "Unknown error",
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await Promise.all([
+        firestore.doc(getPlanModuleDocPath(projectId, "rfi")).set(
+          {
+            projectId,
+            moduleType: "rfi",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              rfi: buildPlanModuleSummaryData(projectId, "rfi", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Failed to generate RFIs.",
       details: error instanceof Error ? error.message : "Unknown error",
     });
