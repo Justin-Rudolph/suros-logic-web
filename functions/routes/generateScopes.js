@@ -39,6 +39,37 @@ const TRADE_KEYS = [
   "HVAC",
 ];
 
+const TRADE_SCOPE_CLASSIFICATION_GUIDANCE = `
+Trade scope classification definitions:
+- Demo: Removal, relocation, disconnecting, sawcutting, or disposal of existing building components. Includes walls, flooring, ceilings, cabinetry, plumbing, electrical, HVAC, windows, doors, roofing, and concrete. Detect keywords like remove, demo, abandon, salvage, protect, relocate, detach/reset, sawcut, and patch.
+- Structural: Load-bearing systems supporting the building including foundations, footings, slabs, beams, columns, headers, LVLs, rebar, steel framing, trusses, shear walls, connectors, anchor bolts, and hurricane clips. Analyze structural plans, framing plans, beam schedules, connection details, and engineering notes.
+- Framing: Wood and metal stud systems forming walls, ceilings, soffits, partitions, rough openings, and backing. Includes interior/exterior framing, ceiling framing, chase walls, blocking, and support framing for doors, windows, cabinets, and MEP systems.
+- Exterior Envelope: Weatherproof and waterproof exterior systems protecting the structure from moisture and air infiltration. Includes stucco, EIFS, waterproofing, flashing, sealants, WRBs, vapor barriers, siding, exterior insulation, and penetration sealing.
+- Doors/Windows: All interior/exterior doors, windows, storefronts, sliders, skylights, glazing systems, mullions, hardware, and thresholds. Detect schedules, rough openings, impact ratings, flashing, egress requirements, and waterproofing transitions.
+- Roofing: Roof covering and drainage systems including shingles, TPO, tile, metal roofing, insulation, flashing, gutters, drains, coping, curbs, penetrations, and roof-mounted equipment supports. Detect slopes, drainage paths, and uplift requirements.
+- Concrete/Masonry: Concrete slabs, foundations, CMU walls, retaining walls, sidewalks, curbs, pads, lintels, grout fill, rebar systems, and reinforced masonry assemblies. Analyze slab details, reinforcement schedules, and structural concrete notes.
+- Drywall/Insulation: Gypsum board systems, insulation, fire-rated assemblies, sound assemblies, cement board, vapor barriers, and ceiling systems. Detect wall types, drywall thicknesses, insulation R-values, and acoustic/fire requirements.
+- Flooring/Tile: All floor finish systems including tile, LVP, hardwood, carpet, epoxy, self-leveling underlayment, waterproof membranes, transitions, and shower pans. Detect tile layouts, slopes, floor prep, and substrate requirements.
+- Paint/Finishes: Decorative and protective finish systems including paint, texture, stains, wall coverings, specialty coatings, sealers, and epoxy finishes. Detect finish schedules, sheen levels, and surface prep requirements.
+- Millwork/Cabinets: Cabinetry, countertops, shelving, trim carpentry, built-ins, vanities, crown molding, baseboard, wall panels, and closet systems. Detect dimensions, hardware, appliance coordination, and blocking requirements.
+- Plumbing: Water supply, sanitary drainage, venting, storm drainage, gas piping, fixtures, water heaters, floor drains, shutoff valves, and plumbing equipment. Detect fixture schedules, pipe sizing, venting, underground plumbing, and drain slopes.
+- Electrical: Power distribution and low-voltage systems including panels, circuits, conduit, lighting, switches, receptacles, fire alarm, data, security, generators, and disconnects. Detect panel schedules, dedicated circuits, conduit routing, and lighting controls.
+- HVAC: Heating, cooling, ventilation, and air distribution systems including ductwork, air handlers, condensers, diffusers, exhaust systems, refrigerant lines, thermostats, and condensate drains. Detect airflow requirements, duct sizing, ventilation notes, and roof penetrations.
+
+Analyzer guidance:
+- Cross-reference all available sheets, notes, schedules, sections, elevations, callouts, symbols, and specifications.
+- Identify hidden scope impacts between trades, especially structural, framing, MEP, waterproofing, exterior envelope, roofing, doors/windows, and finish systems.
+- When scopes overlap, assign the primary work to the most responsible trade and mention important coordination impacts in the description instead of duplicating the same scope item under multiple trades.
+`;
+
+const TRADE_SCOPE_AGGREGATION_GUIDANCE = `
+Trade boundary reminder:
+- Keep each scope item under the most responsible primary trade.
+- Preserve cross-trade coordination notes when they are supported by the chunk summaries, especially for structural, framing, MEP, waterproofing, exterior envelope, roofing, doors/windows, and finish systems.
+- Do not duplicate the same primary scope under multiple trades.
+- Use the established trade definitions from the chunk summaries when resolving ambiguous items.
+`;
+
 const ALLOWED_CLASSIFICATIONS = new Set(["confirmed", "inferred", "unknown"]);
 const MAX_PROJECT_CONTEXT_LENGTH = 75000;
 
@@ -169,11 +200,12 @@ Additional task rules:
   "plumbing"
   "electrical"
   "HVAC"
+${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
 - Each trade value must be an array.
 - If a trade has no meaningful supported scope in this chunk, return an empty array for that trade.
 - Keep scope descriptions concise, contractor-style, and bid-ready.
 - Do not include pricing, labor hours, markup, schedule duration, or unsupported means and methods.
-- Do not duplicate the same work under multiple trades.
+- Do not duplicate the same work as primary scope under multiple trades.
 - Assign each scope item to the most responsible primary trade.
 - If an item is not explicitly named as a trade scope but is supported by the plans, infer the closest responsible trade and place it there.
 - Do not leave supported work unassigned just because it is indirect, note-based, or coordination-driven.
@@ -244,6 +276,7 @@ Additional task rules:
   "plumbing"
   "electrical"
   "HVAC"
+${TRADE_SCOPE_AGGREGATION_GUIDANCE}
 - Deduplicate materially similar scope items across chunks.
 - Preserve the most specific, best-supported wording.
 - Do not create scope items unsupported by the chunk summaries.
