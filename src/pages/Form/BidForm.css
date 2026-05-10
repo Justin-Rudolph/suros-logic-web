@@ -90,13 +90,150 @@
 }
 
 /* LINE ITEM BOX */
+.bid-form-page .line-item-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.bid-form-page .line-item-reorder-toggle {
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+}
+
+.bid-form-page .line-item-reorder-toggle:hover {
+  background: #e5e7eb;
+}
+
+.bid-form-page .line-item-reorder-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 34px;
+}
+
+.bid-form-page .line-item-reorder-row {
+  display: grid;
+  grid-template-columns: 36px 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.bid-form-page .line-item-reorder-row-drag-over {
+  border-color: #0f66b3;
+  box-shadow: 0 0 0 3px rgba(15, 102, 179, 0.34);
+}
+
+.bid-form-page .line-item-reorder-row-dragging {
+  opacity: 0.72;
+}
+
+.bid-form-page .line-item-reorder-drag-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e3a5f;
+  cursor: grab;
+}
+
+.bid-form-page .line-item-reorder-drag-button:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.bid-form-page .line-item-reorder-drag-button:active {
+  cursor: grabbing;
+}
+
+.bid-form-page .line-item-reorder-drag-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 115, 190, 0.18);
+}
+
+.bid-form-page .line-item-reorder-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 700;
+}
+
+.bid-form-page .line-item-reorder-trade {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2937;
+  font-weight: 600;
+}
+
 .bid-form-page .line-item {
+  position: relative;
   background: #fefefe;
   border: 1px solid #d1d5db;
   padding: 18px;
   margin-top: 12px;
+  margin-bottom: 40px;
   border-radius: 10px;
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
+}
+
+.bid-form-page .line-item h3 {
+  min-height: 36px;
+  margin-top: 0;
+  padding: 0 44px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.bid-form-page .line-item-delete-button {
+  position: absolute;
+  top: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.bid-form-page .line-item-delete-button {
+  right: 14px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.bid-form-page .line-item-delete-button:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.bid-form-page .line-item-delete-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.22);
 }
 
 .bid-form-page .scope-input {

@@ -6,10 +6,12 @@ import React, {
     KeyboardEvent,
     FormEvent,
     FocusEvent,
+    DragEvent,
     useEffect
 } from "react";
 
 import "./BidForm.css";
+import { GripVertical, Trash2 } from "lucide-react";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
@@ -92,6 +94,9 @@ const BidForm: React.FC = () => {
     const [form, setForm] = useState<ExtendedBidFormState>(initialFormState);
     const [numLineItems, setNumLineItems] = useState("");
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
+    const [draggedLineItemIndex, setDraggedLineItemIndex] = useState<number | null>(null);
+    const [lineItemDragOverIndex, setLineItemDragOverIndex] = useState<number | null>(null);
+    const [isLineItemReorderMode, setIsLineItemReorderMode] = useState(false);
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentBidId, setCurrentBidId] = useState<string | null>(null);
@@ -227,6 +232,12 @@ const BidForm: React.FC = () => {
         setIsTaxAmountNA(prefillBid.formSnapshot.tax_percentage === "N/A");
         setErrors({});
     }, [prefillBid]);
+
+    useEffect(() => {
+        if (lineItems.length < 2) {
+            setIsLineItemReorderMode(false);
+        }
+    }, [lineItems.length]);
 
     const buildBidTitle = () => {
         const customerName = form.customer_name.trim();
@@ -640,6 +651,129 @@ const BidForm: React.FC = () => {
         // clear specific line-item error on change
         const key = `line_${field}_${index}`;
         setErrors((prev) => ({ ...prev, [key]: false }));
+    };
+
+    const handleDeleteLineItem = (indexToDelete: number) => {
+        setLineItems((prev) => {
+            const nextLineItems = prev.filter((_, index) => index !== indexToDelete);
+            setNumLineItems(nextLineItems.length ? String(nextLineItems.length) : "");
+            return nextLineItems;
+        });
+        handleLineItemDragEnd();
+
+        setErrors((prev) => {
+            const next: FormErrors = {};
+
+            Object.entries(prev).forEach(([key, value]) => {
+                const match = key.match(/^line_(.+)_(\d+)$/);
+
+                if (!match) {
+                    next[key] = value;
+                    return;
+                }
+
+                const errorIndex = Number(match[2]);
+
+                if (errorIndex < indexToDelete) {
+                    next[key] = value;
+                    return;
+                }
+
+                if (errorIndex > indexToDelete) {
+                    next[`line_${match[1]}_${errorIndex - 1}`] = value;
+                }
+            });
+
+            return next;
+        });
+    };
+
+    const handleLineItemDragStart = (
+        index: number,
+        event: DragEvent<HTMLButtonElement>
+    ) => {
+        setDraggedLineItemIndex(index);
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(index));
+    };
+
+    const handleLineItemDragOver = (
+        index: number,
+        event: DragEvent<HTMLDivElement>
+    ) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setLineItemDragOverIndex(index);
+    };
+
+    const handleLineItemDragEnd = () => {
+        setDraggedLineItemIndex(null);
+        setLineItemDragOverIndex(null);
+    };
+
+    const moveLineItem = (fromIndex: number, toIndex: number) => {
+        if (fromIndex === toIndex) return;
+
+        setLineItems((prev) => {
+            if (
+                fromIndex < 0 ||
+                toIndex < 0 ||
+                fromIndex >= prev.length ||
+                toIndex >= prev.length
+            ) {
+                return prev;
+            }
+
+            const next = [...prev];
+            const [movedItem] = next.splice(fromIndex, 1);
+            next.splice(toIndex, 0, movedItem);
+            return next;
+        });
+
+        setErrors((prev) => {
+            const next: FormErrors = {};
+
+            Object.entries(prev).forEach(([key, value]) => {
+                const match = key.match(/^line_(.+)_(\d+)$/);
+
+                if (!match) {
+                    next[key] = value;
+                    return;
+                }
+
+                const errorIndex = Number(match[2]);
+                let nextIndex = errorIndex;
+
+                if (errorIndex === fromIndex) {
+                    nextIndex = toIndex;
+                } else if (fromIndex < toIndex && errorIndex > fromIndex && errorIndex <= toIndex) {
+                    nextIndex = errorIndex - 1;
+                } else if (fromIndex > toIndex && errorIndex >= toIndex && errorIndex < fromIndex) {
+                    nextIndex = errorIndex + 1;
+                }
+
+                next[`line_${match[1]}_${nextIndex}`] = value;
+            });
+
+            return next;
+        });
+    };
+
+    const handleLineItemDrop = (
+        index: number,
+        event: DragEvent<HTMLDivElement>
+    ) => {
+        event.preventDefault();
+        const transferredIndex = event.dataTransfer.getData("text/plain");
+        const fromIndex = draggedLineItemIndex ?? (
+            transferredIndex ? Number(transferredIndex) : null
+        );
+
+        if (fromIndex !== null && Number.isInteger(fromIndex)) {
+            moveLineItem(fromIndex, index);
+        }
+
+        handleLineItemDragEnd();
     };
 
     /** -------------------------------
@@ -1161,9 +1295,24 @@ const BidForm: React.FC = () => {
                                     ].filter(Boolean).join(" ")}
                                 />
 
-                                <button type="button" onClick={handleGenerateLineItems}>
-                                    Generate Line Item Sections
-                                </button>
+                                <div className="line-item-toolbar">
+                                    <button type="button" onClick={handleGenerateLineItems}>
+                                        Generate Line Item Sections
+                                    </button>
+
+                                    {lineItems.length > 1 && (
+                                        <button
+                                            type="button"
+                                            className="line-item-reorder-toggle"
+                                            onClick={() => {
+                                                handleLineItemDragEnd();
+                                                setIsLineItemReorderMode((prev) => !prev);
+                                            }}
+                                        >
+                                            {isLineItemReorderMode ? "Done Reordering" : "Reorder"}
+                                        </button>
+                                    )}
+                                </div>
 
                                 {isInvalid("line_items_missing") && (
                                     <div className="field-error-text">
@@ -1171,7 +1320,46 @@ const BidForm: React.FC = () => {
                                     </div>
                                 )}
 
-                                <div id="lineItemsContainer">
+                                {isLineItemReorderMode ? (
+                                    <div className="line-item-reorder-panel">
+                                        {lineItems.map((item, index) => (
+                                            <div
+                                                key={index}
+                                                className={[
+                                                    "line-item-reorder-row",
+                                                    draggedLineItemIndex === index
+                                                        ? "line-item-reorder-row-dragging"
+                                                        : "",
+                                                    lineItemDragOverIndex === index && draggedLineItemIndex !== index
+                                                        ? "line-item-reorder-row-drag-over"
+                                                        : "",
+                                                ].filter(Boolean).join(" ")}
+                                                onDragOver={(event) => handleLineItemDragOver(index, event)}
+                                                onDrop={(event) => handleLineItemDrop(index, event)}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="line-item-reorder-drag-button"
+                                                    draggable
+                                                    onDragStart={(event) =>
+                                                        handleLineItemDragStart(index, event)
+                                                    }
+                                                    onDragEnd={handleLineItemDragEnd}
+                                                    aria-label={`Reorder line item ${index + 1}`}
+                                                    title="Drag to reorder line item"
+                                                >
+                                                    <GripVertical size={18} aria-hidden="true" />
+                                                </button>
+
+                                                <span className="line-item-reorder-number">{index + 1}</span>
+                                                <span className="line-item-reorder-trade">
+                                                    {item.trade.trim() || `Line Item ${index + 1}`}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div id="lineItemsContainer">
                                     {lineItems.map((item, index) => {
                                         const placeholderTrade =
                                             placeholderTrades[index % placeholderTrades.length];
@@ -1180,12 +1368,18 @@ const BidForm: React.FC = () => {
                                             <div
                                                 key={index}
                                                 className="line-item"
-                                                style={{
-                                                    position: "relative",
-                                                    marginBottom: "40px",
-                                                }}
                                             >
-                                                <h3>{index + 1} LINE ITEM</h3>
+                                                <button
+                                                    type="button"
+                                                    className="line-item-delete-button"
+                                                    onClick={() => handleDeleteLineItem(index)}
+                                                    aria-label={`Delete line item ${index + 1}`}
+                                                    title="Delete line item"
+                                                >
+                                                    <Trash2 size={18} aria-hidden="true" />
+                                                </button>
+
+                                                <h3>LINE ITEM {index + 1}</h3>
 
                                                 <label>Trade Name:</label>
                                                 <input
@@ -1281,7 +1475,8 @@ const BidForm: React.FC = () => {
                                             </div>
                                         );
                                     })}
-                                </div>
+                                    </div>
+                                )}
 
                                 <h2>Contingency</h2>
 
