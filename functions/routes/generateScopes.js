@@ -249,7 +249,7 @@ Return exactly this shape:
         usage,
       };
     },
-    { label: "generateScopes" }
+    { label: "generateScopes", concurrency: 4 }
   );
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({

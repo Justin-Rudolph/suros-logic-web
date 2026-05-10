@@ -879,13 +879,8 @@ export default function PlanAnalyzerRun() {
 
         if (isActivelyProcessing) {
           if (current < inFlightCeiling) {
-            const isSlowFunction =
-              activeStep === "generateScopes" ||
-              activeStep === "generateRFIs" ||
-              getModuleStatus(project, "scopes") === "processing" ||
-              getModuleStatus(project, "rfi") === "processing";
-            const minIncrement = isSlowFunction ? 0.06 : 0.07;
-            const proportionalIncrement = isSlowFunction ? 0.011 : 0.012;
+            const minIncrement = 0.054;
+            const proportionalIncrement = 0.01;
             const next =
               current + Math.max(minIncrement, (inFlightCeiling - current) * proportionalIncrement);
             return Math.min(inFlightCeiling, Number(next.toFixed(1)));
@@ -903,7 +898,7 @@ export default function PlanAnalyzerRun() {
     }, 220);
 
     return () => window.clearInterval(interval);
-  }, [activeStep, project, progressMetrics, isActivelyProcessing, isFullyAnalyzed]);
+  }, [project, progressMetrics, isActivelyProcessing, isFullyAnalyzed]);
 
   useEffect(() => {
     if (!isFullyAnalyzed) {

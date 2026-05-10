@@ -184,7 +184,7 @@ exports.analyzePlanFiles = onRequest(
 exports.generateScopes = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 900,
+    timeoutSeconds: 1200,
     memory: "1GiB",
   },
   async (req, res) => {
