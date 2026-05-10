@@ -4,6 +4,18 @@ const OpenAI = require("openai");
 const pdfParse = require("pdf-parse");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const {
+  buildPlanModuleSummaryData,
+  createJsonCompletion,
+  createPlanContextChunks,
+  getPlanModuleDocPath,
+  logUsageTotals,
+  mapWithConcurrency,
+  normalizeWhitespace,
+  serializeChunkResults,
+  sumUsage,
+  uniqueStrings,
+} = require("./lib/planAnalyzerContext");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -12,17 +24,9 @@ if (!admin.apps.length) {
 const firestore = admin.firestore();
 
 const DISCIPLINE_CODES = ["A", "S", "M", "E", "P", "C", "L", "T", "F", "FP", "R", "I", "G"];
-const MAX_TEXT_LENGTH = 50000;
-const MAX_PROJECT_CONTEXT_LENGTH = 120000;
+const MAX_SUMMARY_CHUNK_LENGTH = 75000;
 const MIN_PDF_TEXT_LENGTH = 80;
 const MIN_IMAGE_TEXT_LENGTH = 80;
-
-const normalizeWhitespace = (value) =>
-  String(value || "")
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 
 const getFileNameFromUrl = (fileUrl, index) => {
   try {
@@ -209,91 +213,6 @@ const detectRevisionDate = (lines, rawText) => {
   return anyDateMatch ? parseDate(anyDateMatch[1]) : null;
 };
 
-const parseSheetKey = (sheetNumber) => {
-  const normalized = String(sheetNumber || "").trim().toUpperCase();
-  const match = normalized.match(/^([A-Z]{1,3})[-.]?(\d{1,4})(?:\.(\d{1,3}))?/);
-  if (!match) return null;
-
-  return {
-    discipline: match[1],
-    major: Number(match[2]),
-    minor: match[3] ? Number(match[3]) : 0,
-    normalized,
-  };
-};
-
-const detectProjectIssues = (files) => {
-  const duplicateSheets = [];
-  const conflictingRevisions = [];
-  const missingSheetNumbers = [];
-
-  const bySheetNumber = new Map();
-  const byDiscipline = new Map();
-
-  files.forEach((file) => {
-    if (file.detectedSheetNumber) {
-      const normalizedSheetNumber = String(file.detectedSheetNumber).toUpperCase();
-      const sheetGroup = bySheetNumber.get(normalizedSheetNumber) || [];
-      sheetGroup.push(file);
-      bySheetNumber.set(normalizedSheetNumber, sheetGroup);
-
-      const parsed = parseSheetKey(normalizedSheetNumber);
-      if (parsed) {
-        const disciplineGroup = byDiscipline.get(parsed.discipline) || [];
-        disciplineGroup.push(parsed);
-        byDiscipline.set(parsed.discipline, disciplineGroup);
-      }
-    }
-  });
-
-  bySheetNumber.forEach((group, sheetNumber) => {
-    if (group.length > 1) {
-      duplicateSheets.push({
-        sheetNumber,
-        fileNames: group.map((entry) => entry.fileName),
-      });
-    }
-
-    const revisionDates = Array.from(
-      new Set(
-        group
-          .map((entry) => entry.revisionDate)
-          .filter(Boolean)
-      )
-    );
-
-    if (revisionDates.length > 1) {
-      conflictingRevisions.push({
-        sheetNumber,
-        revisions: revisionDates,
-        fileNames: group.map((entry) => entry.fileName),
-      });
-    }
-  });
-
-  byDiscipline.forEach((entries, discipline) => {
-    const uniqueNumbers = Array.from(new Set(entries.map((entry) => entry.major))).sort((a, b) => a - b);
-    if (uniqueNumbers.length < 2) return;
-
-    for (let index = 1; index < uniqueNumbers.length; index += 1) {
-      const previous = uniqueNumbers[index - 1];
-      const current = uniqueNumbers[index];
-
-      if (current - previous <= 1) continue;
-
-      for (let missing = previous + 1; missing < current; missing += 1) {
-        missingSheetNumbers.push(`${discipline}${missing}`);
-      }
-    }
-  });
-
-  return {
-    duplicateSheets,
-    conflictingRevisions,
-    missingSheetNumbers,
-  };
-};
-
 const downloadFile = async (fileUrl) => {
   const response = await fetch(fileUrl);
   if (!response.ok) {
@@ -307,9 +226,46 @@ const downloadFile = async (fileUrl) => {
   };
 };
 
-const extractPdfText = async (buffer) => {
-  const parsed = await pdfParse(buffer);
-  return normalizeWhitespace(parsed?.text || "");
+const renderPdfPage = async (pageData) => {
+  const textContent = await pageData.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  });
+
+  let lastY;
+  let text = "";
+
+  for (const item of textContent.items) {
+    if (lastY === item.transform[5] || !lastY) {
+      text += item.str;
+    } else {
+      text += `\n${item.str}`;
+    }
+    lastY = item.transform[5];
+  }
+
+  return normalizeWhitespace(text);
+};
+
+const extractPdfPages = async (buffer) => {
+  const pageTexts = [];
+
+  const parsed = await pdfParse(buffer, {
+    pagerender: async (pageData) => {
+      const pageText = await renderPdfPage(pageData);
+      pageTexts.push(pageText);
+      return pageText;
+    },
+  });
+
+  return {
+    pageCount: Number(parsed?.numpages || pageTexts.length || 0),
+    rawText: normalizeWhitespace(parsed?.text || pageTexts.join("\n\n")),
+    pages: pageTexts.map((text, index) => ({
+      pageNumber: index + 1,
+      rawText: normalizeWhitespace(text),
+    })),
+  };
 };
 
 const extractImageText = async (buffer) => {
@@ -317,20 +273,86 @@ const extractImageText = async (buffer) => {
   return normalizeWhitespace(result?.data?.text || "");
 };
 
-const buildProjectContext = (files) => {
-  const sections = files.map((file) => {
-    const headerParts = [
-      `FILE: ${file.fileName}`,
-      file.detectedSheetNumber ? `SHEET: ${file.detectedSheetNumber}` : null,
-      file.detectedTitle ? `TITLE: ${file.detectedTitle}` : null,
-      file.discipline ? `DISCIPLINE: ${file.discipline}` : null,
-      file.revisionDate ? `REVISION DATE: ${file.revisionDate}` : null,
-    ].filter(Boolean);
+const createPageEntry = ({ fileName, fileUrl, fileKind, rawText, sourcePageNumber, sourcePageCount }) => {
+  const lines = extractLines(rawText);
+  const detectedSheetNumber = detectSheetNumber(lines, rawText);
+  const detectedTitle = detectTitle(lines, detectedSheetNumber);
+  const discipline = detectDiscipline(detectedSheetNumber, detectedTitle, rawText);
+  const revisionDate = detectRevisionDate(lines, rawText);
 
-    return `${headerParts.join(" | ")}\n${file.rawText || ""}`.trim();
-  });
+  return {
+    fileName:
+      typeof sourcePageNumber === "number" && sourcePageCount > 1
+        ? `${fileName} (Page ${sourcePageNumber})`
+        : fileName,
+    sourceFileName: fileName,
+    fileUrl,
+    fileKind,
+    sourcePageNumber: typeof sourcePageNumber === "number" ? sourcePageNumber : 1,
+    sourcePageCount: typeof sourcePageCount === "number" ? sourcePageCount : 1,
+    detectedSheetNumber,
+    detectedTitle,
+    discipline,
+    revisionDate,
+    rawText,
+  };
+};
 
-  return sections.join("\n\n====================\n\n").slice(0, MAX_PROJECT_CONTEXT_LENGTH);
+const buildAnalyzedFileId = (file, index) => {
+  const fileIdBase = sanitizeFileIdPart(file.sourceFileName || file.fileName) || `file-${index + 1}`;
+  const pageSuffix = Number.isFinite(Number(file.sourcePageNumber))
+    ? `page-${Number(file.sourcePageNumber)}`
+    : `${index + 1}`;
+  return `${fileIdBase}-${pageSuffix}`;
+};
+
+const buildAnalyzedFileDocData = ({
+  fileId,
+  file,
+}) => ({
+  fileId,
+  projectId: file.projectId,
+  fileName: file.fileName,
+  sourceFileName: file.sourceFileName,
+  fileUrl: file.fileUrl,
+  fileKind: file.fileKind,
+  sourcePageNumber: file.sourcePageNumber,
+  sourcePageCount: file.sourcePageCount,
+  detectedSheetNumber: file.detectedSheetNumber,
+  detectedTitle: file.detectedTitle,
+  discipline: file.discipline,
+  revisionDate: file.revisionDate,
+  rawText: file.rawText,
+  analyzedAt: FieldValue.serverTimestamp(),
+});
+
+const writeAnalyzedFiles = async ({
+  projectId,
+  analyzedFiles,
+}) => {
+  const writesPerGroup = 20;
+
+  for (let start = 0; start < analyzedFiles.length; start += writesPerGroup) {
+    const slice = analyzedFiles.slice(start, start + writesPerGroup);
+
+    await Promise.all(
+      slice.map((file, offset) => {
+        const index = start + offset;
+        const fileId = buildAnalyzedFileId(file, index);
+        const fileRef = firestore.doc(`planProjects/${projectId}/files/${fileId}`);
+
+        return fileRef.set(
+          buildAnalyzedFileDocData({
+            fileId,
+            file: {
+              ...file,
+              projectId,
+            },
+          })
+        );
+      })
+    );
+  }
 };
 
 const summarizeProjectFromPlans = async (files, openAiApiKey) => {
@@ -338,13 +360,91 @@ const summarizeProjectFromPlans = async (files, openAiApiKey) => {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
-  const combinedContext = buildProjectContext(files);
   const openai = new OpenAI({ apiKey: openAiApiKey });
+  const contextChunks = createPlanContextChunks(files, MAX_SUMMARY_CHUNK_LENGTH);
+  const chunkUsages = [];
 
-  const completion = await openai.chat.completions.create({
+  if (!contextChunks.length) {
+    throw new Error("No extracted plan text is available for this project");
+  }
+
+  const chunkSummaries = await mapWithConcurrency(
+    contextChunks,
+    async (chunk, index) => {
+      const { parsed, usage } = await createJsonCompletion({
+        openai,
+        model: "gpt-5-mini",
+        reasoningEffort: "medium",
+        responseFormat: {
+          type: "json_schema",
+          json_schema: {
+            name: "plan_project_chunk_summary",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                projectTypeSignals: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                affectedAreas: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                scopeSummary: {
+                  type: "string",
+                },
+                notableWorkItems: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+              },
+              required: ["projectTypeSignals", "affectedAreas", "scopeSummary", "notableWorkItems"],
+            },
+          },
+        },
+        systemPrompt: buildEstimatorSystemPrompt(`
+Review one chunk of a larger OCR-extracted plan set and summarize only what this chunk supports.
+
+Additional task rules:
+- projectTypeSignals should list likely project categories suggested by this chunk, such as remodel, addition,
+  tenant improvement, new construction, repair, site work, exterior improvement, interior finish-out, or unknown.
+- affectedAreas must be a deduplicated array of concise room, zone, or site area names.
+- scopeSummary should be 2 to 4 sentences focused on work scope, not metadata.
+- notableWorkItems should be concise contractor-style work items or systems present in this chunk.
+- Do not describe anything as confirmed unless supported by the extracted text.
+
+Return exactly:
+{
+  "projectTypeSignals": ["string"],
+  "affectedAreas": ["Area 1", "Area 2"],
+  "scopeSummary": "string",
+  "notableWorkItems": ["string"]
+}
+      `),
+        userContent: chunk.text,
+      });
+      chunkUsages[index] = usage;
+
+      return {
+        data: {
+          projectTypeSignals: uniqueStrings(parsed?.projectTypeSignals),
+          affectedAreas: uniqueStrings(parsed?.affectedAreas),
+          scopeSummary: String(parsed?.scopeSummary || "").trim(),
+          notableWorkItems: uniqueStrings(parsed?.notableWorkItems),
+        },
+        usage,
+      };
+    },
+    { label: "analyzePlanFiles" }
+  );
+
+  const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
+    openai,
     model: "gpt-5-mini",
-    reasoning_effort: "medium",
-    response_format: {
+    reasoningEffort: "medium",
+    responseFormat: {
       type: "json_schema",
       json_schema: {
         name: "plan_project_summary",
@@ -358,9 +458,7 @@ const summarizeProjectFromPlans = async (files, openAiApiKey) => {
             },
             affectedAreas: {
               type: "array",
-              items: {
-                type: "string",
-              },
+              items: { type: "string" },
             },
             summary: {
               type: "string",
@@ -370,22 +468,16 @@ const summarizeProjectFromPlans = async (files, openAiApiKey) => {
         },
       },
     },
-    messages: [
-      {
-        role: "system",
-        content: buildEstimatorSystemPrompt(`
-Infer the likely project type from the combined sheets, identify the affected rooms/zones/site areas, 
-and write a high-level scope summary that sounds like a contractor's understanding of the work.
+    systemPrompt: buildEstimatorSystemPrompt(`
+Combine chunk-level summaries from a full OCR-extracted plan set into one complete project overview.
 
 Additional task rules:
-- Use the combined context from all sheets together.
-- Think in terms of scope, affected areas, trades, job intent, and likely construction category.
-- Do not summarize sheet metadata.
-- If the exact project type is unclear, choose the best-supported category such as remodel, addition, 
-  tenant improvement, new construction, repair, site work, exterior improvement, interior finish-out, or unknown.
-- affectedAreas must be a deduplicated array of concise area names.
+- Use all chunk summaries together.
+- projectType must be the single best-supported overall category.
+- affectedAreas must be a deduplicated array of concise area names for the full project.
 - summary should be 3 to 6 sentences and reflect the overall work, not sheet metadata.
-- Do not describe anything as confirmed unless supported by the provided extracted text.
+- Weigh repeated signals more heavily than one-off hints.
+- Do not describe anything as confirmed unless supported by the provided chunk summaries.
 
 Return exactly:
 {
@@ -393,39 +485,23 @@ Return exactly:
   "affectedAreas": ["Area 1", "Area 2"],
   "summary": "string"
 }
-        `),
-      },
-      {
-        role: "user",
-        content: combinedContext,
-      },
-    ],
+    `),
+    userContent: serializeChunkResults(contextChunks, chunkSummaries, "PROJECT CHUNK"),
   });
 
-  const content = completion.choices[0]?.message?.content;
-
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`Invalid JSON returned from AI project analysis: ${content || "empty response"}`);
-  }
-
-  const projectType = String(parsed?.projectType || "").trim();
-  const affectedAreas = Array.isArray(parsed?.affectedAreas)
-    ? Array.from(
-        new Set(
-          parsed.affectedAreas
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean)
-        )
-      )
-    : [];
-  const summary = String(parsed?.summary || "").trim();
+  const projectType = String(aggregated?.projectType || "").trim();
+  const affectedAreas = uniqueStrings(aggregated?.affectedAreas);
+  const summary = String(aggregated?.summary || "").trim();
 
   if (!projectType || !summary) {
     throw new Error("AI project analysis did not return required fields");
   }
+
+  logUsageTotals("analyzePlanFiles", [
+    { title: "chunks", usage: sumUsage(chunkUsages) },
+    { title: "aggregation", usage: aggregationUsage },
+    { title: "overall", usage: sumUsage([...chunkUsages, aggregationUsage]) },
+  ]);
 
   return {
     projectType,
@@ -439,43 +515,49 @@ const analyzeSingleFile = async (fileUrl, index) => {
   const fileName = getFileNameFromUrl(fileUrl, index);
   const fileKind = detectFileKind(fileName, contentType);
 
-  let rawText = "";
-
   if (fileKind === "pdf") {
-    rawText = await extractPdfText(buffer);
-    if (rawText.length < MIN_PDF_TEXT_LENGTH) {
+    const extracted = await extractPdfPages(buffer);
+    if (extracted.rawText.length < MIN_PDF_TEXT_LENGTH) {
       throw new Error(
         "Text could not be extracted from this PDF. It is likely a scanned or image-based PDF, which this analyzer does not support."
       );
     }
-  } else if (fileKind === "image") {
-    rawText = await extractImageText(buffer);
+
+    return extracted.pages
+      .filter((page) => normalizeWhitespace(page.rawText).length > 0)
+      .map((page) =>
+        createPageEntry({
+          fileName,
+          fileUrl,
+          fileKind,
+          rawText: page.rawText,
+          sourcePageNumber: page.pageNumber,
+          sourcePageCount: extracted.pageCount,
+        })
+      );
+  }
+
+  if (fileKind === "image") {
+    const rawText = await extractImageText(buffer);
     if (rawText.length < MIN_IMAGE_TEXT_LENGTH) {
       throw new Error(
         "Text could not be extracted from this image. Please upload a clearer file with readable text."
       );
     }
-  } else {
-    throw new Error(`Unsupported file type for ${fileName}`);
+
+    return [
+      createPageEntry({
+        fileName,
+        fileUrl,
+        fileKind,
+        rawText,
+        sourcePageNumber: 1,
+        sourcePageCount: 1,
+      }),
+    ];
   }
 
-  const truncatedText = rawText.slice(0, MAX_TEXT_LENGTH);
-  const lines = extractLines(truncatedText);
-  const detectedSheetNumber = detectSheetNumber(lines, truncatedText);
-  const detectedTitle = detectTitle(lines, detectedSheetNumber);
-  const discipline = detectDiscipline(detectedSheetNumber, detectedTitle, truncatedText);
-  const revisionDate = detectRevisionDate(lines, truncatedText);
-
-  return {
-    fileName,
-    fileUrl,
-    fileKind,
-    detectedSheetNumber,
-    detectedTitle,
-    discipline,
-    revisionDate,
-    rawText: truncatedText,
-  };
+  throw new Error(`Unsupported file type for ${fileName}`);
 };
 
 module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) {
@@ -498,11 +580,28 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       return res.status(400).json({ error: "fileUrl is required." });
     }
 
+    const startedAt = FieldValue.serverTimestamp();
+
     await firestore.doc(`planProjects/${projectId}`).set(
       {
         projectId,
-        analysisStatus: "processing",
-        analysisStartedAt: FieldValue.serverTimestamp(),
+        status: "processing",
+        modules: {
+          overview: buildPlanModuleSummaryData(projectId, "overview", "processing", {
+            startedAt,
+            error: null,
+          }),
+        },
+      },
+      { merge: true }
+    );
+    await firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+      {
+        projectId,
+        moduleType: "overview",
+        status: "processing",
+        startedAt,
+        error: null,
       },
       { merge: true }
     );
@@ -510,8 +609,7 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
     let analyzedFiles = [];
 
     try {
-      const analysis = await analyzeSingleFile(fileUrl, 0);
-      analyzedFiles = [analysis];
+      analyzedFiles = await analyzeSingleFile(fileUrl, 0);
     } catch (error) {
       const fileName = getFileNameFromUrl(fileUrl, 0);
       console.error(`Plan analysis failed for ${fileName}:`, error);
@@ -528,56 +626,48 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       throw new Error("No uploaded files could be analyzed.");
     }
 
-    const projectIssues = detectProjectIssues(analyzedFiles);
-    const projectSummary = analyzedFiles.length
-      ? await summarizeProjectFromPlans(analyzedFiles, openAiApiKey)
-      : {
-          projectType: "",
-          affectedAreas: [],
-          summary: "",
-        };
+    const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey);
 
-    const duplicateSheetSet = new Set(
-      projectIssues.duplicateSheets.flatMap((entry) => entry.fileNames)
-    );
-
-    const conflictingRevisionSet = new Set(
-      projectIssues.conflictingRevisions.flatMap((entry) => entry.fileNames)
-    );
-
-    const batch = firestore.batch();
-    analyzedFiles.forEach((file, index) => {
-      const fileIdBase = sanitizeFileIdPart(file.fileName) || `file-${index + 1}`;
-      const fileId = `${fileIdBase}-${index + 1}`;
-      const fileRef = firestore.doc(`planProjects/${projectId}/files/${fileId}`);
-
-      batch.set(fileRef, {
-        fileId,
-        ...file,
-        duplicateSheetDetected: duplicateSheetSet.has(file.fileName),
-        conflictingRevisionDetected: conflictingRevisionSet.has(file.fileName),
-        missingSheetNumbers: projectIssues.missingSheetNumbers,
-        analyzedAt: FieldValue.serverTimestamp(),
-      });
+    await writeAnalyzedFiles({
+      projectId,
+      analyzedFiles,
     });
 
-    await batch.commit();
+    const overviewStatus = fileErrors.length ? "completed_with_errors" : "completed";
+    const completedAt = FieldValue.serverTimestamp();
+    const overviewResult = {
+      projectType: projectSummary.projectType,
+      areas: projectSummary.affectedAreas,
+      summary: projectSummary.summary,
+    };
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        analysisStatus: fileErrors.length ? "completed_with_errors" : "completed",
-        analysisCompletedAt: FieldValue.serverTimestamp(),
-        analyzedFileCount: analyzedFiles.length,
-        failedFileCount: fileErrors.length,
-        projectType: projectSummary.projectType,
-        areas: projectSummary.affectedAreas,
-        summary: projectSummary.summary,
-        duplicateSheets: projectIssues.duplicateSheets,
-        missingSheetNumbers: projectIssues.missingSheetNumbers,
-        conflictingRevisions: projectIssues.conflictingRevisions,
-      },
-      { merge: true }
-    );
+    await Promise.all([
+      firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+        {
+          projectId,
+          moduleType: "overview",
+          status: overviewStatus,
+          completedAt,
+          error: null,
+          result: overviewResult,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: fileErrors.length ? "completed_with_errors" : "processing",
+          modules: {
+            overview: buildPlanModuleSummaryData(projectId, "overview", overviewStatus, {
+              completedAt,
+              error: null,
+            }),
+          },
+          analyzedFileCount: analyzedFiles.length,
+          failedFileCount: fileErrors.length,
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -585,33 +675,51 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       areas: projectSummary.affectedAreas,
       summary: projectSummary.summary,
       files: analyzedFiles.map((file, index) => ({
-        fileId: `${sanitizeFileIdPart(file.fileName) || `file-${index + 1}`}-${index + 1}`,
+        fileId: buildAnalyzedFileId(file, index),
         fileName: file.fileName,
+        sourceFileName: file.sourceFileName,
+        sourcePageNumber: file.sourcePageNumber,
         detectedSheetNumber: file.detectedSheetNumber,
         detectedTitle: file.detectedTitle,
         discipline: file.discipline,
         revisionDate: file.revisionDate,
         rawText: file.rawText,
       })),
-      duplicateSheets: projectIssues.duplicateSheets,
-      missingSheetNumbers: projectIssues.missingSheetNumbers,
-      conflictingRevisions: projectIssues.conflictingRevisions,
       fileErrors,
     });
   } catch (error) {
     console.error("Plan file analysis failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          analysisStatus: "failed",
-          analysisCompletedAt: FieldValue.serverTimestamp(),
-          failedFileCount: fileErrors.length,
-          analysisError: error instanceof Error ? error.message : "Unknown error",
-          analysisFileErrors: fileErrors,
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+      await Promise.all([
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              overview: buildPlanModuleSummaryData(projectId, "overview", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+            failedFileCount: fileErrors.length,
+            analysisFileErrors: fileErrors,
+          },
+          { merge: true }
+        ),
+        firestore.doc(getPlanModuleDocPath(projectId, "overview")).set(
+          {
+            projectId,
+            moduleType: "overview",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
     return res.status(500).json({

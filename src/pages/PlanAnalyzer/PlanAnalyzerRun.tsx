@@ -15,132 +15,24 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+import { ConflictItem, PlanConflictsModuleRecord } from "@/models/PlanAnalyzerConflicts";
+import { PlanAnalysisResult, PlanOverviewModuleRecord } from "@/models/PlanAnalyzerOverview";
+import { PlanRfiModuleRecord, RfiPackage } from "@/models/PlanAnalyzerRfi";
+import { PlanSafetyModuleRecord, SafetyItem } from "@/models/PlanAnalyzerSafety";
+import { ScopeItem, ScopeResult, PlanScopesModuleRecord } from "@/models/PlanAnalyzerScopes";
+import { PlanModuleStatus, PlanModuleType } from "@/models/PlanAnalyzerShared";
+import { PlanVerificationModuleRecord, VerificationItem } from "@/models/PlanAnalyzerVerification";
+import { PlanProjectRecord } from "@/models/PlanProjects";
 
 import "./PlanAnalyzer.css";
-
-type UploadedPlanFile = {
-  name: string;
-  type: string;
-  size: number;
-  downloadURL: string;
-  storagePath: string;
-};
 
 type FirestoreTimestampLike = {
   seconds?: number;
   toDate?: () => Date;
 };
 
-type PlanAnalysisResult = {
-  projectType: string;
-  areas: string[];
-  summary: string;
-  duplicateSheets: Array<{
-    sheetNumber: string;
-    fileNames: string[];
-  }>;
-  missingSheetNumbers: string[];
-  conflictingRevisions: Array<{
-    sheetNumber: string;
-    revisions: string[];
-    fileNames: string[];
-  }>;
-};
 
-type ScopeItem = {
-  title: string;
-  description: string;
-  materialCategories: string[];
-  classification: "confirmed" | "inferred" | "unknown";
-};
-
-type ScopeResult = Record<string, ScopeItem[]>;
-
-type VerificationItem = {
-  item: string;
-  reason: string;
-  category:
-    | "dimensions"
-    | "structure"
-    | "MEP_conflict"
-    | "access"
-    | "existing_conditions";
-};
-
-type SafetyItem = {
-  issue: string;
-  severity: "low" | "medium" | "high" | "critical";
-  requiresReview: true;
-};
-
-type ConflictItem = {
-  conflict: string;
-  involvedTrades: string[];
-  severity: "low" | "medium" | "high" | "critical";
-  sourceSheets: string[];
-};
-
-type RfiPackage = {
-  rfis: string[];
-  assumptions: string[];
-  estimatorQuestions: string[];
-  contingencyNotes: string[];
-};
-
-type FavoriteSelectionField =
-  | "favoriteScopeItemIds"
-  | "favoriteVerificationItemIds"
-  | "favoriteSafetyItemIds"
-  | "favoriteConflictItemIds"
-  | "favoriteRfiItemIds";
-
-type PlanProjectDoc = {
-  projectId?: string;
-  title?: string;
-  fileCount?: number;
-  status?: string;
-  createdAt?: FirestoreTimestampLike;
-  updatedAt?: FirestoreTimestampLike;
-  uploadedFiles?: UploadedPlanFile[];
-  analysisStatus?: string;
-  analysisCompletedAt?: unknown;
-  analysisError?: string;
-  scopeGenerationStatus?: string;
-  scopeGenerationError?: string;
-  verificationStatus?: string;
-  verificationError?: string;
-  safetyStatus?: string;
-  safetyError?: string;
-  conflictStatus?: string;
-  conflictError?: string;
-  rfiStatus?: string;
-  rfiError?: string;
-  projectType?: string;
-  areas?: string[];
-  summary?: string;
-  duplicateSheets?: PlanAnalysisResult["duplicateSheets"];
-  missingSheetNumbers?: string[];
-  conflictingRevisions?: PlanAnalysisResult["conflictingRevisions"];
-  scopes?: ScopeResult;
-  verification?: VerificationItem[];
-  safety?: SafetyItem[];
-  conflicts?: ConflictItem[];
-  rfis?: string[];
-  assumptions?: string[];
-  estimatorQuestions?: string[];
-  contingencyNotes?: string[];
-  favoriteScopeItemIds?: string[];
-  favoriteVerificationItemIds?: string[];
-  favoriteSafetyItemIds?: string[];
-  favoriteConflictItemIds?: string[];
-  favoriteRfiItemIds?: string[];
-  analysisOptions?: {
-    verification?: boolean;
-    safety?: boolean;
-    conflicts?: boolean;
-    rfi?: boolean;
-  };
-};
+type PlanProjectDoc = PlanProjectRecord;
 
 type ModalState =
   | {
@@ -245,17 +137,19 @@ type FormattedBidLineItem = {
 
 const SCOPE_TRADE_LABELS: Array<{ key: string; label: string }> = [
   { key: "demo", label: "Demo" },
+  { key: "structural", label: "Structural" },
   { key: "framing", label: "Framing" },
-  { key: "drywall", label: "Drywall" },
-  { key: "flooring", label: "Flooring" },
-  { key: "doors/windows", label: "Doors/Windows" },
-  { key: "paint", label: "Paint" },
+  { key: "exterior_envelope", label: "Exterior Envelope" },
+  { key: "doors_windows", label: "Doors/Windows" },
+  { key: "roofing", label: "Roofing" },
   { key: "plumbing", label: "Plumbing" },
   { key: "electrical", label: "Electrical" },
+  { key: "concrete_masonry", label: "Concrete/Masonry" },
+  { key: "drywall_insulation", label: "Drywall/Insulation" },
+  { key: "flooring_tile", label: "Flooring/Tile" },
+  { key: "paint_finishes", label: "Paint/Finishes" },
+  { key: "millwork_cabinets", label: "Millwork/Cabinets" },
   { key: "HVAC", label: "HVAC" },
-  { key: "concrete/masonry", label: "Concrete/Masonry" },
-  { key: "roofing", label: "Roofing" },
-  { key: "specialty/site", label: "Specialty/Site" },
 ];
 
 const VERIFICATION_CATEGORY_ORDER: VerificationItem["category"][] = [
@@ -380,23 +274,36 @@ const getRfiBadgeConfig = (key: keyof RfiPackage) => {
   }
 };
 
+const getOverviewStatus = (project: PlanProjectDoc | null) =>
+  project?.modules?.overview?.status;
+
+const getModuleStatus = (
+  project: PlanProjectDoc | null,
+  moduleType: PlanModuleType
+): PlanModuleStatus | undefined => project?.modules?.[moduleType]?.status;
+
+const getModuleError = (
+  project: PlanProjectDoc | null,
+  moduleType: PlanModuleType
+) => project?.modules?.[moduleType]?.error;
+
 const getProcessingCopy = (step: PipelineStep | null, project: PlanProjectDoc | null) => {
-  if (step === "analyze" || project?.analysisStatus === "processing") {
+  if (step === "analyze" || getOverviewStatus(project) === "processing") {
     return "Upload complete. Running plan analysis...";
   }
-  if (step === "generateScopes" || project?.scopeGenerationStatus === "processing") {
+  if (step === "generateScopes" || getModuleStatus(project, "scopes") === "processing") {
     return "Analysis complete. Generating trade scopes...";
   }
-  if (step === "generateVerification" || project?.verificationStatus === "processing") {
+  if (step === "generateVerification" || getModuleStatus(project, "verification") === "processing") {
     return "Scopes complete. Generating verification checklist...";
   }
-  if (step === "analyzeSafety" || project?.safetyStatus === "processing") {
+  if (step === "analyzeSafety" || getModuleStatus(project, "safety") === "processing") {
     return "Verification complete. Running safety review...";
   }
-  if (step === "detectConflicts" || project?.conflictStatus === "processing") {
+  if (step === "detectConflicts" || getModuleStatus(project, "conflicts") === "processing") {
     return "Safety review complete. Detecting cross-sheet conflicts...";
   }
-  if (step === "generateRFIs" || project?.rfiStatus === "processing") {
+  if (step === "generateRFIs" || getModuleStatus(project, "rfi") === "processing") {
     return "Conflict detection complete. Generating RFIs and estimator notes...";
   }
   return "Project upload complete.";
@@ -420,24 +327,24 @@ const isProjectFullyAnalyzed = (project: PlanProjectDoc | null) => {
   if (!project) return false;
 
   const analysisDone =
-    project.analysisStatus === "completed" || project.analysisStatus === "completed_with_errors";
-  const scopesDone = project.scopeGenerationStatus === "completed";
+    getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors";
+  const scopesDone = getModuleStatus(project, "scopes") === "completed";
   const verificationDone =
     !isOptionalStepEnabled(project, "verification") ||
-    project.verificationStatus === "completed" ||
-    project.verificationStatus === "skipped";
+    getModuleStatus(project, "verification") === "completed" ||
+    getModuleStatus(project, "verification") === "skipped";
   const safetyDone =
     !isOptionalStepEnabled(project, "safety") ||
-    project.safetyStatus === "completed" ||
-    project.safetyStatus === "skipped";
+    getModuleStatus(project, "safety") === "completed" ||
+    getModuleStatus(project, "safety") === "skipped";
   const conflictsDone =
     !isOptionalStepEnabled(project, "conflicts") ||
-    project.conflictStatus === "completed" ||
-    project.conflictStatus === "skipped";
+    getModuleStatus(project, "conflicts") === "completed" ||
+    getModuleStatus(project, "conflicts") === "skipped";
   const rfiDone =
     !isOptionalStepEnabled(project, "rfi") ||
-    project.rfiStatus === "completed" ||
-    project.rfiStatus === "skipped";
+    getModuleStatus(project, "rfi") === "completed" ||
+    getModuleStatus(project, "rfi") === "skipped";
 
   return analysisDone && scopesDone && verificationDone && safetyDone && conflictsDone && rfiDone;
 };
@@ -445,38 +352,34 @@ const isProjectFullyAnalyzed = (project: PlanProjectDoc | null) => {
 const getStatusValue = (project: PlanProjectDoc | null) => {
   if (!project) return "Loading";
   if (isProjectFullyAnalyzed(project)) return "Fully Analyzed";
-  if (project.rfiStatus === "completed") return "Fully Analyzed";
-  if (project.rfiStatus === "failed") return "RFI Generation Failed";
-  if (project.rfiStatus === "processing") return "Generating RFIs";
-  if (project.conflictStatus === "completed") return "Conflict Checked";
-  if (project.conflictStatus === "failed") return "Conflict Detection Failed";
-  if (project.conflictStatus === "processing") return "Detecting Conflicts";
-  if (project.safetyStatus === "completed") return "Safety Reviewed";
-  if (project.safetyStatus === "failed") return "Safety Analysis Failed";
-  if (project.safetyStatus === "processing") return "Analyzing Safety";
-  if (project.verificationStatus === "completed") return "Verified";
-  if (project.verificationStatus === "failed") return "Verification Failed";
-  if (project.verificationStatus === "processing") return "Generating Verification";
-  if (project.scopeGenerationStatus === "completed") return "Scoped";
-  if (project.scopeGenerationStatus === "failed") return "Scope Generation Failed";
-  if (project.scopeGenerationStatus === "processing") return "Generating Scopes";
-  if (project.analysisStatus === "completed" || project.analysisStatus === "completed_with_errors") {
+  if (getModuleStatus(project, "rfi") === "completed") return "Fully Analyzed";
+  if (getModuleStatus(project, "rfi") === "failed") return "RFI Generation Failed";
+  if (getModuleStatus(project, "rfi") === "processing") return "Generating RFIs";
+  if (getModuleStatus(project, "conflicts") === "completed") return "Conflict Checked";
+  if (getModuleStatus(project, "conflicts") === "failed") return "Conflict Detection Failed";
+  if (getModuleStatus(project, "conflicts") === "processing") return "Detecting Conflicts";
+  if (getModuleStatus(project, "safety") === "completed") return "Safety Reviewed";
+  if (getModuleStatus(project, "safety") === "failed") return "Safety Analysis Failed";
+  if (getModuleStatus(project, "safety") === "processing") return "Analyzing Safety";
+  if (getModuleStatus(project, "verification") === "completed") return "Verified";
+  if (getModuleStatus(project, "verification") === "failed") return "Verification Failed";
+  if (getModuleStatus(project, "verification") === "processing") return "Generating Verification";
+  if (getModuleStatus(project, "scopes") === "completed") return "Scoped";
+  if (getModuleStatus(project, "scopes") === "failed") return "Scope Generation Failed";
+  if (getModuleStatus(project, "scopes") === "processing") return "Generating Scopes";
+  if (getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors") {
     return "Analyzed";
   }
-  if (project.analysisStatus === "failed") return "Analysis Failed";
-  if (project.analysisStatus === "processing") return "Analyzing";
+  if (getOverviewStatus(project) === "failed") return "Analysis Failed";
+  if (getOverviewStatus(project) === "processing") return "Analyzing";
   return project.status === "uploaded" ? "Uploaded" : project.status || "Uploaded";
 };
 
 const getProjectTitle = (
-  project: Pick<PlanProjectDoc, "title" | "projectType">
+  project: Pick<PlanProjectDoc, "title"> | null
 ) => {
-  if (project.title?.trim()) {
+  if (project?.title?.trim()) {
     return project.title.trim();
-  }
-
-  if (project.projectType?.trim()) {
-    return project.projectType.trim();
   }
 
   return "Untitled plan analysis";
@@ -510,6 +413,12 @@ export default function PlanAnalyzerRun() {
   const { profile } = useAuth();
 
   const [project, setProject] = useState<PlanProjectDoc | null>(null);
+  const [overviewModule, setOverviewModule] = useState<PlanOverviewModuleRecord | null>(null);
+  const [scopesModule, setScopesModule] = useState<PlanScopesModuleRecord | null>(null);
+  const [verificationModule, setVerificationModule] = useState<PlanVerificationModuleRecord | null>(null);
+  const [safetyModule, setSafetyModule] = useState<PlanSafetyModuleRecord | null>(null);
+  const [conflictsModule, setConflictsModule] = useState<PlanConflictsModuleRecord | null>(null);
+  const [rfiModule, setRfiModule] = useState<PlanRfiModuleRecord | null>(null);
   const [projectMissing, setProjectMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<ModalState>(null);
@@ -537,7 +446,10 @@ export default function PlanAnalyzerRun() {
           return;
         }
 
-        setProject(snapshot.data() as PlanProjectDoc);
+        setProject({
+          id: snapshot.id,
+          ...(snapshot.data() as Omit<PlanProjectDoc, "id">),
+        });
         setProjectMissing(false);
       },
       (error) => {
@@ -554,62 +466,101 @@ export default function PlanAnalyzerRun() {
     return unsubscribe;
   }, [projectId, toast]);
 
+  useEffect(() => {
+    if (!projectId) return;
+
+    const moduleSubscriptions = [
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "overview"), (snapshot) => {
+        setOverviewModule(snapshot.exists() ? (snapshot.data() as PlanOverviewModuleRecord) : null);
+      }),
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "scopes"), (snapshot) => {
+        setScopesModule(snapshot.exists() ? (snapshot.data() as PlanScopesModuleRecord) : null);
+      }),
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "verification"), (snapshot) => {
+        setVerificationModule(snapshot.exists() ? (snapshot.data() as PlanVerificationModuleRecord) : null);
+      }),
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "safety"), (snapshot) => {
+        setSafetyModule(snapshot.exists() ? (snapshot.data() as PlanSafetyModuleRecord) : null);
+      }),
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "conflicts"), (snapshot) => {
+        setConflictsModule(snapshot.exists() ? (snapshot.data() as PlanConflictsModuleRecord) : null);
+      }),
+      onSnapshot(doc(firestore, "planProjects", projectId, "modules", "rfi"), (snapshot) => {
+        setRfiModule(snapshot.exists() ? (snapshot.data() as PlanRfiModuleRecord) : null);
+      }),
+    ];
+
+    return () => {
+      moduleSubscriptions.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [projectId]);
+
   const analysisResult = useMemo<PlanAnalysisResult | null>(() => {
-    if (!project?.analysisCompletedAt) return null;
+    if (
+      overviewModule?.status !== "completed" &&
+      overviewModule?.status !== "completed_with_errors"
+    ) {
+      return null;
+    }
+    const result = overviewModule.result;
 
     return {
-      projectType: typeof project.projectType === "string" ? project.projectType : "",
-      areas: Array.isArray(project.areas) ? project.areas : [],
-      summary: typeof project.summary === "string" ? project.summary : "",
-      duplicateSheets: Array.isArray(project.duplicateSheets) ? project.duplicateSheets : [],
-      missingSheetNumbers: Array.isArray(project.missingSheetNumbers) ? project.missingSheetNumbers : [],
-      conflictingRevisions: Array.isArray(project.conflictingRevisions) ? project.conflictingRevisions : [],
+      projectType: typeof result?.projectType === "string" ? result.projectType : "",
+      areas: Array.isArray(result?.areas) ? result.areas : [],
+      summary: typeof result?.summary === "string" ? result.summary : "",
     };
-  }, [project]);
+  }, [overviewModule]);
 
   const scopeResult = useMemo<ScopeResult | null>(
-    () => (project?.scopeGenerationStatus === "completed" ? project.scopes || {} : null),
-    [project]
+    () => (scopesModule?.status === "completed" ? scopesModule.result || {} : null),
+    [scopesModule]
   );
 
   const verificationResult = useMemo<VerificationItem[] | null>(
-    () => (project?.verificationStatus === "completed" ? project.verification || [] : null),
-    [project]
+    () => (verificationModule?.status === "completed" ? verificationModule.result || [] : null),
+    [verificationModule]
   );
 
   const safetyResult = useMemo<SafetyItem[] | null>(
-    () => (project?.safetyStatus === "completed" ? project.safety || [] : null),
-    [project]
+    () => (safetyModule?.status === "completed" ? safetyModule.result || [] : null),
+    [safetyModule]
   );
 
   const conflictResult = useMemo<ConflictItem[] | null>(
-    () => (project?.conflictStatus === "completed" ? project.conflicts || [] : null),
-    [project]
+    () => (conflictsModule?.status === "completed" ? conflictsModule.result || [] : null),
+    [conflictsModule]
   );
 
   const rfiResult = useMemo<RfiPackage | null>(() => {
-    if (project?.rfiStatus !== "completed") return null;
+    if (rfiModule?.status !== "completed") return null;
+    const result = rfiModule.result;
 
     return {
-      rfis: Array.isArray(project.rfis) ? project.rfis : [],
-      assumptions: Array.isArray(project.assumptions) ? project.assumptions : [],
-      estimatorQuestions: Array.isArray(project.estimatorQuestions) ? project.estimatorQuestions : [],
-      contingencyNotes: Array.isArray(project.contingencyNotes) ? project.contingencyNotes : [],
+      rfis: Array.isArray(result?.rfis) ? result.rfis : [],
+      assumptions: Array.isArray(result?.assumptions) ? result.assumptions : [],
+      estimatorQuestions: Array.isArray(result?.estimatorQuestions) ? result.estimatorQuestions : [],
+      contingencyNotes: Array.isArray(result?.contingencyNotes) ? result.contingencyNotes : [],
     };
-  }, [project]);
+  }, [rfiModule]);
 
   const failedStepError = useMemo(() => {
     if (!project) return "";
     return (
-      project.rfiError ||
-      project.conflictError ||
-      project.safetyError ||
-      project.verificationError ||
-      project.scopeGenerationError ||
-      project.analysisError ||
+      rfiModule?.error ||
+      getModuleError(project, "rfi") ||
+      conflictsModule?.error ||
+      getModuleError(project, "conflicts") ||
+      safetyModule?.error ||
+      getModuleError(project, "safety") ||
+      verificationModule?.error ||
+      getModuleError(project, "verification") ||
+      scopesModule?.error ||
+      getModuleError(project, "scopes") ||
+      overviewModule?.error ||
+      getModuleError(project, "overview") ||
       ""
     );
-  }, [project]);
+  }, [conflictsModule, overviewModule, project, rfiModule, safetyModule, scopesModule, verificationModule]);
 
   const visibleTabs = useMemo(() => {
     return PLAN_ANALYZER_TABS.filter((tab) => {
@@ -693,38 +644,38 @@ export default function PlanAnalyzerRun() {
 
   const selectedScopeItemIds = useMemo(() => {
     const validIds = new Set(allSelectableScopeItems.map(({ id }) => id));
-    return Array.isArray(project?.favoriteScopeItemIds)
-      ? project.favoriteScopeItemIds.filter((id) => validIds.has(id))
+    return Array.isArray(scopesModule?.favoriteItemIds)
+      ? scopesModule.favoriteItemIds.filter((id) => validIds.has(id))
       : [];
-  }, [allSelectableScopeItems, project?.favoriteScopeItemIds]);
+  }, [allSelectableScopeItems, scopesModule?.favoriteItemIds]);
 
   const selectedVerificationItemIds = useMemo(() => {
     const validIds = new Set(allSelectableVerificationItems.map(({ id }) => id));
-    return Array.isArray(project?.favoriteVerificationItemIds)
-      ? project.favoriteVerificationItemIds.filter((id) => validIds.has(id))
+    return Array.isArray(verificationModule?.favoriteItemIds)
+      ? verificationModule.favoriteItemIds.filter((id) => validIds.has(id))
       : [];
-  }, [allSelectableVerificationItems, project?.favoriteVerificationItemIds]);
+  }, [allSelectableVerificationItems, verificationModule?.favoriteItemIds]);
 
   const selectedSafetyItemIds = useMemo(() => {
     const validIds = new Set(allSelectableSafetyItems.map(({ id }) => id));
-    return Array.isArray(project?.favoriteSafetyItemIds)
-      ? project.favoriteSafetyItemIds.filter((id) => validIds.has(id))
+    return Array.isArray(safetyModule?.favoriteItemIds)
+      ? safetyModule.favoriteItemIds.filter((id) => validIds.has(id))
       : [];
-  }, [allSelectableSafetyItems, project?.favoriteSafetyItemIds]);
+  }, [allSelectableSafetyItems, safetyModule?.favoriteItemIds]);
 
   const selectedConflictItemIds = useMemo(() => {
     const validIds = new Set(allSelectableConflictItems.map(({ id }) => id));
-    return Array.isArray(project?.favoriteConflictItemIds)
-      ? project.favoriteConflictItemIds.filter((id) => validIds.has(id))
+    return Array.isArray(conflictsModule?.favoriteItemIds)
+      ? conflictsModule.favoriteItemIds.filter((id) => validIds.has(id))
       : [];
-  }, [allSelectableConflictItems, project?.favoriteConflictItemIds]);
+  }, [allSelectableConflictItems, conflictsModule?.favoriteItemIds]);
 
   const selectedRfiItemIds = useMemo(() => {
     const validIds = new Set(allSelectableRfiItems.map(({ id }) => id));
-    return Array.isArray(project?.favoriteRfiItemIds)
-      ? project.favoriteRfiItemIds.filter((id) => validIds.has(id))
+    return Array.isArray(rfiModule?.favoriteItemIds)
+      ? rfiModule.favoriteItemIds.filter((id) => validIds.has(id))
       : [];
-  }, [allSelectableRfiItems, project?.favoriteRfiItemIds]);
+  }, [allSelectableRfiItems, rfiModule?.favoriteItemIds]);
 
   const selectedScopeItemIdSet = useMemo(
     () => new Set(selectedScopeItemIds),
@@ -778,41 +729,41 @@ export default function PlanAnalyzerRun() {
     }
 
     if (
-      project.analysisStatus === "failed" ||
-      project.scopeGenerationStatus === "failed" ||
-      project.verificationStatus === "failed" ||
-      project.safetyStatus === "failed" ||
-      project.conflictStatus === "failed" ||
-      project.rfiStatus === "failed"
+      getOverviewStatus(project) === "failed" ||
+      getModuleStatus(project, "scopes") === "failed" ||
+      getModuleStatus(project, "verification") === "failed" ||
+      getModuleStatus(project, "safety") === "failed" ||
+      getModuleStatus(project, "conflicts") === "failed" ||
+      getModuleStatus(project, "rfi") === "failed"
     ) {
       return null;
     }
 
     if (
-      project.analysisStatus !== "completed" &&
-      project.analysisStatus !== "completed_with_errors"
+      getOverviewStatus(project) !== "completed" &&
+      getOverviewStatus(project) !== "completed_with_errors"
     ) {
-      return project.analysisStatus === "processing" ? null : "analyze";
+      return getOverviewStatus(project) === "processing" ? null : "analyze";
     }
 
-    if (project.scopeGenerationStatus !== "completed") {
-      return project.scopeGenerationStatus === "processing" ? null : "generateScopes";
+    if (getModuleStatus(project, "scopes") !== "completed") {
+      return getModuleStatus(project, "scopes") === "processing" ? null : "generateScopes";
     }
 
-    if (isOptionalStepEnabled(project, "verification") && project.verificationStatus !== "completed") {
-      return project.verificationStatus === "processing" ? null : "generateVerification";
+    if (isOptionalStepEnabled(project, "verification") && getModuleStatus(project, "verification") !== "completed") {
+      return getModuleStatus(project, "verification") === "processing" ? null : "generateVerification";
     }
 
-    if (isOptionalStepEnabled(project, "safety") && project.safetyStatus !== "completed") {
-      return project.safetyStatus === "processing" ? null : "analyzeSafety";
+    if (isOptionalStepEnabled(project, "safety") && getModuleStatus(project, "safety") !== "completed") {
+      return getModuleStatus(project, "safety") === "processing" ? null : "analyzeSafety";
     }
 
-    if (isOptionalStepEnabled(project, "conflicts") && project.conflictStatus !== "completed") {
-      return project.conflictStatus === "processing" ? null : "detectConflicts";
+    if (isOptionalStepEnabled(project, "conflicts") && getModuleStatus(project, "conflicts") !== "completed") {
+      return getModuleStatus(project, "conflicts") === "processing" ? null : "detectConflicts";
     }
 
-    if (isOptionalStepEnabled(project, "rfi") && project.rfiStatus !== "completed") {
-      return project.rfiStatus === "processing" ? null : "generateRFIs";
+    if (isOptionalStepEnabled(project, "rfi") && getModuleStatus(project, "rfi") !== "completed") {
+      return getModuleStatus(project, "rfi") === "processing" ? null : "generateRFIs";
     }
 
     return null;
@@ -838,19 +789,19 @@ export default function PlanAnalyzerRun() {
 
     const totalSteps = 2 + enabledOptionalSteps;
     const completedSteps = [
-      project.analysisStatus === "completed" || project.analysisStatus === "completed_with_errors",
-      project.scopeGenerationStatus === "completed",
+      getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors",
+      getModuleStatus(project, "scopes") === "completed",
       isOptionalStepEnabled(project, "verification")
-        ? project.verificationStatus === "completed"
+        ? getModuleStatus(project, "verification") === "completed"
         : null,
       isOptionalStepEnabled(project, "safety")
-        ? project.safetyStatus === "completed"
+        ? getModuleStatus(project, "safety") === "completed"
         : null,
       isOptionalStepEnabled(project, "conflicts")
-        ? project.conflictStatus === "completed"
+        ? getModuleStatus(project, "conflicts") === "completed"
         : null,
       isOptionalStepEnabled(project, "rfi")
-        ? project.rfiStatus === "completed"
+        ? getModuleStatus(project, "rfi") === "completed"
         : null,
     ].filter(Boolean).length;
 
@@ -876,12 +827,12 @@ export default function PlanAnalyzerRun() {
     !isFullyAnalyzed &&
     Boolean(
       activeStep ||
-        project?.analysisStatus === "processing" ||
-        project?.scopeGenerationStatus === "processing" ||
-        project?.verificationStatus === "processing" ||
-        project?.safetyStatus === "processing" ||
-        project?.conflictStatus === "processing" ||
-      project?.rfiStatus === "processing"
+        getOverviewStatus(project) === "processing" ||
+        getModuleStatus(project, "scopes") === "processing" ||
+        getModuleStatus(project, "verification") === "processing" ||
+        getModuleStatus(project, "safety") === "processing" ||
+        getModuleStatus(project, "conflicts") === "processing" ||
+      getModuleStatus(project, "rfi") === "processing"
     );
   const visibleProgress = useMemo(() => {
     if (isFullyAnalyzed) {
@@ -913,7 +864,7 @@ export default function PlanAnalyzerRun() {
 
     const interval = window.setInterval(() => {
       setDisplayedProgress((current) => {
-        const { completedProgress, inFlightCeiling, isFinalStepInFlight } = progressMetrics;
+        const { completedProgress, inFlightCeiling } = progressMetrics;
 
         if (isFullyAnalyzed) {
           if (current >= 100) return 100;
@@ -928,8 +879,8 @@ export default function PlanAnalyzerRun() {
 
         if (isActivelyProcessing) {
           if (current < inFlightCeiling) {
-            const minIncrement = isFinalStepInFlight ? 0.28 : 0.12;
-            const proportionalIncrement = isFinalStepInFlight ? 0.02 : 0.014;
+            const minIncrement = 0.054;
+            const proportionalIncrement = 0.01;
             const next =
               current + Math.max(minIncrement, (inFlightCeiling - current) * proportionalIncrement);
             return Math.min(inFlightCeiling, Number(next.toFixed(1)));
@@ -1041,7 +992,7 @@ export default function PlanAnalyzerRun() {
 
       try {
         if (nextStep === "analyze") {
-          await updateDoc(projectRef, { analysisStatus: "processing" });
+          await updateDoc(projectRef, { "modules.overview.status": "processing" });
         }
 
         const response = await fetch(
@@ -1193,7 +1144,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "scope") {
       return {
-        field: "favoriteScopeItemIds" as const,
+        field: "scopes" as const,
         currentIds: selectedScopeItemIds,
         itemIds: activeModal.items.map((_, index) => buildScopeSelectionId(activeModal.tradeKey, index)),
         errorTitle: "Unable to save scope favorites",
@@ -1202,7 +1153,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "scopeFavorites") {
       return {
-        field: "favoriteScopeItemIds" as const,
+        field: "scopes" as const,
         currentIds: selectedScopeItemIds,
         itemIds: activeModal.items.map(({ id }) => id),
         errorTitle: "Unable to save scope favorites",
@@ -1211,7 +1162,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "verification") {
       return {
-        field: "favoriteVerificationItemIds" as const,
+        field: "verification" as const,
         currentIds: selectedVerificationItemIds,
         itemIds: activeModal.items.map(({ id }) => id),
         errorTitle: "Unable to save verification favorites",
@@ -1220,7 +1171,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "safety") {
       return {
-        field: "favoriteSafetyItemIds" as const,
+        field: "safety" as const,
         currentIds: selectedSafetyItemIds,
         itemIds: activeModal.items.map(({ id }) => id),
         errorTitle: "Unable to save safety favorites",
@@ -1229,7 +1180,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "conflict") {
       return {
-        field: "favoriteConflictItemIds" as const,
+        field: "conflicts" as const,
         currentIds: selectedConflictItemIds,
         itemIds: activeModal.items.map(({ id }) => id),
         errorTitle: "Unable to save conflict favorites",
@@ -1238,7 +1189,7 @@ export default function PlanAnalyzerRun() {
 
     if (activeModal.type === "rfi") {
       return {
-        field: "favoriteRfiItemIds" as const,
+        field: "rfi" as const,
         currentIds: selectedRfiItemIds,
         itemIds: activeModal.items.map(({ id }) => id),
         errorTitle: "Unable to save RFI favorites",
@@ -1266,12 +1217,12 @@ export default function PlanAnalyzerRun() {
         window.requestAnimationFrame(() => resolve());
       });
 
-      await updateDoc(doc(firestore, "planProjects", projectId), {
-        [config.field]: nextIds,
+      await updateDoc(doc(firestore, "planProjects", projectId, "modules", config.field), {
+        favoriteItemIds: nextIds,
       });
       setActiveModal(null);
     } catch (error) {
-      console.error(`Failed to save ${config.field}:`, error);
+      console.error(`Failed to save ${config.field} favorites:`, error);
       toast({
         title: config.errorTitle,
         description: "Your favorites could not be saved right now.",
@@ -1469,35 +1420,6 @@ export default function PlanAnalyzerRun() {
           <div className="plan-analysis-card">
             <span className="plan-summary-label">High-level scope</span>
             <p className="plan-analysis-copy">{analysisResult.summary || "No summary returned."}</p>
-          </div>
-
-          <div className="plan-analysis-issues">
-            <div className="plan-analysis-card">
-              <span className="plan-summary-label">Duplicate sheets</span>
-              <p className="plan-analysis-copy">
-                {analysisResult.duplicateSheets.length
-                  ? analysisResult.duplicateSheets.map((entry) => entry.sheetNumber).join(", ")
-                  : "None detected"}
-              </p>
-            </div>
-
-            <div className="plan-analysis-card">
-              <span className="plan-summary-label">Missing sheet numbers</span>
-              <p className="plan-analysis-copy">
-                {analysisResult.missingSheetNumbers.length
-                  ? analysisResult.missingSheetNumbers.join(", ")
-                  : "None detected"}
-              </p>
-            </div>
-
-            <div className="plan-analysis-card">
-              <span className="plan-summary-label">Conflicting revisions</span>
-              <p className="plan-analysis-copy">
-                {analysisResult.conflictingRevisions.length
-                  ? analysisResult.conflictingRevisions.map((entry) => entry.sheetNumber).join(", ")
-                  : "None detected"}
-              </p>
-            </div>
           </div>
         </div>
       ) : (
@@ -1793,7 +1715,7 @@ export default function PlanAnalyzerRun() {
             <div className="plan-analysis-card-heading-copy">
               <span className="plan-summary-label">Conflict detection</span>
               <p className="plan-section-subtitle">
-                Cross-sheet coordination issues like trade clashes, mismatched dimensions, and revision conflicts.
+                Cross-sheet coordination issues like trade clashes, mismatched dimensions, and cross-discipline coordination concerns.
               </p>
             </div>
             {selectedConflictItems.length ? (

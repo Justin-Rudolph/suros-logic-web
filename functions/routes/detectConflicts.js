@@ -2,6 +2,19 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const {
+  buildPlanModuleSummaryData,
+  createJsonCompletion,
+  createPlanContextChunks,
+  getPlanModuleDocPath,
+  getProjectStatusAfterModuleUpdate,
+  loadProjectPlanFiles,
+  logUsageTotals,
+  mapWithConcurrency,
+  serializeChunkResults,
+  sumUsage,
+  uniqueStrings,
+} = require("./lib/planAnalyzerContext");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -10,30 +23,45 @@ if (!admin.apps.length) {
 const firestore = admin.firestore();
 
 const ALLOWED_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
-const MAX_PLAN_CONTEXT_LENGTH = 120000;
+const MAX_PLAN_CONTEXT_LENGTH = 80000;
 
-const normalizeWhitespace = (value) =>
-  String(value || "")
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-const buildPlanContext = (files) => {
-  const sections = files.map((file) => {
-    const headerParts = [
-      file.fileName ? `FILE: ${file.fileName}` : null,
-      file.detectedSheetNumber ? `SHEET: ${file.detectedSheetNumber}` : null,
-      file.detectedTitle ? `TITLE: ${file.detectedTitle}` : null,
-      file.discipline ? `DISCIPLINE: ${file.discipline}` : null,
-      file.revisionDate ? `REVISION DATE: ${file.revisionDate}` : null,
-    ].filter(Boolean);
-
-    return `${headerParts.join(" | ")}\n${normalizeWhitespace(file.rawText || "")}`.trim();
-  });
-
-  return sections.join("\n\n====================\n\n").slice(0, MAX_PLAN_CONTEXT_LENGTH);
-};
+const getConflictResponseFormat = () => ({
+  type: "json_schema",
+  json_schema: {
+    name: "plan_conflict_findings",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              conflict: { type: "string" },
+              involvedTrades: {
+                type: "array",
+                items: { type: "string" },
+              },
+              severity: {
+                type: "string",
+                enum: ["low", "medium", "high", "critical"],
+              },
+              sourceSheets: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+            required: ["conflict", "involvedTrades", "severity", "sourceSheets"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+});
 
 const sanitizeConflictItem = (item) => {
   if (!item || typeof item !== "object") {
@@ -42,24 +70,8 @@ const sanitizeConflictItem = (item) => {
 
   const conflict = String(item.conflict || "").trim();
   const severity = String(item.severity || "").trim().toLowerCase();
-  const involvedTrades = Array.isArray(item.involvedTrades)
-    ? Array.from(
-        new Set(
-          item.involvedTrades
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean)
-        )
-      )
-    : [];
-  const sourceSheets = Array.isArray(item.sourceSheets)
-    ? Array.from(
-        new Set(
-          item.sourceSheets
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean)
-        )
-      )
-    : [];
+  const involvedTrades = uniqueStrings(item.involvedTrades);
+  const sourceSheets = uniqueStrings(item.sourceSheets);
 
   if (!conflict || !ALLOWED_SEVERITIES.has(severity)) {
     return null;
@@ -73,26 +85,37 @@ const sanitizeConflictItem = (item) => {
   };
 };
 
+const parseConflictPayload = (parsed) => {
+  const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+  if (!items.length) {
+    return [];
+  }
+
+  return items.map(sanitizeConflictItem).filter(Boolean);
+};
+
 const generateConflictAnalysis = async (files, openAiApiKey) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
-  const planContext = buildPlanContext(files);
-  if (!planContext) {
+  const contextChunks = createPlanContextChunks(files, MAX_PLAN_CONTEXT_LENGTH);
+  if (!contextChunks.length) {
     throw new Error("No extracted plan text is available for this project");
   }
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5",
-    reasoning_effort: "medium",
-    messages: [
-      {
-        role: "system",
-        content: buildEstimatorSystemPrompt(`
-Compare across the entire OCR-extracted plan set and detect meaningful cross-sheet or coordination
+  const chunkUsages = [];
+  const chunkFindings = await mapWithConcurrency(
+    contextChunks,
+    async (chunk, index) => {
+      const { parsed, usage } = await createJsonCompletion({
+        openai,
+        model: "gpt-5",
+        reasoningEffort: "medium",
+        responseFormat: getConflictResponseFormat(),
+        systemPrompt: buildEstimatorSystemPrompt(`
+Compare the OCR-extracted plan text inside this chunk and detect meaningful coordination
 conflicts that could affect pricing, construction, trade coordination, materials, or change-
 order exposure.
 
@@ -104,10 +127,10 @@ Focus on:
 - finish schedule vs room tag conflicts
 - door/window schedule vs opening notes conflicts
 - structural vs architectural conflicts
-- revision conflicts
+- unclear cross-discipline coordination notes
 
 Additional task rules:
-- Only return meaningful cross-sheet or coordination conflicts.
+- Only return meaningful conflicts supported by this chunk.
 - Do not return generic warnings.
 - Severity must be one of: "low", "medium", "high", "critical".
 - sourceSheets should list relevant sheet numbers when available.
@@ -115,37 +138,66 @@ Additional task rules:
 - Do not invent sheet references.
 
 Return exactly:
-[
-  {
-    "conflict": "string",
-    "involvedTrades": ["string"],
-    "severity": "low" | "medium" | "high" | "critical",
-    "sourceSheets": ["string"]
-  }
-]
-        `),
-      },
-      {
-        role: "user",
-        content: planContext,
-      },
-    ],
+{
+  "items": [
+    {
+      "conflict": "string",
+      "involvedTrades": ["string"],
+      "severity": "low" | "medium" | "high" | "critical",
+      "sourceSheets": ["string"]
+    }
+  ]
+}
+      `),
+        userContent: chunk.text,
+      });
+      chunkUsages[index] = usage;
+
+      return {
+        data: parseConflictPayload(parsed),
+        usage,
+      };
+    },
+    { label: "detectConflicts" }
+  );
+
+  const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
+    openai,
+    model: "gpt-5",
+    reasoningEffort: "medium",
+    responseFormat: getConflictResponseFormat(),
+    systemPrompt: buildEstimatorSystemPrompt(`
+Combine chunk-level coordination conflicts from a full plan set into one final cross-sheet conflict list.
+
+Additional task rules:
+- Deduplicate materially similar conflicts across chunks.
+- Preserve the best-supported sheet references.
+- Severity must be one of: "low", "medium", "high", "critical".
+- Do not invent sheet references or unsupported conflicts.
+- Prefer the most actionable and specific wording.
+
+Return exactly:
+{
+  "items": [
+    {
+      "conflict": "string",
+      "involvedTrades": ["string"],
+      "severity": "low" | "medium" | "high" | "critical",
+      "sourceSheets": ["string"]
+    }
+  ]
+}
+    `),
+    userContent: serializeChunkResults(contextChunks, chunkFindings, "CONFLICT CHUNK"),
   });
 
-  const content = completion.choices[0]?.message?.content;
+  logUsageTotals("detectConflicts", [
+    { title: "chunks", usage: sumUsage(chunkUsages) },
+    { title: "aggregation", usage: aggregationUsage },
+    { title: "overall", usage: sumUsage([...chunkUsages, aggregationUsage]) },
+  ]);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`Invalid JSON returned from AI conflict analysis: ${content || "empty response"}`);
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error("AI conflict analysis did not return an array");
-  }
-
-  return parsed.map(sanitizeConflictItem).filter(Boolean);
+  return parseConflictPayload(aggregated);
 };
 
 module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
@@ -156,49 +208,77 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        conflictStatus: "processing",
-        conflictRequestedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "conflicts"));
+    const startedAt = FieldValue.serverTimestamp();
 
-    const fileSnapshot = await firestore.collection(`planProjects/${projectId}/files`).get();
-    if (fileSnapshot.empty) {
-      return res.status(404).json({
-        error: "No analyzed plan files found for this project.",
-      });
-    }
+    await Promise.all([
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: "processing",
+          modules: {
+            conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "processing", {
+              startedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "conflicts",
+          status: "processing",
+          error: null,
+          startedAt,
+        },
+        { merge: true }
+      ),
+    ]);
 
-    const files = fileSnapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }))
-      .filter((file) => typeof file.rawText === "string" && normalizeWhitespace(file.rawText).length > 0)
-      .sort((left, right) => {
-        const leftSheet = String(left.detectedSheetNumber || "");
-        const rightSheet = String(right.detectedSheetNumber || "");
-        return leftSheet.localeCompare(rightSheet) || String(left.fileName || "").localeCompare(String(right.fileName || ""));
-      });
-
+    const files = await loadProjectPlanFiles(firestore, projectId);
     if (!files.length) {
-      return res.status(400).json({
-        error: "Analyzed files exist, but no extracted plan text is available.",
-      });
+      const missingFilesError = new Error("No analyzed plan files found for this project.");
+      missingFilesError.statusCode = 404;
+      throw missingFilesError;
     }
 
     const conflicts = await generateConflictAnalysis(files, openAiApiKey);
 
-    await firestore.doc(`planProjects/${projectId}`).set(
-      {
-        conflicts,
-        conflictStatus: "completed",
-        conflictGeneratedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const completedAt = FieldValue.serverTimestamp();
+
+    const projectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    const nextProjectStatus = getProjectStatusAfterModuleUpdate(
+      projectSnap.data() || {},
+      "conflicts",
+      "completed"
     );
+
+    await Promise.all([
+      moduleRef.set(
+        {
+          projectId,
+          moduleType: "conflicts",
+          status: "completed",
+          error: null,
+          completedAt,
+          result: conflicts,
+        },
+        { merge: true }
+      ),
+      firestore.doc(`planProjects/${projectId}`).set(
+        {
+          status: nextProjectStatus,
+          modules: {
+            conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "completed", {
+              completedAt,
+              error: null,
+            }),
+          },
+        },
+        { merge: true }
+      ),
+    ]);
 
     return res.json({
       projectId,
@@ -208,17 +288,35 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
     console.error("Conflict detection failed:", error);
 
     if (projectId) {
-      await firestore.doc(`planProjects/${projectId}`).set(
-        {
-          conflictStatus: "failed",
-          conflictGeneratedAt: FieldValue.serverTimestamp(),
-          conflictError: error instanceof Error ? error.message : "Unknown error",
-        },
-        { merge: true }
-      );
+      const completedAt = FieldValue.serverTimestamp();
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await Promise.all([
+        firestore.doc(getPlanModuleDocPath(projectId, "conflicts")).set(
+          {
+            projectId,
+            moduleType: "conflicts",
+            status: "failed",
+            completedAt,
+            error: errorMessage,
+          },
+          { merge: true }
+        ),
+        firestore.doc(`planProjects/${projectId}`).set(
+          {
+            status: "failed",
+            modules: {
+              conflicts: buildPlanModuleSummaryData(projectId, "conflicts", "failed", {
+                completedAt,
+                error: errorMessage,
+              }),
+            },
+          },
+          { merge: true }
+        ),
+      ]);
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Failed to detect conflicts.",
       details: error instanceof Error ? error.message : "Unknown error",
     });
