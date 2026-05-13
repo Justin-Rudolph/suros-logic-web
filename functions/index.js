@@ -176,6 +176,107 @@ exports.downloadBidFormProposalPdf = onRequest(
    ANALYZE PLAN FILES
 -------------------------------------------------- */
 
+exports.reservePlanAnalysis = onRequest(
+  {
+    timeoutSeconds: 60,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const reservePlanAnalysisHandler = require("./routes/reservePlanAnalysis");
+
+      await reservePlanAnalysisHandler(req, res);
+    });
+  }
+);
+
+exports.finalizePlanAnalysisUpload = onRequest(
+  {
+    timeoutSeconds: 60,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const finalizePlanAnalysisUploadHandler = require("./routes/finalizePlanAnalysisUpload");
+
+      await finalizePlanAnalysisUploadHandler(req, res);
+    });
+  }
+);
+
+exports.cancelPlanAnalysisReservation = onRequest(
+  {
+    timeoutSeconds: 60,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const cancelPlanAnalysisReservationHandler = require("./routes/cancelPlanAnalysisReservation");
+
+      await cancelPlanAnalysisReservationHandler(req, res);
+    });
+  }
+);
+
+exports.markPlanAnalysisFailed = onRequest(
+  {
+    timeoutSeconds: 60,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const markPlanAnalysisFailedHandler = require("./routes/markPlanAnalysisFailed");
+
+      await markPlanAnalysisFailedHandler(req, res);
+    });
+  }
+);
+
+exports.deletePlanAnalysisProject = onRequest(
+  {
+    timeoutSeconds: 120,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const deletePlanAnalysisProjectHandler = require("./routes/deletePlanAnalysisProject");
+
+      await deletePlanAnalysisProjectHandler(req, res);
+    });
+  }
+);
+
+// Stale reservation cleanup is intentionally disabled for now.
+// Re-enable this scheduled export if automated cleanup is needed later.
+// const { onSchedule } = require("firebase-functions/v2/scheduler");
+// exports.cleanupStalePlanAnalysisReservations = onSchedule(
+//   {
+//     schedule: "every 60 minutes",
+//     timeZone: "America/New_York",
+//     timeoutSeconds: 300,
+//   },
+//   async () => {
+//     const cleanupStalePlanAnalysisReservationsHandler = require("./routes/cleanupStalePlanAnalysisReservations");
+//
+//     await cleanupStalePlanAnalysisReservationsHandler();
+//   }
+// );
+
 exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],

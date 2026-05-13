@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { Check, Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -172,6 +172,94 @@ const buildVerificationSelectionId = (index: number) => `verification::${index}`
 const buildSafetySelectionId = (index: number) => `safety::${index}`;
 const buildConflictSelectionId = (index: number) => `conflict::${index}`;
 const buildRfiSelectionId = (sectionKey: keyof RfiPackage, index: number) => `${sectionKey}::${index}`;
+const PLAN_ANALYSIS_SUPPORT_MESSAGE =
+  "This analysis failed. Please contact an admin at support@suroslogic.com.";
+const PLAN_ANALYSIS_TIMEOUT_GRACE_MS = 5000;
+
+const PIPELINE_STEP_ENDPOINTS: Record<PipelineStep, string> = {
+  analyze: "analyzePlanFiles",
+  generateScopes: "generateScopes",
+  generateVerification: "generateVerificationChecklist",
+  analyzeSafety: "analyzeSafety",
+  detectConflicts: "detectConflicts",
+  generateRFIs: "generateRFIs",
+};
+
+const PIPELINE_STEP_TIMEOUT_SECONDS: Record<PipelineStep, number> = {
+  analyze: 420,
+  generateScopes: 1200,
+  generateVerification: 600,
+  analyzeSafety: 600,
+  detectConflicts: 720,
+  generateRFIs: 900,
+};
+
+type PlanAnalysisFailurePayload = {
+  projectId: string;
+  moduleType: PlanModuleType;
+  error: string;
+};
+
+const getModuleTypeForPipelineStep = (step: PipelineStep): PlanModuleType => {
+  if (step === "analyze") return "overview";
+  if (step === "generateScopes") return "scopes";
+  if (step === "generateVerification") return "verification";
+  if (step === "analyzeSafety") return "safety";
+  if (step === "detectConflicts") return "conflicts";
+  return "rfi";
+};
+
+const isFunctionTimeoutStatus = (status?: number) => status === 408 || status === 504;
+
+const isFunctionRequestFailureError = (error: unknown) =>
+  error instanceof TypeError && error.message === "Failed to fetch";
+
+const isAbortError = (error: unknown) =>
+  error instanceof Error && error.name === "AbortError";
+
+const didStepReachTimeoutWindow = (step: PipelineStep, startedAt: number) => {
+  const timeoutMillis = PIPELINE_STEP_TIMEOUT_SECONDS[step] * 1000;
+  const elapsedMillis = Date.now() - startedAt;
+  return elapsedMillis >= Math.max(timeoutMillis - PLAN_ANALYSIS_TIMEOUT_GRACE_MS, 0);
+};
+
+const getFunctionTimeoutErrorMessage = (step: PipelineStep) => {
+  if (step === "analyze") return "The plan file analysis function timed out.";
+  if (step === "generateScopes") return "The generate scopes function timed out.";
+  if (step === "generateVerification") return "The verification checklist function timed out.";
+  if (step === "analyzeSafety") return "The safety analysis function timed out.";
+  if (step === "detectConflicts") return "The conflict detection function timed out.";
+  return "The RFI generation function timed out.";
+};
+
+const getFunctionRequestFailureMessage = (step: PipelineStep) => {
+  if (step === "analyze") return "The plan file analysis request failed before a response was received.";
+  if (step === "generateScopes") return "The generate scopes request failed before a response was received.";
+  if (step === "generateVerification") return "The verification checklist request failed before a response was received.";
+  if (step === "analyzeSafety") return "The safety analysis request failed before a response was received.";
+  if (step === "detectConflicts") return "The conflict detection request failed before a response was received.";
+  return "The RFI generation request failed before a response was received.";
+};
+
+const getFunctionResponseErrorMessage = (
+  step: PipelineStep,
+  status: number,
+  payload: { error?: unknown; details?: unknown }
+) => {
+  if (isFunctionTimeoutStatus(status)) {
+    return getFunctionTimeoutErrorMessage(step);
+  }
+
+  if (typeof payload.details === "string") {
+    return payload.details;
+  }
+
+  if (typeof payload.error === "string") {
+    return payload.error;
+  }
+
+  return `The ${step} step failed.`;
+};
 
 const haveSameIds = (left: string[], right: string[]) => {
   if (left.length !== right.length) {
@@ -286,6 +374,18 @@ const getModuleError = (
   project: PlanProjectDoc | null,
   moduleType: PlanModuleType
 ) => project?.modules?.[moduleType]?.error;
+
+const getPlanModuleSummaryDocPath = (projectId: string, moduleType: PlanModuleType) =>
+  `planProjects/${projectId}/modules/${moduleType}`;
+
+const isProjectFailed = (project: PlanProjectDoc | null) =>
+  project?.status === "failed" ||
+  getOverviewStatus(project) === "failed" ||
+  getModuleStatus(project, "scopes") === "failed" ||
+  getModuleStatus(project, "verification") === "failed" ||
+  getModuleStatus(project, "safety") === "failed" ||
+  getModuleStatus(project, "conflicts") === "failed" ||
+  getModuleStatus(project, "rfi") === "failed";
 
 const getProcessingCopy = (step: PipelineStep | null, project: PlanProjectDoc | null) => {
   if (step === "analyze" || getOverviewStatus(project) === "processing") {
@@ -410,7 +510,7 @@ export default function PlanAnalyzerRun() {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   const [project, setProject] = useState<PlanProjectDoc | null>(null);
   const [overviewModule, setOverviewModule] = useState<PlanOverviewModuleRecord | null>(null);
@@ -769,6 +869,7 @@ export default function PlanAnalyzerRun() {
     return null;
   }, [project]);
 
+  const hasFailed = isProjectFailed(project);
   const progressMetrics = useMemo(() => {
     if (!project) {
       return {
@@ -822,8 +923,10 @@ export default function PlanAnalyzerRun() {
 
   const isFullyAnalyzed = isProjectFullyAnalyzed(project);
   const shouldRenderProgressPanel =
-    showProgressPanel && (!isFullyAnalyzed || hasSeenIncompleteProgressRef.current);
+    !hasFailed && showProgressPanel && (!isFullyAnalyzed || hasSeenIncompleteProgressRef.current);
+  const shouldRenderStatusRow = shouldRenderProgressPanel || hasFailed;
   const isActivelyProcessing =
+    !hasFailed &&
     !isFullyAnalyzed &&
     Boolean(
       activeStep ||
@@ -848,6 +951,12 @@ export default function PlanAnalyzerRun() {
       setShowProgressPanel(true);
       setProgressPanelFading(false);
       hasSeenIncompleteProgressRef.current = false;
+      return;
+    }
+
+    if (hasFailed) {
+      setShowProgressPanel(false);
+      setProgressPanelFading(false);
       return;
     }
 
@@ -898,9 +1007,15 @@ export default function PlanAnalyzerRun() {
     }, 220);
 
     return () => window.clearInterval(interval);
-  }, [project, progressMetrics, isActivelyProcessing, isFullyAnalyzed]);
+  }, [hasFailed, project, progressMetrics, isActivelyProcessing, isFullyAnalyzed]);
 
   useEffect(() => {
+    if (hasFailed) {
+      setShowProgressPanel(false);
+      setProgressPanelFading(false);
+      return;
+    }
+
     if (!isFullyAnalyzed) {
       setShowProgressPanel(true);
       setProgressPanelFading(false);
@@ -919,7 +1034,7 @@ export default function PlanAnalyzerRun() {
     }, 900);
 
     return () => window.clearTimeout(fadeTimer);
-  }, [displayedProgress, isFullyAnalyzed]);
+  }, [displayedProgress, hasFailed, isFullyAnalyzed]);
 
   useEffect(() => {
     if (!visibleTabs.some((tab) => tab.id === activeTab)) {
@@ -980,8 +1095,105 @@ export default function PlanAnalyzerRun() {
     selectedVerificationItemIds,
   ]);
 
+  const markPlanAnalysisFailed = useCallback(async (failure: PlanAnalysisFailurePayload) => {
+    if (!user) {
+      throw new Error("Please sign in before updating this plan analysis.");
+    }
+
+    const token = await user.getIdToken();
+    const response = await fetch(`${getFunctionsBaseUrl()}/markPlanAnalysisFailed`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(failure),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(
+        typeof payload?.error === "string"
+          ? payload.error
+        : "Failed to release plan analysis quota."
+      );
+    }
+  }, [user]);
+
+  const applyClientSideFailureState = useCallback(
+    (moduleType: PlanModuleType, errorMessage: string) => {
+      if (!projectId) return;
+
+      const failedModuleSummary = {
+        moduleType,
+        docPath: getPlanModuleSummaryDocPath(projectId, moduleType),
+        status: "failed" as const,
+        error: errorMessage,
+      };
+
+      setProject((current) =>
+        current
+          ? {
+              ...current,
+              status: "failed",
+              modules: {
+                ...current.modules,
+                [moduleType]: {
+                  ...current.modules[moduleType],
+                  ...failedModuleSummary,
+                },
+              },
+            }
+          : current
+      );
+
+      if (moduleType === "overview") {
+        setOverviewModule((current) => ({
+          ...(current || { projectId, moduleType: "overview" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      } else if (moduleType === "scopes") {
+        setScopesModule((current) => ({
+          ...(current || { projectId, moduleType: "scopes" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      } else if (moduleType === "verification") {
+        setVerificationModule((current) => ({
+          ...(current || { projectId, moduleType: "verification" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      } else if (moduleType === "safety") {
+        setSafetyModule((current) => ({
+          ...(current || { projectId, moduleType: "safety" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      } else if (moduleType === "conflicts") {
+        setConflictsModule((current) => ({
+          ...(current || { projectId, moduleType: "conflicts" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      } else if (moduleType === "rfi") {
+        setRfiModule((current) => ({
+          ...(current || { projectId, moduleType: "rfi" }),
+          status: "failed",
+          error: errorMessage,
+        }));
+      }
+
+      setActiveStep(null);
+      setShowProgressPanel(false);
+      setProgressPanelFading(false);
+    },
+    [projectId]
+  );
+
   useEffect(() => {
-    if (!projectId || !project || !nextStep || activeStep) {
+    if (!projectId || !project || !nextStep || activeStep || !user) {
       return;
     }
 
@@ -989,58 +1201,84 @@ export default function PlanAnalyzerRun() {
 
     const runStep = async () => {
       setActiveStep(nextStep);
+      let stepStartedAt = 0;
 
       try {
+        const token = await user.getIdToken();
+
         if (nextStep === "analyze") {
           await updateDoc(projectRef, { "modules.overview.status": "processing" });
         }
 
+        stepStartedAt = Date.now();
+        const abortController = new AbortController();
+        const timeoutHandle = window.setTimeout(
+          () => abortController.abort(),
+          PIPELINE_STEP_TIMEOUT_SECONDS[nextStep] * 1000 + PLAN_ANALYSIS_TIMEOUT_GRACE_MS
+        );
+
         const response = await fetch(
-          `${getFunctionsBaseUrl()}/${
-            nextStep === "analyze"
-              ? "analyzePlanFiles"
-              : nextStep === "generateScopes"
-                ? "generateScopes"
-                : nextStep === "generateVerification"
-                  ? "generateVerificationChecklist"
-                : nextStep === "analyzeSafety"
-                    ? "analyzeSafety"
-                    : nextStep === "detectConflicts"
-                      ? "detectConflicts"
-                      : "generateRFIs"
-          }`,
+          `${getFunctionsBaseUrl()}/${PIPELINE_STEP_ENDPOINTS[nextStep]}`,
           {
             method: "POST",
             headers: {
+              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(
-              nextStep === "analyze"
-                ? {
-                    projectId,
-                    fileUrl: project.uploadedFiles?.[0]?.downloadURL || "",
-                  }
-                : { projectId }
-            ),
+            body: JSON.stringify({ projectId }),
+            signal: abortController.signal,
           }
-        );
+        ).finally(() => {
+          window.clearTimeout(timeoutHandle);
+        });
 
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
-          throw new Error(
-            typeof payload?.error === "string"
-              ? payload.error
-              : `The ${nextStep} step failed.`
+          const processingError = new Error(
+            getFunctionResponseErrorMessage(nextStep, response.status, payload)
           );
+          (processingError as Error & { statusCode?: number }).statusCode = response.status;
+          throw processingError;
         }
       } catch (error) {
         console.error(`Plan analyzer step failed: ${nextStep}`, error);
+        const requestFailedBeforeResponse =
+          isFunctionRequestFailureError(error) || isAbortError(error);
+        const errorMessage =
+          requestFailedBeforeResponse && didStepReachTimeoutWindow(nextStep, stepStartedAt)
+            ? getFunctionTimeoutErrorMessage(nextStep)
+            : requestFailedBeforeResponse
+            ? getFunctionRequestFailureMessage(nextStep)
+            : error instanceof Error
+              ? error.message
+              : "A processing step failed for this project.";
+        const statusCode =
+          error instanceof Error
+            ? (error as Error & { statusCode?: number }).statusCode
+            : undefined;
+        const shouldMarkProjectFailed = ![401, 403, 409].includes(Number(statusCode));
+
+        if (projectId && shouldMarkProjectFailed) {
+          const failure = {
+            projectId,
+            moduleType: getModuleTypeForPipelineStep(nextStep),
+            error: errorMessage,
+          };
+
+          applyClientSideFailureState(failure.moduleType, errorMessage);
+
+          if (user) {
+            try {
+              await markPlanAnalysisFailed(failure);
+            } catch (markFailedError) {
+              console.error("Failed to release plan analysis quota after client-side processing failure:", markFailedError);
+            }
+          }
+        }
+
         toast({
           title: "Project processing failed",
-          description:
-            error instanceof Error
-              ? error.message
-              : "A processing step failed for this project.",
+          description: PLAN_ANALYSIS_SUPPORT_MESSAGE,
           variant: "destructive",
         });
       } finally {
@@ -1049,7 +1287,7 @@ export default function PlanAnalyzerRun() {
     };
 
     void runStep();
-  }, [activeStep, nextStep, project, projectId, toast]);
+  }, [activeStep, applyClientSideFailureState, markPlanAnalysisFailed, nextStep, project, projectId, toast, user]);
 
   const openScopeModal = (tradeKey: string, label: string) => {
     const items = Array.isArray(scopeResult?.[tradeKey]) ? scopeResult[tradeKey] : [];
@@ -1397,6 +1635,7 @@ export default function PlanAnalyzerRun() {
         <div className="plan-analysis-card">
           <span className="plan-summary-label">Latest error</span>
           <p className="plan-analysis-copy">{failedStepError}</p>
+          <p className="plan-analysis-copy">{PLAN_ANALYSIS_SUPPORT_MESSAGE}</p>
         </div>
       ) : null}
 
@@ -2196,34 +2435,40 @@ export default function PlanAnalyzerRun() {
             </p>
           </div>
 
-          {shouldRenderProgressPanel ? (
-            <div className={`plan-analyzer-progress-row${progressPanelFading ? " plan-analyzer-progress-row-fade" : ""}`}>
+          {shouldRenderStatusRow ? (
+            <div
+              className={`plan-analyzer-progress-row${progressPanelFading ? " plan-analyzer-progress-row-fade" : ""}${
+                hasFailed ? " plan-analyzer-progress-row-status-only" : ""
+              }`}
+            >
               <div className="plan-analyzer-status">
                 <span className="plan-summary-label">Status</span>
                 <strong className="plan-summary-value">{getStatusValue(project)}</strong>
               </div>
 
-              <div className="plan-progress-panel plan-progress-panel-header">
-                <div className="plan-progress-heading">
-                  <div>
-                    <div className="plan-progress-status-row">
-                      <p className="plan-progress-label">Processing Progress</p>
-                      <span className="plan-progress-dots" aria-hidden="true">
-                        <span />
-                        <span />
-                        <span />
-                      </span>
+              {shouldRenderProgressPanel ? (
+                <div className="plan-progress-panel plan-progress-panel-header">
+                  <div className="plan-progress-heading">
+                    <div>
+                      <div className="plan-progress-status-row">
+                        <p className="plan-progress-label">Processing Progress</p>
+                        <span className="plan-progress-dots" aria-hidden="true">
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                      </div>
+                      <p className="plan-progress-copy">{getProcessingCopy(activeStep, project)}</p>
                     </div>
-                    <p className="plan-progress-copy">{getProcessingCopy(activeStep, project)}</p>
+                    <span className="plan-progress-value">{Math.round(visibleProgress)}%</span>
                   </div>
-                  <span className="plan-progress-value">{Math.round(visibleProgress)}%</span>
-                </div>
 
-                <Progress
-                  value={visibleProgress}
-                  className="plan-progress-bar plan-progress-bar-animated plan-progress-bar-solid-track"
-                />
-              </div>
+                  <Progress
+                    value={visibleProgress}
+                    className="plan-progress-bar plan-progress-bar-animated plan-progress-bar-solid-track"
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
 

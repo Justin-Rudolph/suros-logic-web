@@ -16,12 +16,20 @@ const {
   sumUsage,
   uniqueStrings,
 } = require("./lib/planAnalyzerContext");
+const {
+  assertPlanAnalysisCanProcess,
+  markPlanAnalysisFailed,
+  shouldReleasePlanAnalysisReservationAfterError,
+  shouldSkipPlanAnalysisFailureMutation,
+  verifyPlanProjectOwner,
+} = require("./lib/planAnalyzerQuota");
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
 const firestore = admin.firestore();
+const storage = admin.storage();
 
 const DISCIPLINE_CODES = ["A", "S", "M", "E", "P", "C", "L", "T", "F", "FP", "R", "I", "G"];
 const MAX_SUMMARY_CHUNK_LENGTH = 75000;
@@ -213,16 +221,22 @@ const detectRevisionDate = (lines, rawText) => {
   return anyDateMatch ? parseDate(anyDateMatch[1]) : null;
 };
 
-const downloadFile = async (fileUrl) => {
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(`Unable to download file: ${response.status} ${response.statusText}`);
+const downloadUploadedPlanFile = async (uploadedFile) => {
+  if (!uploadedFile?.storagePath) {
+    const error = new Error("Uploaded file storage path is missing.");
+    error.statusCode = 400;
+    throw error;
   }
 
-  const arrayBuffer = await response.arrayBuffer();
+  const storageFile = storage.bucket().file(uploadedFile.storagePath);
+  const [[buffer], [metadata]] = await Promise.all([
+    storageFile.download(),
+    storageFile.getMetadata(),
+  ]);
+
   return {
-    buffer: Buffer.from(arrayBuffer),
-    contentType: response.headers.get("content-type") || "",
+    buffer,
+    contentType: metadata.contentType || uploadedFile.type || "",
   };
 };
 
@@ -510,9 +524,10 @@ Return exactly:
   };
 };
 
-const analyzeSingleFile = async (fileUrl, index) => {
-  const { buffer, contentType } = await downloadFile(fileUrl);
-  const fileName = getFileNameFromUrl(fileUrl, index);
+const analyzeSingleFile = async (uploadedFile, index) => {
+  const { buffer, contentType } = await downloadUploadedPlanFile(uploadedFile);
+  const fileName = uploadedFile.name || getFileNameFromUrl(uploadedFile.downloadURL || "", index);
+  const fileUrl = uploadedFile.downloadURL || "";
   const fileKind = detectFileKind(fileName, contentType);
 
   if (fileKind === "pdf") {
@@ -563,21 +578,19 @@ const analyzeSingleFile = async (fileUrl, index) => {
 module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) {
   const projectId = String(req.body?.projectId || "").trim();
   let fileErrors = [];
+  let uploadedFile = null;
 
   try {
-    const fileUrl =
-      typeof req.body?.fileUrl === "string" && req.body.fileUrl.trim()
-        ? req.body.fileUrl.trim()
-        : Array.isArray(req.body?.fileUrls)
-          ? String(req.body.fileUrls[0] || "").trim()
-          : "";
-
     if (!projectId) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    if (!fileUrl) {
-      return res.status(400).json({ error: "fileUrl is required." });
+    const { projectData } = await verifyPlanProjectOwner(firestore, req, projectId);
+    assertPlanAnalysisCanProcess(projectData);
+
+    uploadedFile = Array.isArray(projectData.uploadedFiles) ? projectData.uploadedFiles[0] : null;
+    if (!uploadedFile?.storagePath) {
+      return res.status(400).json({ error: "Uploaded file is missing for this plan analysis." });
     }
 
     const startedAt = FieldValue.serverTimestamp();
@@ -609,14 +622,14 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
     let analyzedFiles = [];
 
     try {
-      analyzedFiles = await analyzeSingleFile(fileUrl, 0);
+      analyzedFiles = await analyzeSingleFile(uploadedFile, 0);
     } catch (error) {
-      const fileName = getFileNameFromUrl(fileUrl, 0);
+      const fileName = uploadedFile?.name || getFileNameFromUrl(uploadedFile?.downloadURL || "", 0);
       console.error(`Plan analysis failed for ${fileName}:`, error);
       fileErrors = [
         {
           fileName,
-          fileUrl,
+          fileUrl: uploadedFile?.downloadURL || "",
           error: error instanceof Error ? error.message : "Unknown analysis error",
         },
       ];
@@ -627,6 +640,9 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
     }
 
     const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey);
+
+    const latestProjectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    assertPlanAnalysisCanProcess(latestProjectSnap.data() || {});
 
     await writeAnalyzedFiles({
       projectId,
@@ -690,7 +706,7 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
   } catch (error) {
     console.error("Plan file analysis failed:", error);
 
-    if (projectId) {
+    if (projectId && !shouldSkipPlanAnalysisFailureMutation(error)) {
       const completedAt = FieldValue.serverTimestamp();
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -720,9 +736,16 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
           { merge: true }
         ),
       ]);
+
     }
 
-    return res.status(500).json({
+    if (projectId && shouldReleasePlanAnalysisReservationAfterError(error)) {
+      await markPlanAnalysisFailed(firestore, projectId).catch((quotaError) => {
+        console.error("Failed to release plan analysis quota after analysis failure:", quotaError);
+      });
+    }
+
+    return res.status(error.statusCode || 500).json({
       error: "Failed to analyze plan file.",
       details: error instanceof Error ? error.message : "Unknown error",
       fileErrors,

@@ -63,6 +63,10 @@
   transition: opacity 0.8s ease;
 }
 
+.plan-analyzer-progress-row-status-only {
+  justify-content: center;
+}
+
 .plan-analyzer-progress-row-fade {
   opacity: 0;
 }

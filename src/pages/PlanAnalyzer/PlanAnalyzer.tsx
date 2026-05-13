@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import {
   collection,
-  deleteDoc,
-  getDocs,
   onSnapshot,
   query,
-  serverTimestamp,
-  setDoc,
   where,
-  doc,
 } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { FileImage, FileText, Loader2, Trash2, UploadCloud } from "lucide-react";
@@ -19,8 +14,10 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { firestore, storage } from "@/lib/firebase";
-import { PlanModuleSummary, PlanModuleStatus, UploadedPlanFile } from "@/models/PlanAnalyzerShared";
+import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+import { UploadedPlanFile } from "@/models/PlanAnalyzerShared";
 import { PlanProjectRecord } from "@/models/PlanProjects";
+import { PlanAnalyzerUsage } from "@/models/UserProfile";
 
 import "./PlanAnalyzer.css";
 
@@ -33,15 +30,7 @@ type AnalysisToggleKey = "verification" | "safety" | "conflicts" | "rfi";
 
 type AnalysisToggleState = Record<AnalysisToggleKey, boolean>;
 
-const buildPlanModuleSummary = (
-  projectId: string,
-  moduleType: "overview" | "scopes" | "verification" | "safety" | "conflicts" | "rfi",
-  status: PlanModuleStatus
-): PlanModuleSummary => ({
-  moduleType,
-  docPath: `planProjects/${projectId}/modules/${moduleType}`,
-  status,
-});
+const DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT = 3;
 
 const ACCEPTED_FILE_TYPES = [
   "application/pdf",
@@ -124,22 +113,43 @@ const isProjectFullyAnalyzed = (
 };
 
 const getProjectStatusLabel = (project: PlanProjectRecord) => {
+  if (project.status === "reserved_upload") return "Preparing Upload";
+  if (project.status === "failed") return "Analysis Failed";
   if (isProjectFullyAnalyzed(project)) return "Fully Analyzed";
   if (getModuleStatus(project, "rfi") === "processing") return "Generating RFIs";
+  if (getModuleStatus(project, "rfi") === "queued") return "RFI Queued";
   if (getModuleStatus(project, "conflicts") === "completed") return "Conflict Checked";
   if (getModuleStatus(project, "conflicts") === "processing") return "Detecting Conflicts";
+  if (getModuleStatus(project, "conflicts") === "queued") return "Conflicts Queued";
   if (getModuleStatus(project, "safety") === "completed") return "Safety Reviewed";
   if (getModuleStatus(project, "safety") === "processing") return "Analyzing Safety";
+  if (getModuleStatus(project, "safety") === "queued") return "Safety Queued";
   if (getModuleStatus(project, "verification") === "completed") return "Verified";
   if (getModuleStatus(project, "verification") === "processing") return "Generating Verification";
+  if (getModuleStatus(project, "verification") === "queued") return "Verification Queued";
   if (getModuleStatus(project, "scopes") === "completed") return "Scoped";
   if (getModuleStatus(project, "scopes") === "processing") return "Generating Scopes";
+  if (getModuleStatus(project, "scopes") === "queued") return "Scopes Queued";
   if (getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors") {
-    return "Analyzed";
+    return "Overview Analyzed";
   }
-  if (getOverviewStatus(project) === "processing") return "Analyzing";
+  if (getOverviewStatus(project) === "processing") return "Analyzing Overview";
+  if (getOverviewStatus(project) === "queued") return "Overview Queued";
   if (getOverviewStatus(project) === "failed") return "Analysis Failed";
-  return project.status === "uploaded" ? "Uploaded" : project.status || "Uploaded";
+  if (project.status === "uploaded") return "Uploaded";
+  if (project.status === "processing") return "Processing";
+  if (project.status === "completed") return "Fully Analyzed";
+  if (project.status === "completed_with_errors") return "Analyzed with Warnings";
+  return "Uploaded";
+};
+
+const getProjectFileCountLabel = (project: PlanProjectRecord) => {
+  if (project.status === "reserved_upload") {
+    return "Upload pending";
+  }
+
+  const fileCount = project.fileCount || project.uploadedFiles?.length || 0;
+  return `${fileCount} file${fileCount === 1 ? "" : "s"}`;
 };
 
 const getProjectTitle = (project: Pick<PlanProjectRecord, "title">) => {
@@ -177,11 +187,60 @@ const deletePlanUploadStorageObject = async (storagePath?: string) => {
   }
 };
 
+const getCurrentPlanAnalysisPeriodKey = () => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+
+  const year = parts.find((part) => part.type === "year")?.value || String(now.getFullYear());
+  const month =
+    parts.find((part) => part.type === "month")?.value ||
+    String(now.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+};
+
+const normalizePlanAnalyzerUsage = (usage?: PlanAnalyzerUsage | null): PlanAnalyzerUsage => {
+  const monthlyLimit = Number.isFinite(Number(usage?.monthlyLimit))
+    ? Math.max(Number(usage?.monthlyLimit), 0)
+    : DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  const periodKey = getCurrentPlanAnalysisPeriodKey();
+
+  if (usage?.periodKey !== periodKey) {
+    return {
+      monthlyLimit,
+      used: 0,
+      reserved: 0,
+      periodKey,
+    };
+  }
+
+  return {
+    monthlyLimit,
+    used: Math.max(Number(usage?.used) || 0, 0),
+    reserved: Math.max(Number(usage?.reserved) || 0, 0),
+    periodKey,
+  };
+};
+
+const getPlanAnalyzerRemaining = (usage: PlanAnalyzerUsage) =>
+  Math.max(usage.monthlyLimit - usage.used - usage.reserved, 0);
+
 export default function PlanAnalyzer() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const hasActiveSubscription = profile?.isSubscribed === true;
+  const planAnalyzerUsage = useMemo(
+    () => normalizePlanAnalyzerUsage(profile?.planAnalyzerUsage),
+    [profile?.planAnalyzerUsage]
+  );
+  const remainingPlanAnalyses = getPlanAnalyzerRemaining(planAnalyzerUsage);
+  const hasAvailablePlanAnalysis = remainingPlanAnalyses > 0;
+  const canUploadPlanAnalysis = hasActiveSubscription && hasAvailablePlanAnalysis;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -256,6 +315,15 @@ export default function PlanAnalyzer() {
       return;
     }
 
+    if (!hasAvailablePlanAnalysis) {
+      toast({
+        title: "Monthly analysis limit reached",
+        description: `You have used all ${planAnalyzerUsage.monthlyLimit} plan analyses for this month.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { validFiles, rejectedFiles } = validateFiles(incomingFiles);
 
     if (rejectedFiles.length > 0) {
@@ -293,7 +361,7 @@ export default function PlanAnalyzer() {
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!hasActiveSubscription) return;
+    if (!canUploadPlanAnalysis) return;
     setIsDragging(true);
   };
 
@@ -308,7 +376,7 @@ export default function PlanAnalyzer() {
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
-    if (!hasActiveSubscription) return;
+    if (!canUploadPlanAnalysis) return;
     addFiles(Array.from(event.dataTransfer.files || []));
   };
 
@@ -343,21 +411,9 @@ export default function PlanAnalyzer() {
     setIsDeletingProject(true);
 
     try {
-      const projectRef = doc(firestore, "planProjects", projectPendingDelete.id);
-      const projectFilesSnapshot = await getDocs(collection(projectRef, "files"));
-      const projectModulesSnapshot = await getDocs(collection(projectRef, "modules"));
-
-      await Promise.all(
-        (projectPendingDelete.uploadedFiles || []).map((file) =>
-          deletePlanUploadStorageObject(file.storagePath)
-        )
-      );
-
-      await Promise.all([
-        ...projectFilesSnapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)),
-        ...projectModulesSnapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)),
-        deleteDoc(projectRef),
-      ]);
+      await postPlanAnalysisRequest("deletePlanAnalysisProject", {
+        projectId: projectPendingDelete.id,
+      });
 
       setProjectPendingDelete(null);
       toast({
@@ -380,7 +436,7 @@ export default function PlanAnalyzer() {
   };
 
   const toggleAnalysisOption = (key: AnalysisToggleKey) => {
-    if (isUploading || !hasActiveSubscription) return;
+    if (isUploading || !canUploadPlanAnalysis) return;
 
     setAnalysisToggles((current) => ({
       ...current,
@@ -389,7 +445,7 @@ export default function PlanAnalyzer() {
   };
 
   const enableFullAnalysis = () => {
-    if (isUploading || !hasActiveSubscription) return;
+    if (isUploading || !canUploadPlanAnalysis) return;
 
     setAnalysisToggles({
       verification: true,
@@ -408,6 +464,33 @@ export default function PlanAnalyzer() {
     }, 180);
   };
 
+  const postPlanAnalysisRequest = async <ResponseBody,>(endpoint: string, body: Record<string, unknown>) => {
+    if (!user) {
+      throw new Error("Please sign in before uploading a plan file.");
+    }
+
+    const token = await user.getIdToken();
+    const response = await fetch(`${getFunctionsBaseUrl()}/${endpoint}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        typeof payload?.error === "string"
+          ? payload.error
+          : "There was a problem preparing your plan analysis."
+      );
+    }
+
+    return payload as ResponseBody;
+  };
+
   const startUpload = async () => {
     const trimmedProjectTitle = projectTitle.trim();
 
@@ -419,16 +502,24 @@ export default function PlanAnalyzer() {
       throw new Error("An active subscription is required to upload plan files.");
     }
 
+    if (!hasAvailablePlanAnalysis) {
+      throw new Error(`You have used all ${planAnalyzerUsage.monthlyLimit} plan analyses for this month.`);
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
+
+    let reservedProjectId = "";
+    let uploadedStoragePath = "";
 
     try {
       if (!selectedFile) {
         throw new Error("A single plan file is required before upload can begin.");
       }
 
-      const projectRef = doc(collection(firestore, "planProjects"));
-      const projectId = projectRef.id;
+      const reservation = await postPlanAnalysisRequest<{ projectId: string }>("reservePlanAnalysis", {});
+      const projectId = reservation.projectId;
+      reservedProjectId = projectId;
       const progressByFile = new Map<string, number>();
 
       const uploadedResult = await new Promise<UploadedPlanFile>((resolve, reject) => {
@@ -461,6 +552,7 @@ export default function PlanAnalyzer() {
           async () => {
             try {
               const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              uploadedStoragePath = storagePath;
               resolve({
                 name: selectedFile.name,
                 type: selectedFile.type,
@@ -475,79 +567,12 @@ export default function PlanAnalyzer() {
         );
       });
 
-      await setDoc(projectRef, {
-        userId: user.uid,
+      await postPlanAnalysisRequest("finalizePlanAnalysisUpload", {
         projectId,
         title: trimmedProjectTitle,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        fileCount: 1,
-        status: "uploaded",
-        uploadedFiles: [uploadedResult],
+        uploadedFile: uploadedResult,
         analysisOptions: analysisToggles,
-        modules: {
-          overview: buildPlanModuleSummary(projectId, "overview", "queued"),
-          scopes: buildPlanModuleSummary(projectId, "scopes", "queued"),
-          verification: buildPlanModuleSummary(
-            projectId,
-            "verification",
-            analysisToggles.verification ? "queued" : "skipped"
-          ),
-          safety: buildPlanModuleSummary(
-            projectId,
-            "safety",
-            analysisToggles.safety ? "queued" : "skipped"
-          ),
-          conflicts: buildPlanModuleSummary(
-            projectId,
-            "conflicts",
-            analysisToggles.conflicts ? "queued" : "skipped"
-          ),
-          rfi: buildPlanModuleSummary(
-            projectId,
-            "rfi",
-            analysisToggles.rfi ? "queued" : "skipped"
-          ),
-        },
       });
-
-      await Promise.all([
-        setDoc(doc(projectRef, "modules", "overview"), {
-          projectId,
-          moduleType: "overview",
-          status: "queued",
-        }),
-        setDoc(doc(projectRef, "modules", "scopes"), {
-          projectId,
-          moduleType: "scopes",
-          status: "queued",
-          favoriteItemIds: [],
-        }),
-        setDoc(doc(projectRef, "modules", "verification"), {
-          projectId,
-          moduleType: "verification",
-          status: analysisToggles.verification ? "queued" : "skipped",
-          favoriteItemIds: [],
-        }),
-        setDoc(doc(projectRef, "modules", "safety"), {
-          projectId,
-          moduleType: "safety",
-          status: analysisToggles.safety ? "queued" : "skipped",
-          favoriteItemIds: [],
-        }),
-        setDoc(doc(projectRef, "modules", "conflicts"), {
-          projectId,
-          moduleType: "conflicts",
-          status: analysisToggles.conflicts ? "queued" : "skipped",
-          favoriteItemIds: [],
-        }),
-        setDoc(doc(projectRef, "modules", "rfi"), {
-          projectId,
-          moduleType: "rfi",
-          status: analysisToggles.rfi ? "queued" : "skipped",
-          favoriteItemIds: [],
-        }),
-      ]);
 
       toast({
         title: "Plan file uploaded",
@@ -561,6 +586,21 @@ export default function PlanAnalyzer() {
       navigate(`/plan-analyzer/${projectId}`);
     } catch (error) {
       console.error("Plan upload failed:", error);
+
+      if (uploadedStoragePath) {
+        await deletePlanUploadStorageObject(uploadedStoragePath).catch((deleteError) => {
+          console.error("Failed to remove uploaded plan file after upload error:", deleteError);
+        });
+      }
+
+      if (reservedProjectId) {
+        await postPlanAnalysisRequest("cancelPlanAnalysisReservation", {
+          projectId: reservedProjectId,
+        }).catch((cancelError) => {
+          console.error("Failed to release plan analysis reservation after upload error:", cancelError);
+        });
+      }
+
       toast({
         title: "Upload failed",
         description:
@@ -590,6 +630,15 @@ export default function PlanAnalyzer() {
       toast({
         title: "Subscription required",
         description: "An active subscription is required to upload plan files.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!hasAvailablePlanAnalysis) {
+      toast({
+        title: "Monthly analysis limit reached",
+        description: `You have used all ${planAnalyzerUsage.monthlyLimit} plan analyses for this month.`,
         variant: "destructive",
       });
       return;
@@ -645,7 +694,16 @@ export default function PlanAnalyzer() {
                 Manage Subscription
               </Link>
             </div>
-          ) : null}
+          ) : (
+            <div className="plan-readonly-banner">
+              <div>
+                <span className="plan-summary-label">Monthly plan analyses</span>
+                <p className="plan-readonly-copy">
+                  {remainingPlanAnalyses} of {planAnalyzerUsage.monthlyLimit} analyses remaining this month.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div ref={titleFieldRef} className="plan-title-field">
             <label htmlFor="plan-project-title" className="plan-summary-label">
@@ -659,31 +717,33 @@ export default function PlanAnalyzer() {
               placeholder="Project Title..."
               value={projectTitle}
               onChange={(event) => setProjectTitle(event.target.value)}
-              disabled={isUploading || !hasActiveSubscription}
+              disabled={isUploading || !canUploadPlanAnalysis}
               required
             />
             <p className="plan-title-note">
-              {hasActiveSubscription
+              {canUploadPlanAnalysis
                 ? "This title will be used in your project list and processing view."
-                : "Upload controls are disabled while your subscription is inactive."}
+                : hasActiveSubscription
+                  ? "Upload controls are disabled until your monthly plan analysis limit resets."
+                  : "Upload controls are disabled while your subscription is inactive."}
             </p>
           </div>
 
           <div
-            className={`plan-dropzone${isDragging && hasActiveSubscription ? " plan-dropzone-active" : ""}${isUploading || !hasActiveSubscription ? " plan-dropzone-disabled" : ""}`}
+            className={`plan-dropzone${isDragging && canUploadPlanAnalysis ? " plan-dropzone-active" : ""}${isUploading || !canUploadPlanAnalysis ? " plan-dropzone-disabled" : ""}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => {
-              if (!isUploading && hasActiveSubscription) {
+              if (!isUploading && canUploadPlanAnalysis) {
                 fileInputRef.current?.click();
               }
             }}
             role="button"
-            tabIndex={hasActiveSubscription ? 0 : -1}
-            aria-disabled={!hasActiveSubscription}
+            tabIndex={canUploadPlanAnalysis ? 0 : -1}
+            aria-disabled={!canUploadPlanAnalysis}
             onKeyDown={(event) => {
-              if ((event.key === "Enter" || event.key === " ") && !isUploading && hasActiveSubscription) {
+              if ((event.key === "Enter" || event.key === " ") && !isUploading && canUploadPlanAnalysis) {
                 event.preventDefault();
                 fileInputRef.current?.click();
               }
@@ -695,7 +755,7 @@ export default function PlanAnalyzer() {
               accept=".pdf,image/*"
               className="plan-dropzone-input"
               onChange={handleFileInputChange}
-              disabled={!hasActiveSubscription}
+              disabled={!canUploadPlanAnalysis}
             />
 
             <div className="plan-dropzone-icon">
@@ -714,11 +774,11 @@ export default function PlanAnalyzer() {
               className="plan-dropzone-button"
               onClick={(event) => {
                 event.stopPropagation();
-                if (hasActiveSubscription) {
+                if (canUploadPlanAnalysis) {
                   fileInputRef.current?.click();
                 }
               }}
-              disabled={isUploading || !hasActiveSubscription}
+              disabled={isUploading || !canUploadPlanAnalysis}
             >
               Select File
             </Button>
@@ -754,7 +814,7 @@ export default function PlanAnalyzer() {
                         type="button"
                         className="plan-file-remove"
                         onClick={() => removeFile(selectedFile)}
-                        disabled={isUploading || !hasActiveSubscription}
+                        disabled={isUploading || !canUploadPlanAnalysis}
                       >
                         Remove
                       </button>
@@ -782,7 +842,7 @@ export default function PlanAnalyzer() {
                   Object.values(analysisToggles).every(Boolean) ? " plan-analysis-toggle-active" : ""
                 }`}
                 onClick={enableFullAnalysis}
-                disabled={isUploading || !hasActiveSubscription}
+                disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">Full Analysis</span>
                 <span className="plan-analysis-toggle-state">
@@ -794,7 +854,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.verification ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("verification")}
-                disabled={isUploading || !hasActiveSubscription}
+                disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">Verification</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.verification ? "On" : "Off"}</span>
@@ -804,7 +864,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.safety ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("safety")}
-                disabled={isUploading || !hasActiveSubscription}
+                disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">Safety</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.safety ? "On" : "Off"}</span>
@@ -814,7 +874,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.conflicts ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("conflicts")}
-                disabled={isUploading || !hasActiveSubscription}
+                disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">Conflicts</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.conflicts ? "On" : "Off"}</span>
@@ -824,7 +884,7 @@ export default function PlanAnalyzer() {
                 type="button"
                 className={`plan-analysis-toggle${analysisToggles.rfi ? " plan-analysis-toggle-active" : ""}`}
                 onClick={() => toggleAnalysisOption("rfi")}
-                disabled={isUploading || !hasActiveSubscription}
+                disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">RFI Package</span>
                 <span className="plan-analysis-toggle-state">{analysisToggles.rfi ? "On" : "Off"}</span>
@@ -885,7 +945,7 @@ export default function PlanAnalyzer() {
               type="button"
               variant="outline"
               onClick={clearSelection}
-              disabled={isUploading || !hasActiveSubscription}
+              disabled={isUploading || !canUploadPlanAnalysis}
             >
               Clear Selection
             </Button>
@@ -893,7 +953,7 @@ export default function PlanAnalyzer() {
             <Button
               type="button"
               onClick={handleUpload}
-              disabled={isUploading || !selectedFile || !hasActiveSubscription}
+              disabled={isUploading || !selectedFile || !canUploadPlanAnalysis}
             >
               {isUploading ? (
                 <>
@@ -926,10 +986,7 @@ export default function PlanAnalyzer() {
 
                     <div className="plan-project-meta">
                       <span className="plan-project-status-pill">{getProjectStatusLabel(project)}</span>
-                      <span>
-                        {project.fileCount || project.uploadedFiles?.length || 0} file
-                        {(project.fileCount || project.uploadedFiles?.length || 0) === 1 ? "" : "s"}
-                      </span>
+                      <span>{getProjectFileCountLabel(project)}</span>
                       <span>{formatProjectTimestamp(project)}</span>
                     </div>
                   </div>

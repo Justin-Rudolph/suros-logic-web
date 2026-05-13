@@ -15,6 +15,14 @@ const {
   sumUsage,
   uniqueStrings,
 } = require("./lib/planAnalyzerContext");
+const {
+  assertPlanAnalysisCanProcess,
+  markPlanAnalysisCompleted,
+  markPlanAnalysisFailed,
+  shouldReleasePlanAnalysisReservationAfterError,
+  shouldSkipPlanAnalysisFailureMutation,
+  verifyPlanProjectOwner,
+} = require("./lib/planAnalyzerQuota");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -158,6 +166,9 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
+    const { projectData } = await verifyPlanProjectOwner(firestore, req, projectId);
+    assertPlanAnalysisCanProcess(projectData);
+
     const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "rfi"));
     const startedAt = FieldValue.serverTimestamp();
 
@@ -198,6 +209,7 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
     const completedAt = FieldValue.serverTimestamp();
 
     const projectSnap = await firestore.doc(`planProjects/${projectId}`).get();
+    assertPlanAnalysisCanProcess(projectSnap.data() || {});
     const nextProjectStatus = getProjectStatusAfterModuleUpdate(
       projectSnap.data() || {},
       "rfi",
@@ -230,6 +242,10 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
       ),
     ]);
 
+    if (nextProjectStatus === "completed") {
+      await markPlanAnalysisCompleted(firestore, projectId);
+    }
+
     return res.json({
       projectId,
       ...rfiPackage,
@@ -237,7 +253,7 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
   } catch (error) {
     console.error("RFI generation failed:", error);
 
-    if (projectId) {
+    if (projectId && !shouldSkipPlanAnalysisFailureMutation(error)) {
       const completedAt = FieldValue.serverTimestamp();
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       await Promise.all([
@@ -264,6 +280,13 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey) {
           { merge: true }
         ),
       ]);
+
+    }
+
+    if (projectId && shouldReleasePlanAnalysisReservationAfterError(error)) {
+      await markPlanAnalysisFailed(firestore, projectId).catch((quotaError) => {
+        console.error("Failed to release plan analysis quota after RFI failure:", quotaError);
+      });
     }
 
     return res.status(error.statusCode || 500).json({
