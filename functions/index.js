@@ -10,7 +10,7 @@ setGlobalOptions({ maxInstances: 10 });
 -------------------------------------------------- */
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
-const CONVERTAPI_SECRET = defineSecret("CONVERTAPI_SECRET");
+const API2PDF_API_KEY = defineSecret("API2PDF_API_KEY");
 
 const STRIPE_SECRET_KEY_LIVE = defineSecret("STRIPE_SECRET_KEY_LIVE");
 const STRIPE_WEBHOOK_SECRET_LIVE = defineSecret("STRIPE_WEBHOOK_SECRET_LIVE");
@@ -152,7 +152,7 @@ exports.formatPlanScopeSelectionsForBid = onRequest(
 
 exports.downloadBidFormProposalPdf = onRequest(
   {
-    secrets: [CONVERTAPI_SECRET],
+    secrets: [API2PDF_API_KEY],
     timeoutSeconds: 180,
   },
   async (req, res) => {
@@ -166,7 +166,7 @@ exports.downloadBidFormProposalPdf = onRequest(
       await downloadBidFormProposalPdfHandler(
         req,
         res,
-        CONVERTAPI_SECRET.value()
+        API2PDF_API_KEY.value()
       );
     });
   }

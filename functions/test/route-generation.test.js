@@ -7,6 +7,7 @@ const ROUTE_MODULES = {
   bidForm: "../routes/generateBidFormProposal",
   estimate: "../routes/generateEstimate",
   planScopeSelections: "../routes/formatPlanScopeSelectionsForBid",
+  downloadProposalPdf: "../routes/downloadBidFormProposalPdf",
 };
 
 const createMockResponse = () => {
@@ -426,6 +427,55 @@ test("formatPlanScopeSelectionsForBid falls back to normalized source lines when
       ]);
     }
   );
+});
+
+test("downloadBidFormProposalPdf sends HTML to API2PDF chrome endpoint", async () => {
+  const originalFetch = global.fetch;
+  let capturedUrl;
+  let capturedOptions;
+
+  global.fetch = async (url, options) => {
+    capturedUrl = url;
+    capturedOptions = options;
+
+    return {
+      ok: true,
+      json: async () => ({
+        Success: true,
+        FileUrl: "https://example.com/generated.pdf",
+      }),
+    };
+  };
+
+  try {
+    const handler = loadHandler("downloadProposalPdf");
+    const req = {
+      body: {
+        html: "<html><body>Proposal</body></html>",
+        fileName: "Invoice # 123",
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res, "api2pdf-key");
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.downloadUrl, "https://example.com/generated.pdf");
+    assert.equal(res.body.fileName, "Invoice-123.pdf");
+    assert.equal(capturedUrl, "https://v2.api2pdf.com/chrome/pdf/html");
+    assert.equal(capturedOptions.headers.Authorization, "api2pdf-key");
+
+    const payload = JSON.parse(capturedOptions.body);
+    assert.equal(payload.html, req.body.html);
+    assert.equal(payload.inline, false);
+    assert.equal(payload.fileName, "Invoice-123.pdf");
+    assert.equal(payload.options.width, "8.5in");
+    assert.equal(payload.options.height, "11in");
+    assert.equal(payload.options.printBackground, true);
+    assert.equal(payload.options.scale, 0.54);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("renderBidEditorHtml reflects 0 percent tax with N/A tax dollars", async () => {

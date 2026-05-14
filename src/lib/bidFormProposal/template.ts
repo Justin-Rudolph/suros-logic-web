@@ -163,6 +163,14 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
       page-break-inside: avoid;
       break-inside: avoid;
     }
+
+    .line-items-table thead {
+      display: table-header-group;
+    }
+
+    .line-items-table tfoot {
+      display: table-footer-group;
+    }
   </style>
 </head>
 
@@ -247,7 +255,7 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
 </h2>
 
 <!-- LINE ITEMS TABLE -->
-<table cellpadding="8" cellspacing="0" style="border:2px solid #2A3439; background:#ffffff; margin-top:10px;">
+<table class="line-items-table" cellpadding="8" cellspacing="0" style="border:2px solid #2A3439; background:#ffffff; margin-top:10px;">
   <thead>
     <tr style="background:#e3f2fd;">
       <th width="40" align="left">#</th>
@@ -255,6 +263,11 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
       <th width="160" align="right">Line Total</th>
     </tr>
   </thead>
+  <tfoot>
+    <tr>
+      <td colspan="3" style="padding:0; height:0; line-height:0; font-size:0; border-bottom:2px solid #2A3439;"></td>
+    </tr>
+  </tfoot>
   <tbody>
 
     ${buildLineItemsRows(document.line_items)}

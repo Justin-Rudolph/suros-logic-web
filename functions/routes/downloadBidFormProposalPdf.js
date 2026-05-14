@@ -1,14 +1,14 @@
 module.exports = async function downloadBidFormProposalPdfHandler(
   req,
   res,
-  CONVERTAPI_SECRET
+  API2PDF_API_KEY
 ) {
   try {
     const { html, fileName } = req.body || {};
 
-    if (!CONVERTAPI_SECRET) {
+    if (!API2PDF_API_KEY) {
       return res.status(500).json({
-        error: "CONVERTAPI_SECRET not found in environment",
+        error: "API2PDF_API_KEY not found in environment",
       });
     }
 
@@ -23,34 +23,29 @@ module.exports = async function downloadBidFormProposalPdfHandler(
       .replace(/[^a-zA-Z0-9-_]+/g, "-")
       .replace(/^-+|-+$/g, "") || "invoice";
 
+    const returnedFileName = `${safeFileName}.pdf`;
     const requestBody = {
-      Parameters: [
-        {
-          Name: "File",
-          FileValue: {
-            Name: `${safeFileName}.html`,
-            Data: Buffer.from(html, "utf8").toString("base64"),
-          },
-        },
-        { Name: "StoreFile", Value: true },
-        { Name: "PageSize", Value: "letter" },
-        { Name: "MarginTop", Value: 10 },
-        { Name: "MarginRight", Value: 10 },
-        { Name: "MarginBottom", Value: 10 },
-        { Name: "MarginLeft", Value: 10 },
-        { Name: "Background", Value: true },
-        { Name: "CssMediaType", Value: "screen" },
-        { Name: "ViewportWidth", Value: 1366 },
-        { Name: "ViewportHeight", Value: 1024 },
-      ],
+      html,
+      inline: false,
+      fileName: returnedFileName,
+      options: {
+        width: "8.5in",
+        height: "11in",
+        marginTop: "0.4in",
+        marginRight: "0.4in",
+        marginBottom: "0.4in",
+        marginLeft: "0.4in",
+        printBackground: true,
+        scale: 0.54,
+      },
     };
 
-    const convertResponse = await fetch(
-      "https://v2.convertapi.com/convert/html/to/pdf",
+    const apiResponse = await fetch(
+      "https://v2.api2pdf.com/chrome/pdf/html",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${CONVERTAPI_SECRET}`,
+          Authorization: API2PDF_API_KEY,
           Accept: "application/json",
           "Content-Type": "application/json",
         },
@@ -58,22 +53,21 @@ module.exports = async function downloadBidFormProposalPdfHandler(
       }
     );
 
-    if (!convertResponse.ok) {
-      const errorText = await convertResponse.text();
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
 
-      return res.status(convertResponse.status).json({
-        error: "ConvertAPI failed to generate PDF.",
+      return res.status(apiResponse.status).json({
+        error: "API2PDF failed to generate PDF.",
         details: errorText,
       });
     }
 
-    const data = await convertResponse.json();
-    const downloadUrl = data?.Files?.[0]?.Url || data?.Files?.[0]?.FileUrl;
-    const returnedFileName = data?.Files?.[0]?.FileName || `${safeFileName}.pdf`;
+    const data = await apiResponse.json();
+    const downloadUrl = data?.FileUrl;
 
-    if (!downloadUrl) {
+    if (!data?.Success || !downloadUrl) {
       return res.status(500).json({
-        error: "ConvertAPI did not return a downloadable PDF URL.",
+        error: data?.Error || "API2PDF did not return a downloadable PDF URL.",
         details: data,
       });
     }
