@@ -25,6 +25,7 @@ export type UserProfile = {
 
   // Billing / Stripe (READ-ONLY in UI)
   stripeCustomerId?: string;
+  stripeSubscriptionStatus?: string;
   isSubscribed?: boolean;
   planAnalyzerUsage?: PlanAnalyzerUsage;
 }

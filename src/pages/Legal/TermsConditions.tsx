@@ -1,8 +1,23 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "@/styles/gradients.css";
 
 export default function TermsConditions() {
     const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        window.scrollTo({ top: 0, left: 0 });
+    }, []);
+
+    const handleBack = () => {
+        if (location.state?.fromLanding === true) {
+            navigate(-1);
+            return;
+        }
+
+        navigate("/");
+    };
 
     return (
         <div className="suros-gradient min-h-screen w-full">
@@ -10,7 +25,7 @@ export default function TermsConditions() {
             {/* Logo */}
             <div className="flex items-center mb-10 px-6 pt-10">
                 <button
-                    onClick={() => navigate("/dashboard")}
+                    onClick={handleBack}
                     style={{
                         position: "fixed",
                         top: "20px",

@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 
 const DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT = 3;
+const TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT = 1;
 const PLAN_ANALYSIS_TIME_ZONE = "America/New_York";
 
 const getCurrentPlanAnalysisPeriodKey = (date = new Date()) => {
@@ -19,11 +20,24 @@ const getCurrentPlanAnalysisPeriodKey = (date = new Date()) => {
   return `${year}-${month}`;
 };
 
+const getPlanAnalyzerMonthlyLimit = (profile = {}) => {
+  if (profile.stripeSubscriptionStatus === "trialing") {
+    return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  }
+
+  if (profile.stripeSubscriptionStatus === "active") {
+    return DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  }
+
+  const usageLimit = Number(profile.planAnalyzerUsage?.monthlyLimit);
+  return Number.isFinite(usageLimit)
+    ? Math.max(usageLimit, 0)
+    : DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+};
+
 const normalizePlanAnalyzerUsage = (profile = {}, periodKey = getCurrentPlanAnalysisPeriodKey()) => {
   const usage = profile.planAnalyzerUsage || {};
-  const monthlyLimit = Number.isFinite(Number(usage.monthlyLimit))
-    ? Math.max(Number(usage.monthlyLimit), 0)
-    : DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  const monthlyLimit = getPlanAnalyzerMonthlyLimit(profile);
 
   if (usage.periodKey !== periodKey) {
     return {
@@ -239,8 +253,10 @@ const markPlanAnalysisFailed = async (firestore, projectId) => {
 
 module.exports = {
   DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT,
+  TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT,
   assertPlanAnalysisCanProcess,
   getCurrentPlanAnalysisPeriodKey,
+  getPlanAnalyzerMonthlyLimit,
   getPlanAnalyzerRemaining,
   markPlanAnalysisCompleted,
   markPlanAnalysisFailed,

@@ -17,7 +17,7 @@ import { firestore, storage } from "@/lib/firebase";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { UploadedPlanFile } from "@/models/PlanAnalyzerShared";
 import { PlanProjectRecord } from "@/models/PlanProjects";
-import { PlanAnalyzerUsage } from "@/models/UserProfile";
+import { PlanAnalyzerUsage, UserProfile } from "@/models/UserProfile";
 
 import "./PlanAnalyzer.css";
 
@@ -31,6 +31,7 @@ type AnalysisToggleKey = "verification" | "safety" | "conflicts" | "rfi";
 type AnalysisToggleState = Record<AnalysisToggleKey, boolean>;
 
 const DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT = 3;
+const TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT = 1;
 
 const ACCEPTED_FILE_TYPES = [
   "application/pdf",
@@ -203,10 +204,24 @@ const getCurrentPlanAnalysisPeriodKey = () => {
   return `${year}-${month}`;
 };
 
-const normalizePlanAnalyzerUsage = (usage?: PlanAnalyzerUsage | null): PlanAnalyzerUsage => {
-  const monthlyLimit = Number.isFinite(Number(usage?.monthlyLimit))
-    ? Math.max(Number(usage?.monthlyLimit), 0)
+const getPlanAnalyzerMonthlyLimit = (profile?: UserProfile | null) => {
+  if (profile?.stripeSubscriptionStatus === "trialing") {
+    return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  }
+
+  if (profile?.stripeSubscriptionStatus === "active") {
+    return DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+  }
+
+  const usageLimit = Number(profile?.planAnalyzerUsage?.monthlyLimit);
+  return Number.isFinite(usageLimit)
+    ? Math.max(usageLimit, 0)
     : DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+};
+
+const normalizePlanAnalyzerUsage = (profile?: UserProfile | null): PlanAnalyzerUsage => {
+  const usage = profile?.planAnalyzerUsage;
+  const monthlyLimit = getPlanAnalyzerMonthlyLimit(profile);
   const periodKey = getCurrentPlanAnalysisPeriodKey();
 
   if (usage?.periodKey !== periodKey) {
@@ -235,8 +250,8 @@ export default function PlanAnalyzer() {
   const navigate = useNavigate();
   const hasActiveSubscription = profile?.isSubscribed === true;
   const planAnalyzerUsage = useMemo(
-    () => normalizePlanAnalyzerUsage(profile?.planAnalyzerUsage),
-    [profile?.planAnalyzerUsage]
+    () => normalizePlanAnalyzerUsage(profile),
+    [profile]
   );
   const remainingPlanAnalyses = getPlanAnalyzerRemaining(planAnalyzerUsage);
   const hasAvailablePlanAnalysis = remainingPlanAnalyses > 0;
