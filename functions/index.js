@@ -280,7 +280,7 @@ exports.deletePlanAnalysisProject = onRequest(
 exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 420,
+    timeoutSeconds: 600,
     memory: "2GiB",
   },
   async (req, res) => {
@@ -326,7 +326,7 @@ exports.generateScopes = onRequest(
 exports.generateVerificationChecklist = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 600,
+    timeoutSeconds: 720,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -349,7 +349,7 @@ exports.generateVerificationChecklist = onRequest(
 exports.analyzeSafety = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 600,
+    timeoutSeconds: 720,
     memory: "1GiB",
   },
   async (req, res) => {
@@ -395,7 +395,7 @@ exports.detectConflicts = onRequest(
 exports.generateRFIs = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 900,
+    timeoutSeconds: 1080,
     memory: "1GiB",
   },
   async (req, res) => {

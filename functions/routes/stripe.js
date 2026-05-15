@@ -4,6 +4,10 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const { auth } = require("firebase-admin");
 const { Timestamp } = require("firebase-admin/firestore");
+const {
+  DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT,
+  TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT,
+} = require("./lib/planAnalyzerQuota");
 
 /* 🔥 FIX: prevent double initialization */
 if (!admin.apps.length) {
@@ -47,13 +51,12 @@ const BASE_URL = isEmulator
 
 const getPriceId = () => {
   return isEmulator
-    ? process.env.STRIPE_PRICE_ID_MONTHLY_TEST
-    : process.env.STRIPE_PRICE_ID_MONTHLY_LIVE;
+    ? process.env.STRIPE_PRICE_ID_MONTHLY_TEST_150
+    : process.env.STRIPE_PRICE_ID_MONTHLY_LIVE_150;
 };
 
 const QUICKSTART_TRIAL_DAYS = 30;
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
-const LANDING_PROMO_CODE = "SUROS50";
 
 /* ---------------------------------------------------------
    HELPER: RESET EMAIL
@@ -118,7 +121,13 @@ const getStripe = () => {
    HELPER: UPDATE SUBSCRIPTION
 --------------------------------------------------------- */
 
-const updateSubscriptionStatus = async (stripeCustomerId, isSubscribed) => {
+const getPlanAnalyzerLimitForSubscriptionStatus = (status) =>
+  status === "trialing"
+    ? TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT
+    : DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT;
+
+const updateSubscriptionStatus = async (stripeCustomerId, status) => {
+  const isSubscribed = ["active", "trialing"].includes(status);
   const usersRef = db.collection("users");
 
   const snap = await usersRef
@@ -128,7 +137,12 @@ const updateSubscriptionStatus = async (stripeCustomerId, isSubscribed) => {
 
   if (snap.empty) return;
 
-  await snap.docs[0].ref.update({ isSubscribed });
+  await snap.docs[0].ref.update({
+    isSubscribed,
+    stripeSubscriptionStatus: status,
+    "planAnalyzerUsage.monthlyLimit": getPlanAnalyzerLimitForSubscriptionStatus(status),
+    "planAnalyzerUsage.updatedAt": Timestamp.now(),
+  });
 };
 
 const getUserProfileByEmail = async (email) => {
@@ -149,20 +163,6 @@ const getUserProfileByEmail = async (email) => {
   };
 };
 
-const getPromotionCodeIdByCode = async (stripe, code) => {
-  const promotionCodes = await stripe.promotionCodes.list({
-    code,
-    active: true,
-    limit: 1,
-  });
-
-  if (!promotionCodes.data.length) {
-    return null;
-  }
-
-  return promotionCodes.data[0].id;
-};
-
 const getAuthUserByEmail = async (email) => {
   if (!email) return null;
 
@@ -174,6 +174,25 @@ const getAuthUserByEmail = async (email) => {
     }
 
     throw err;
+  }
+};
+
+const verifyFirebaseUser = async (req) => {
+  const authorization = String(req.headers.authorization || "");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (!match) {
+    const error = new Error("Authentication is required.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  try {
+    return await auth().verifyIdToken(match[1]);
+  } catch (err) {
+    const error = new Error("Authentication is invalid or expired.");
+    error.statusCode = 401;
+    throw error;
   }
 };
 
@@ -214,6 +233,12 @@ app.post(
           const stripeCustomerId = session.customer;
           if (!email || !stripeCustomerId) break;
 
+          let subscriptionStatus = "active";
+          if (session.subscription) {
+            const subscription = await stripe.subscriptions.retrieve(session.subscription);
+            subscriptionStatus = subscription.status;
+          }
+
           let userRecord;
           let isNewUser = false;
           let profileComplete = false;
@@ -232,7 +257,11 @@ app.post(
             uid: userRecord.uid,
             email,
             stripeCustomerId,
-            isSubscribed: true,
+            isSubscribed: ["active", "trialing"].includes(subscriptionStatus),
+            stripeSubscriptionStatus: subscriptionStatus,
+            planAnalyzerUsage: {
+              monthlyLimit: getPlanAnalyzerLimitForSubscriptionStatus(subscriptionStatus),
+            },
             profileComplete: profileComplete,
             justCreated: isNewUser,
           };
@@ -266,19 +295,21 @@ app.post(
 
         case "customer.subscription.updated": {
           const subscription = event.data.object;
-          const isSubscribed = ["active", "trialing"].includes(subscription.status);
-          await updateSubscriptionStatus(subscription.customer, isSubscribed);
+          await updateSubscriptionStatus(subscription.customer, subscription.status);
           break;
         }
 
         case "customer.subscription.deleted":
         case "invoice.payment_failed": {
-          await updateSubscriptionStatus(event.data.object.customer, false);
+          await updateSubscriptionStatus(event.data.object.customer, event.data.object.status || "inactive");
           break;
         }
 
         case "invoice.payment_succeeded": {
-          await updateSubscriptionStatus(event.data.object.customer, true);
+          if (event.data.object.subscription) {
+            const subscription = await stripe.subscriptions.retrieve(event.data.object.subscription);
+            await updateSubscriptionStatus(subscription.customer, subscription.status);
+          }
           break;
         }
       }
@@ -304,15 +335,19 @@ app.post("/checkout", async (req, res) => {
   try {
     const stripe = getStripe();
 
-    const { stripeCustomerId, email, uid, source } = req.body || {};
-    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const { email, source } = req.body || {};
+    let normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const isLandingCheckout = source === LANDING_CHECKOUT_SOURCE;
 
-    let customerId = stripeCustomerId || null;
+    let customerId = null;
+    let customerUid = "";
     let shouldApplyLandingTrial = false;
-    let landingPromotionCodeId = null;
 
-    if (isLandingCheckout && normalizedEmail) {
+    if (isLandingCheckout) {
+      if (!normalizedEmail) {
+        return res.status(400).json({ error: "Email is required." });
+      }
+
       const existingAuthUser = await getAuthUserByEmail(normalizedEmail);
       const existingUser = normalizedEmail
         ? await getUserProfileByEmail(normalizedEmail)
@@ -330,10 +365,17 @@ app.post("/checkout", async (req, res) => {
       }
 
       shouldApplyLandingTrial = true;
-      landingPromotionCodeId = await getPromotionCodeIdByCode(
-        stripe,
-        LANDING_PROMO_CODE
-      );
+    } else {
+      const decodedToken = await verifyFirebaseUser(req);
+      const userSnap = await db.collection("users").doc(decodedToken.uid).get();
+      const profile = userSnap.data() || {};
+
+      customerId = profile.stripeCustomerId || null;
+      customerUid = decodedToken.uid;
+      normalizedEmail =
+        typeof profile.email === "string" && profile.email.trim()
+          ? profile.email.trim().toLowerCase()
+          : decodedToken.email || "";
     }
 
     /* ---------------------------------------------------------
@@ -343,7 +385,7 @@ app.post("/checkout", async (req, res) => {
       const customer = await stripe.customers.create({
         email: normalizedEmail,
         metadata: {
-          uid: uid || "",
+          uid: customerUid,
         },
       });
 
@@ -370,18 +412,11 @@ app.post("/checkout", async (req, res) => {
           trial_period_days: QUICKSTART_TRIAL_DAYS,
         },
       }),
-      ...(landingPromotionCodeId && {
-        discounts: [
-          {
-            promotion_code: landingPromotionCodeId,
-          },
-        ],
-      }),
       metadata: {
         checkoutSource: source || "",
       },
 
-      ...(!landingPromotionCodeId && { allow_promotion_codes: true }),
+      allow_promotion_codes: true,
 
       success_url: `${BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${BASE_URL}/`,
@@ -402,7 +437,14 @@ app.post("/checkout", async (req, res) => {
 app.post("/portal", async (req, res) => {
   try {
     const stripe = getStripe();
+    const decodedToken = await verifyFirebaseUser(req);
     const { stripeCustomerId } = req.body;
+    const userSnap = await db.collection("users").doc(decodedToken.uid).get();
+    const profile = userSnap.data() || {};
+
+    if (!stripeCustomerId || profile.stripeCustomerId !== stripeCustomerId) {
+      return res.status(403).json({ error: "Billing portal access denied" });
+    }
 
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
@@ -412,7 +454,7 @@ app.post("/portal", async (req, res) => {
     res.json({ url: session.url });
   } catch (err) {
     console.error("Portal error:", err);
-    res.status(500).json({ error: "Portal failed" });
+    res.status(err.statusCode || 500).json({ error: "Portal failed" });
   }
 });
 
@@ -434,6 +476,14 @@ app.get("/session/:sessionId", async (req, res) => {
       return res.status(400).json({ error: "No email found" });
     }
 
+    let subscriptionStatus = null;
+    if (session.status === "complete" && session.subscription) {
+      const subscription = await stripe.subscriptions.retrieve(session.subscription);
+      subscriptionStatus = subscription.status;
+    } else if (session.status === "complete" && session.customer) {
+      subscriptionStatus = "active";
+    }
+
     const usersRef = db.collection("users");
 
     const snap = await usersRef
@@ -447,18 +497,23 @@ app.get("/session/:sessionId", async (req, res) => {
       const userDoc = snap.docs[0];
       justCreated = userDoc.data().justCreated === true;
 
-      if (session.status === "complete" && session.customer) {
+      if (session.status === "complete" && session.customer && subscriptionStatus) {
         await userDoc.ref.set(
           {
             stripeCustomerId: session.customer,
-            isSubscribed: true,
+            isSubscribed: ["active", "trialing"].includes(subscriptionStatus),
+            stripeSubscriptionStatus: subscriptionStatus,
+            planAnalyzerUsage: {
+              monthlyLimit: getPlanAnalyzerLimitForSubscriptionStatus(subscriptionStatus),
+              updatedAt: Timestamp.now(),
+            },
           },
           { merge: true }
         );
       }
     }
 
-    res.json({ email, justCreated });
+    res.json({ email, justCreated, stripeSubscriptionStatus: subscriptionStatus });
 
   } catch (err) {
     console.error("Session fetch error:", err);

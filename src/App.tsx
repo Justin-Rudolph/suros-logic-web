@@ -28,7 +28,6 @@ import TermsConditions from "./pages/Legal/TermsConditions";
 
 import ProjectFiles from "./pages/Bids/ProjectFiles";
 import MyBids from "./pages/Bids/MyBids";
-import PriceEstimator from "./components/PriceEstimator";
 import BidWorkspaceLayout from "./pages/Bids/BidWorkspaceLayout";
 import BidWorkspaceOverview from "./pages/Bids/BidWorkspaceOverview";
 import BidWorkspaceChangeOrders from "./pages/Bids/BidWorkspaceChangeOrders";
@@ -56,7 +55,6 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/estimate" element={<PriceEstimator />} />
 
             <Route path="/success" element={<PaymentSuccess />} />
             <Route path="/cancel" element={<PaymentFailure />} />

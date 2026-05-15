@@ -5,20 +5,18 @@ import "@/styles/gradients.css";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 export default function ManageSubscription() {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const navigate = useNavigate();
 
+    const hasStripeCustomer =
+        Boolean(profile?.stripeCustomerId) &&
+        profile?.stripeCustomerId?.trim() !== "";
+    const isTrialing = profile?.isSubscribed === true && profile?.stripeSubscriptionStatus === "trialing";
     const hasActiveSubscription =
         profile?.isSubscribed === true &&
-        profile?.stripeCustomerId &&
-        profile.stripeCustomerId.trim() !== "";
-
-    // ✅ NEW: Free trial state
-    const isFreeTrial =
-        profile?.isSubscribed === true &&
-        (!profile?.stripeCustomerId || profile.stripeCustomerId.trim() === "");
+        hasStripeCustomer;
 
     /* ----------------------------------------------------------
        OPEN STRIPE BILLING PORTAL (ACTIVE SUBS)
@@ -32,10 +30,18 @@ export default function ManageSubscription() {
         try {
             setLoading(true);
             setError("");
+            const token = await user?.getIdToken();
+
+            if (!token) {
+                throw new Error("Missing auth token");
+            }
 
             const res = await fetch(`${getFunctionsBaseUrl()}/stripe/portal`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
                 body: JSON.stringify({
                     stripeCustomerId: profile.stripeCustomerId,
                 }),
@@ -68,15 +74,19 @@ export default function ManageSubscription() {
         try {
             setLoading(true);
             setError("");
+            const token = await user?.getIdToken();
+
+            if (!token) {
+                throw new Error("Missing auth token");
+            }
 
             const res = await fetch(`${getFunctionsBaseUrl()}/stripe/checkout`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    email: profile?.email,
-                    uid: profile?.uid,
-                    stripeCustomerId: profile?.stripeCustomerId,
-                }),
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({}),
             });
 
             if (!res.ok) {
@@ -129,11 +139,11 @@ export default function ManageSubscription() {
                 </h1>
 
                 <p className="text-gray-600 mb-6">
-                    {hasActiveSubscription
+                    {isTrialing
+                        ? "You are currently on a free trial. Manage your subscription, payment method, and invoices."
+                        : hasActiveSubscription
                         ? "Manage your subscription, payment method, and invoices."
-                        : isFreeTrial
-                            ? "You are currently on a free trial."
-                            : "Your subscription is inactive. Start a new subscription below."}
+                        : "Your subscription is inactive. Start a new subscription below."}
                 </p>
 
                 {error && (
@@ -149,13 +159,10 @@ export default function ManageSubscription() {
                     >
                         {loading
                             ? "Opening Billing Portal..."
-                            : "Manage Subscription"}
+                            : isTrialing
+                                ? "Manage Trial"
+                                : "Manage Subscription"}
                     </button>
-                ) : isFreeTrial ? (
-                    /* ✅ FREE TRIAL (NO BUTTON) */
-                    <div className="w-full py-3 bg-green-600 text-white rounded-xl font-semibold">
-                        Free Trial Active
-                    </div>
                 ) : (
                     /* NO SUB */
                     <button

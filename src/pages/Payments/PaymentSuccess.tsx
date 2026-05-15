@@ -21,7 +21,10 @@ const PaymentSuccess = () => {
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState(false);
+  const [stripeSubscriptionStatus, setStripeSubscriptionStatus] = useState<string | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
   const [refreshingProfile, setRefreshingProfile] = useState(false);
+  const isTrialing = stripeSubscriptionStatus === "trialing";
 
   const refreshUntilSubscribed = useCallback(async () => {
     setRefreshingProfile(true);
@@ -55,6 +58,7 @@ const PaymentSuccess = () => {
     const fetchEmail = async () => {
       if (!sessionId) {
         setError("Missing checkout session.");
+        setLoadingSession(false);
         return;
       }
 
@@ -74,12 +78,15 @@ const PaymentSuccess = () => {
         setEmail(data.email);
         setEmailSent(true);
         setJustCreated(data.justCreated === true);
+        setStripeSubscriptionStatus(data.stripeSubscriptionStatus || null);
 
         await refreshUntilSubscribed();
 
       } catch (err) {
         console.error("Session fetch failed:", err);
         setError("Something went wrong. Please contact support.");
+      } finally {
+        setLoadingSession(false);
       }
     };
 
@@ -94,10 +101,20 @@ const PaymentSuccess = () => {
 
         <CheckCircle className="mx-auto text-primary" size={72} />
 
-        <h1 className="text-4xl font-bold">Payment Successful</h1>
+        <h1 className="text-4xl font-bold">
+          {loadingSession
+            ? "Confirming Checkout..."
+            : isTrialing
+              ? "Trial Started"
+              : "Payment Successful"}
+        </h1>
 
         <p className="text-muted-foreground text-lg">
-          Your subscription is active.
+          {loadingSession
+            ? "Hang tight while we confirm your subscription details."
+            : isTrialing
+              ? "Your 30-day free trial is active."
+              : "Your subscription is active."}
         </p>
 
         {justCreated && email && (
