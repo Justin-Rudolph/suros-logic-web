@@ -1,5 +1,11 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
+import {
+  initializeAnalytics,
+  isSupported,
+  logEvent,
+  type Analytics,
+} from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -20,6 +26,41 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+const isLocalHost =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+
+const analyticsPromise: Promise<Analytics | null> =
+  typeof window === "undefined" || isLocalHost || !firebaseConfig.measurementId
+    ? Promise.resolve(null)
+    : isSupported()
+        .then((supported) =>
+          supported
+            ? initializeAnalytics(app, {
+                config: {
+                  send_page_view: false,
+                },
+              })
+            : null
+        )
+        .catch(() => null);
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export const firestore = getFirestore(app);
+export const getFirebaseAnalytics = () => analyticsPromise;
+
+export const trackPageView = async (pagePath: string, pageTitle: string) => {
+  const analytics = await analyticsPromise;
+
+  if (!analytics) {
+    return;
+  }
+
+  logEvent(analytics, "page_view", {
+    page_path: pagePath,
+    page_location: `${window.location.origin}${pagePath}`,
+    page_title: pageTitle,
+  });
+};

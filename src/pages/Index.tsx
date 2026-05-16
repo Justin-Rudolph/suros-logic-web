@@ -13,6 +13,7 @@ import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 
 const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%204.14.26.mp4?alt=media&token=950c161a-e3ad-4413-8e34-757dcb59b667";
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
+const TRIAL_DIALOG_DRAFT_STORAGE_KEY = "suros-logic-trial-dialog-draft";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -22,6 +23,47 @@ const Index = () => {
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
   const [existingAccount, setExistingAccount] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+
+  useEffect(() => {
+    const savedDraft = window.localStorage.getItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
+    if (!savedDraft) return;
+
+    try {
+      const parsedDraft = JSON.parse(savedDraft) as {
+        checkoutEmail?: unknown;
+        legalAccepted?: unknown;
+        shouldReopen?: unknown;
+      };
+
+      if (typeof parsedDraft.checkoutEmail === "string") {
+        setCheckoutEmail(parsedDraft.checkoutEmail);
+      }
+
+      if (typeof parsedDraft.legalAccepted === "boolean") {
+        setLegalAccepted(parsedDraft.legalAccepted);
+      }
+
+      if (parsedDraft.shouldReopen === true) {
+        setIsTrialDialogOpen(true);
+      }
+    } catch {
+      window.localStorage.removeItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isTrialDialogOpen && !checkoutEmail && !legalAccepted) return;
+
+    window.localStorage.setItem(
+      TRIAL_DIALOG_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        checkoutEmail,
+        legalAccepted,
+        shouldReopen: isTrialDialogOpen,
+      })
+    );
+  }, [checkoutEmail, isTrialDialogOpen, legalAccepted]);
 
   // AUTO-REDIRECT IF LOGGED IN
   useEffect(() => {
@@ -46,6 +88,12 @@ const Index = () => {
     if (!isValidEmail) {
       setExistingAccount(false);
       setCheckoutError("Enter a valid email address.");
+      return;
+    }
+
+    if (!legalAccepted) {
+      setExistingAccount(false);
+      setCheckoutError("Please agree to the Terms and Privacy Policy to continue.");
       return;
     }
 
@@ -77,6 +125,7 @@ const Index = () => {
 
       const session = await response.json();
 
+      window.localStorage.removeItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
       window.location.href = session.url;
 
     } catch (err) {
@@ -230,17 +279,17 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Upload project drawings or plans
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Generate summaries, scopes, conflicts, and RFIs
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
+                        Generate summaries, trade scopes, safety risks, conflicts, and RFIs
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
-                        Use extracted scopes to start the bid, if available
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
+                        Use extracted scopes to start the bid
                       </div>
                     </div>
                   </div>
@@ -257,16 +306,16 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Company & Client Information
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Scope of Work for Each Trade (Plumbing, Drywall, etc.)
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Payment Terms & Timeline
                       </div>
                     </div>
@@ -284,20 +333,20 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Editable bid form and proposal tabs
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Clean documents with your project details
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Downloadable proposal files
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Professional, industry-standard language powered by AI
                       </div>
                     </div>
@@ -315,16 +364,16 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2 text-sm text-muted-foreground pl-[3.5rem]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Project status timeline from created to completed
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Linked change orders and change order proposals
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-secondary"></div>
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-secondary"></div>
                         Project files stored with the bid they belong to
                       </div>
                     </div>
@@ -582,7 +631,7 @@ const Index = () => {
                   <br />
                   50% off for life!
                 </div>
-                <h3 className="text-2xl font-bold text-primary">QuickStart Bid Templates</h3>
+                <h3 className="text-2xl font-bold text-primary">Quick Start Bid Bundle</h3>
                 <div className="space-y-2">
                   <div className="flex items-end gap-3">
                     <div className="text-2xl font-semibold text-muted-foreground line-through">$300/month</div>
@@ -630,7 +679,7 @@ const Index = () => {
                   </div>
                   <ul className="space-y-3">
                     {[
-                      "Everything from QuickStart subscription",
+                      "Everything from Quick Start subscription",
                       "Custom bid output templates that match your company's specific style and format",
                       "Tailored prompts for your trades & regions",
                       "Higher Plan Analysis quotas for uploading and analyzing more plan drawings",
@@ -706,6 +755,40 @@ const Index = () => {
             />
           </div>
 
+          <label className="flex items-start gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-border"
+              checked={legalAccepted}
+              onChange={(event) => {
+                setLegalAccepted(event.target.checked);
+                if (event.target.checked && checkoutError.includes("Terms")) {
+                  setCheckoutError("");
+                }
+              }}
+              disabled={isCheckoutLoading}
+            />
+            <span>
+              I agree to the{" "}
+              <Link
+                to="/terms"
+                state={{ fromLanding: true }}
+                className="underline underline-offset-4 hover:text-primary"
+              >
+                Terms and Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                to="/privacy"
+                state={{ fromLanding: true }}
+                className="underline underline-offset-4 hover:text-primary"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+
           {checkoutError && (
             <p className="text-sm text-red-500">{checkoutError}</p>
           )}
@@ -717,6 +800,9 @@ const Index = () => {
                 if (isCheckoutLoading) return;
                 setCheckoutError("");
                 setExistingAccount(false);
+                setLegalAccepted(false);
+                setCheckoutEmail("");
+                window.localStorage.removeItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
                 setIsTrialDialogOpen(false);
               }}
               disabled={isCheckoutLoading}

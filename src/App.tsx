@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -50,6 +51,7 @@ const App = () => (
 
       <AuthProvider>
         <BrowserRouter>
+          <AnalyticsTracker />
           <Routes>
             {/* PUBLIC ROUTES */}
             <Route path="/" element={<Index />} />
