@@ -23,7 +23,7 @@ It includes:
 - Firebase Functions v2 + Firebase Admin
 - Stripe API (subscriptions + billing portal + webhooks)
 - OpenAI API (estimate generation)
-- SendGrid (new-user password setup email)
+- Resend (password setup and reset emails)
 
 ---
 
@@ -107,7 +107,7 @@ Functions secrets/variables used by backend routes:
 OPENAI_API_KEY=
 STRIPE_SECRET_KEY_LIVE=
 STRIPE_WEBHOOK_SECRET_LIVE=
-SENDGRID_API_KEY=
+RESEND_API_KEY=
 
 # Optional local emulator/runtime vars used by Stripe route
 STRIPE_SECRET_KEY_TEST=

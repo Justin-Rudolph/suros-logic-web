@@ -4,6 +4,7 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const { auth } = require("firebase-admin");
 const { Timestamp } = require("firebase-admin/firestore");
+const { sendEmail } = require("./lib/resend");
 const {
   DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT,
   TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT,
@@ -22,26 +23,6 @@ app.use(cors());
 /* ---------------------------------------------------------
    ENVIRONMENT HELPERS
 --------------------------------------------------------- */
-
-const sgMail = require("@sendgrid/mail");
-
-let sendgridInitialized = false;
-
-const getSendGrid = () => {
-  if (!sendgridInitialized) {
-    const key = process.env.SENDGRID_API_KEY;
-
-    if (!key || !key.startsWith("SG.")) {
-      console.error("❌ Invalid SendGrid API key:", key);
-      throw new Error("Invalid SendGrid API key");
-    }
-
-    sgMail.setApiKey(key);
-    sendgridInitialized = true;
-  }
-
-  return sgMail;
-};
 
 const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
 
@@ -63,12 +44,9 @@ const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
 --------------------------------------------------------- */
 
 const sendResetEmail = async (toEmail, resetLink) => {
-  const msg = {
+  await sendEmail({
     to: toEmail,
-    from: {
-      email: "support@suroslogic.com",
-      name: "Suros Logic Support",
-    },
+    from: "Suros Logic Support <support@suroslogic.com>",
     subject: "Set your password - Suros Logic",
     html: `
       <div style="font-family: Arial; padding: 20px;">
@@ -90,9 +68,7 @@ const sendResetEmail = async (toEmail, resetLink) => {
         <p style="margin-top:20px;">If you didn’t request this, ignore this email.</p>
       </div>
     `,
-  };
-
-  await getSendGrid().send(msg);
+  });
 };
 
 /* ---------------------------------------------------------

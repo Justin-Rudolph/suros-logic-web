@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
-const sgMail = require("@sendgrid/mail");
+const { sendEmail } = require("./lib/resend");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -11,24 +11,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let sendgridInitialized = false;
-
-const getSendGrid = () => {
-  if (!sendgridInitialized) {
-    const key = process.env.SENDGRID_API_KEY;
-
-    if (!key || !key.startsWith("SG.")) {
-      console.error("❌ Invalid SendGrid API key:", key);
-      throw new Error("Invalid SendGrid API key");
-    }
-
-    sgMail.setApiKey(key);
-    sendgridInitialized = true;
-  }
-
-  return sgMail;
-};
-
 const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
 
 const BASE_URL = isEmulator
@@ -36,12 +18,9 @@ const BASE_URL = isEmulator
   : "https://suroslogic.com";
 
 const sendPasswordResetEmail = async (toEmail, resetLink) => {
-  const msg = {
+  await sendEmail({
     to: toEmail,
-    from: {
-      email: "support@suroslogic.com",
-      name: "Suros Logic Support",
-    },
+    from: "Suros Logic Support <support@suroslogic.com>",
     subject: "Reset your password - Suros Logic",
     html: `
       <div style="font-family: Arial; padding: 20px;">
@@ -63,9 +42,7 @@ const sendPasswordResetEmail = async (toEmail, resetLink) => {
         <p style="margin-top:20px;">If you didn’t request this, you can safely ignore this email.</p>
       </div>
     `,
-  };
-
-  await getSendGrid().send(msg);
+  });
 };
 
 app.post("/forgot-password", async (req, res) => {

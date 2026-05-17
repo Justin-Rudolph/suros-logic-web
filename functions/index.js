@@ -14,7 +14,7 @@ const API2PDF_API_KEY = defineSecret("API2PDF_API_KEY");
 
 const STRIPE_SECRET_KEY_LIVE = defineSecret("STRIPE_SECRET_KEY_LIVE");
 const STRIPE_WEBHOOK_SECRET_LIVE = defineSecret("STRIPE_WEBHOOK_SECRET_LIVE");
-const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
+const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 /* --------------------------------------------------
    GENERATE ESTIMATE
@@ -420,7 +420,7 @@ exports.stripe = onRequest(
     secrets: [
       STRIPE_SECRET_KEY_LIVE,
       STRIPE_WEBHOOK_SECRET_LIVE,
-      SENDGRID_API_KEY,
+      RESEND_API_KEY,
     ],
     timeoutSeconds: 180,
   },
@@ -436,7 +436,7 @@ exports.stripe = onRequest(
 
 exports.auth = onRequest(
   {
-    secrets: [SENDGRID_API_KEY],
+    secrets: [RESEND_API_KEY],
     timeoutSeconds: 90,
   },
   (req, res) => {
