@@ -97,24 +97,31 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
-VITE_API_URL=
+VITE_FUNCTIONS_BASE_URL=
 ```
 
-Functions secrets/variables used by backend routes:
+`VITE_FUNCTIONS_BASE_URL` is optional and only needed when overriding the
+default Functions URL derived from `VITE_FIREBASE_PROJECT_ID`.
+
+Backend routes read runtime secrets from Firebase Secret Manager. Create the same
+secret names in both Firebase projects, with dev/test values in `suros-logic-dev`
+and production values in `suros-logic`:
 
 ```bash
-# Firebase Secret Manager / function runtime secrets
+# Firebase Secret Manager names for both prod and dev projects
 OPENAI_API_KEY=
-STRIPE_SECRET_KEY_LIVE=
-STRIPE_WEBHOOK_SECRET_LIVE=
+API2PDF_API_KEY=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID_MONTHLY_150=
 RESEND_API_KEY=
 
-# Optional local emulator/runtime vars used by Stripe route
-STRIPE_SECRET_KEY_TEST=
-STRIPE_WEBHOOK_SECRET_TEST=
-STRIPE_PRICE_ID_MONTHLY_TEST=
-STRIPE_PRICE_ID_MONTHLY_LIVE=
+# Optional local emulator override
+APP_BASE_URL=
 ```
+
+`functions/.env` is optional and can be empty when these values are managed in
+Firebase Secret Manager.
 
 ## 4) Run frontend
 
@@ -132,7 +139,7 @@ In a separate terminal:
 cd functions
 npm run serve
 OR
-firebase emulators:start --only functions
+firebase emulators:start --only functions --project dev
 ```
 
 ## 5.1) Run Stripe webhook for testing (optional but recommended for backend work)
@@ -140,7 +147,7 @@ firebase emulators:start --only functions
 In a separate terminal:
 
 ```bash
-stripe listen --forward-to localhost:5001/suros-logic/us-central1/stripe/events
+stripe listen --forward-to localhost:5001/suros-logic-dev/us-central1/stripe/events
 ```
 
 ---
@@ -157,7 +164,7 @@ stripe listen --forward-to localhost:5001/suros-logic/us-central1/stripe/events
 
 ### Functions (`/functions/package.json`)
 
-- `npm run serve` — run Firebase emulators for functions
+- `npm run serve` — run Firebase emulators for functions using the dev project
 - `npm run deploy` — deploy functions
 - `npm run logs` — view functions logs
 
@@ -171,11 +178,18 @@ The repo is configured for Firebase Hosting + Functions.
 - `generateEstimate` is exposed as a function rewrite route.
 - Stripe endpoints are served from the `stripe` function.
 
-Typical deployment flow:
+Deploy to development:
+
+```bash
+npm run build:dev
+firebase deploy --project dev
+```
+
+Deploy to production:
 
 ```bash
 npm run build
-firebase deploy
+firebase deploy --project prod
 ```
 
 ---

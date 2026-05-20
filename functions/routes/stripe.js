@@ -5,6 +5,7 @@ const admin = require("firebase-admin");
 const { auth } = require("firebase-admin");
 const { Timestamp } = require("firebase-admin/firestore");
 const { sendEmail } = require("./lib/resend");
+const { getAppBaseUrl, getEnvironmentValue, isDevProject } = require("./lib/runtimeEnv");
 const {
   DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT,
   TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT,
@@ -25,15 +26,12 @@ app.use(cors());
 --------------------------------------------------------- */
 
 const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
+const isDevEnvironment = isEmulator || isDevProject();
 
-const BASE_URL = isEmulator
-  ? "http://localhost:5173"
-  : "https://suroslogic.com";
+const BASE_URL = getAppBaseUrl();
 
 const getPriceId = () => {
-  return isEmulator
-    ? process.env.STRIPE_PRICE_ID_MONTHLY_TEST_150
-    : process.env.STRIPE_PRICE_ID_MONTHLY_LIVE_150;
+  return process.env.STRIPE_PRICE_ID_MONTHLY_150;
 };
 
 const QUICKSTART_TRIAL_DAYS = 30;
@@ -76,19 +74,13 @@ const sendResetEmail = async (toEmail, resetLink) => {
 --------------------------------------------------------- */
 
 const getStripe = () => {
-  let key;
-
-  if (isEmulator) {
-    key = process.env.STRIPE_SECRET_KEY_TEST;
-  } else {
-    key = process.env.STRIPE_SECRET_KEY_LIVE;
-  }
+  const key = getEnvironmentValue("STRIPE_SECRET_KEY");
 
   if (!key) {
     throw new Error("Missing Stripe secret key");
   }
 
-  console.log("Stripe mode:", isEmulator ? "TEST" : "LIVE");
+  console.log("Stripe mode:", isDevEnvironment ? "TEST" : "LIVE");
 
   return new Stripe(key);
 };
@@ -186,9 +178,7 @@ app.post(
     let event;
 
     try {
-      const webhookSecret = isEmulator
-        ? process.env.STRIPE_WEBHOOK_SECRET_TEST
-        : process.env.STRIPE_WEBHOOK_SECRET_LIVE;
+      const webhookSecret = getEnvironmentValue("STRIPE_WEBHOOK_SECRET");
 
       event = stripe.webhooks.constructEvent(
         req.rawBody,

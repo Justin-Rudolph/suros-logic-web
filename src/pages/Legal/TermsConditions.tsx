@@ -215,7 +215,7 @@ export default function TermsConditions() {
           <li>Google Firebase, Google Cloud, and Google Analytics for hosting, authentication, database, storage, cloud functions, usage measurement, and operational analytics;</li>
           <li>OpenAI API services for AI-assisted processing and generation;</li>
           <li>Stripe for checkout, subscription billing, payment processing, and billing portal tools;</li>
-          <li>Twilio SendGrid for transactional email, account, support, and billing-related communications;</li>
+          <li>Resend for transactional email, account, support, and billing-related communications;</li>
           <li>API2PDF for converting HTML-based proposal content into downloadable PDF files;</li>
           <li>Open-source or commercial libraries, including OCR, document parsing, UI, and application dependencies.</li>
         </ul>

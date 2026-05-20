@@ -141,7 +141,7 @@ export default function PrivacyPolicy() {
         <h3 className="text-lg font-semibold mt-4 mb-2">3.7 Information from Third Parties</h3>
         <p className="mb-4">
           We may receive information from service providers and partners, including Firebase/Google
-          authentication status, Stripe checkout and subscription events, Twilio SendGrid email
+          authentication status, Stripe checkout and subscription events, Resend email
           delivery information, support communications, fraud-prevention signals, and information
           you authorize others to provide to us.
         </p>
@@ -197,7 +197,7 @@ export default function PrivacyPolicy() {
           <li>Google Firebase and Google Cloud for hosting, authentication, Firestore database, Cloud Storage, Cloud Functions, Google Analytics, security, and operational logs;</li>
           <li>OpenAI API services for AI-assisted processing and generation;</li>
           <li>Stripe for payments, subscriptions, billing, taxes, fraud prevention, checkout, and billing portal services;</li>
-          <li>Twilio SendGrid for transactional email, password reset, account, billing, and support communications;</li>
+          <li>Resend for transactional email, password reset, account, billing, and support communications;</li>
           <li>API2PDF for PDF generation from HTML or proposal content;</li>
           <li>Open-source and commercial software libraries used to provide OCR, document parsing, UI components, routing, validation, and application infrastructure.</li>
         </ul>

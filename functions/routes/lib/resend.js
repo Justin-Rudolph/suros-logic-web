@@ -1,7 +1,8 @@
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
+const { getEnvironmentValue } = require("./runtimeEnv");
 
 const getResendApiKey = () => {
-  const key = process.env.RESEND_API_KEY;
+  const key = getEnvironmentValue("RESEND_API_KEY");
 
   if (!key) {
     throw new Error("Missing Resend API key");

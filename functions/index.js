@@ -11,9 +11,9 @@ setGlobalOptions({ maxInstances: 10 });
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const API2PDF_API_KEY = defineSecret("API2PDF_API_KEY");
-
-const STRIPE_SECRET_KEY_LIVE = defineSecret("STRIPE_SECRET_KEY_LIVE");
-const STRIPE_WEBHOOK_SECRET_LIVE = defineSecret("STRIPE_WEBHOOK_SECRET_LIVE");
+const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+const STRIPE_PRICE_ID_MONTHLY_150 = defineSecret("STRIPE_PRICE_ID_MONTHLY_150");
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 /* --------------------------------------------------
@@ -418,8 +418,9 @@ exports.generateRFIs = onRequest(
 exports.stripe = onRequest(
   {
     secrets: [
-      STRIPE_SECRET_KEY_LIVE,
-      STRIPE_WEBHOOK_SECRET_LIVE,
+      STRIPE_SECRET_KEY,
+      STRIPE_WEBHOOK_SECRET,
+      STRIPE_PRICE_ID_MONTHLY_150,
       RESEND_API_KEY,
     ],
     timeoutSeconds: 180,
