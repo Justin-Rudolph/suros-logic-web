@@ -98,10 +98,18 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 VITE_FUNCTIONS_BASE_URL=
+VITE_DEV_ACCESS_ALLOWED_EMAILS=
+VITE_DEV_ACCESS_HOSTS=
 ```
 
 `VITE_FUNCTIONS_BASE_URL` is optional and only needed when overriding the
 default Functions URL derived from `VITE_FIREBASE_PROJECT_ID`.
+
+`VITE_DEV_ACCESS_HOSTS` is the list of hostnames where the dev gate should run.
+For local and hosted dev testing, use a comma-separated list like
+`localhost,127.0.0.1,dev.suroslogic.com,suros-logic-dev.web.app,suros-logic-dev.firebaseapp.com`.
+`VITE_DEV_ACCESS_ALLOWED_EMAILS` is the dev tester allowlist; use a
+comma-separated list like `owner@example.com,tester@example.com`.
 
 Backend routes read runtime secrets from Firebase Secret Manager. Create the same
 secret names in both Firebase projects, with dev/test values in `suros-logic-dev`

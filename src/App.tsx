@@ -15,6 +15,7 @@ import TestBidForm from "./pages/Form/TestBidForm";
 import Login from "./pages/Auth/Login";
 
 import { AuthProvider } from "./context/AuthContext";
+import DevAccessGate from "./routes/DevAccessGate";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -52,11 +53,12 @@ const App = () => (
       <AuthProvider>
         <BrowserRouter>
           <AnalyticsTracker />
-          <Routes>
-            {/* PUBLIC ROUTES */}
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
+          <DevAccessGate>
+            <Routes>
+              {/* PUBLIC ROUTES */}
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
 
             <Route path="/success" element={<PaymentSuccess />} />
             <Route path="/cancel" element={<PaymentFailure />} />
@@ -230,8 +232,9 @@ const App = () => (
             />
 
             {/* 404 */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </DevAccessGate>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
