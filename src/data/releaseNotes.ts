@@ -2,6 +2,17 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.1.0",
+    date: "May 24, 2026",
+    highlights: [
+      "Improved Plan Analyzer support for scanned and image-based PDFs, so plans with little or no selectable text can still be reviewed.",
+      "Added smarter PDF handling that combines readable plan text with visual page review for more complete project summaries and scopes.",
+      "Improved large plan-set processing so text-rich PDFs can be analyzed more efficiently while still checking important visual pages.",
+      "Updated Plan Analyzer results to better understand visual details such as sheet titles, notes, schedules, callouts, and visible work items.",
+      "Improved error handling and processing visibility when an uploaded plan cannot be analyzed successfully.",
+    ],
+  },
+  {
     version: "v3.0.0",
     date: "April 30, 2026",
     highlights: [

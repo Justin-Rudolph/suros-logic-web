@@ -126,7 +126,8 @@ const generateChecklist = async (files, scopes, openAiApiKey) => {
         reasoningEffort: "medium",
         responseFormat: getChecklistResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
-Review one chunk of OCR-extracted plan text and the generated project scopes. Identify what
+Review one chunk of plan context and the generated project scopes. The context may include
+extracted text and visual PDF/page summaries. Identify what
 should be field-verified before pricing, ordering material, or committing to scope.
 
 Additional task rules:

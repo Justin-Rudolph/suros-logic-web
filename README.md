@@ -5,8 +5,9 @@ Suros Logic Web is a production React + Firebase application for contractors to 
 It includes:
 - A marketing/public site with Stripe checkout.
 - An authenticated dashboard and bid workflow.
+- A Plan Analyzer for PDF/image plan files, including hybrid text + vision analysis.
 - Firebase-backed profile + bid storage.
-- Firebase Cloud Functions for Stripe billing + AI estimate generation.
+- Firebase Cloud Functions for Stripe billing, AI estimate generation, and plan analysis.
 
 ---
 
@@ -22,7 +23,8 @@ It includes:
 - Node.js 20
 - Firebase Functions v2 + Firebase Admin
 - Stripe API (subscriptions + billing portal + webhooks)
-- OpenAI API (estimate generation)
+- OpenAI API (estimate generation, plan analysis, scope extraction)
+- pdf-lib (temporary sampled PDFs for large plan analysis)
 - Resend (password setup and reset emails)
 
 ---
@@ -48,8 +50,41 @@ It includes:
 - **Protected dashboard** (`/dashboard`) for bid operations.
 - **Bid form** (`/form/bid_form`) with line items, pricing math, and submission webhook.
 - **Bid history + saved bids** (`/view-bids`, `/bids/history`) backed by Firestore.
+- **Plan Analyzer** (`/plan-analyzer`) for uploaded plan PDFs/images, overview generation, scopes, verification checklists, safety notes, conflicts, and RFIs.
 - **Billing management** (`/billing`) via Stripe customer portal.
 - **Legal pages** (`/privacy`, `/terms`).
+
+---
+
+## Plan Analyzer PDF Processing
+
+Uploaded PDFs are analyzed with a hybrid pipeline so scanned/image-based plans and normal text PDFs can both produce useful plan context.
+
+- Local text extraction runs first for every PDF page.
+- OpenAI vision analysis is required for PDF analysis and is used alongside extracted text.
+- Weak, mixed, scanned, or smaller PDFs use `pdf_hybrid_full`, which sends the full PDF to vision.
+- Large text-rich PDFs use `pdf_hybrid_sampled`, which creates a temporary PDF containing up to 15 selected pages, sends only that sampled PDF to vision, then maps the visual summaries back to the original page numbers.
+- All pages keep their extracted text. In sampled mode, selected pages also get visual analysis.
+- Image uploads use image OCR/visual fallback behavior instead of PDF sampling.
+
+Sampling is designed to reduce cost and latency without ignoring important visual context. The sampled pages include key boundary pages, pages with weak extracted text, and a spread across the rest of the document.
+
+The analysis method is saved on plan file records as `analysisMethod`, for example `pdf_hybrid_full`, `pdf_hybrid_sampled`, `image_ocr`, or `image_visual_fallback`. Existing Firestore records without this optional field still work.
+
+Useful backend logs:
+
+```text
+[analyzePlanFiles] Extraction method ... method=pdf_hybrid_full|pdf_hybrid_sampled ...
+[analyzePlanFilesHybrid] Token totals ...
+```
+
+If vision analysis fails, PDF analysis fails with an error like:
+
+```text
+Vision analysis failed for <file name>: <provider error>
+```
+
+That error is stored in Firestore under the plan project error fields and is surfaced in the frontend's Plan Analyzer run UI.
 
 ---
 
@@ -208,6 +243,7 @@ firebase deploy --project prod
 - Bid form submissions currently post to an external n8n webhook for document generation workflow.
 - Firestore data models live under `src/models`.
 - Auth + user profile bootstrapping logic lives in `src/context/AuthContext.tsx`.
+- Plan Analyzer high-accuracy routes currently use literal `gpt-5.2` model values for vision, overview, and scope generation instead of environment-variable model overrides.
 
 ---
 

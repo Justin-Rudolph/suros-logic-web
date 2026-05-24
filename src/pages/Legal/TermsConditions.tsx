@@ -47,7 +47,7 @@ export default function TermsConditions() {
         <h1 className="text-3xl font-bold mb-2">
           Terms & Conditions (Terms of Service) - Suros Logic Systems, LLC
         </h1>
-        <p className="text-sm text-gray-600 mb-8">Last updated: 05/16/2026</p>
+        <p className="text-sm text-gray-600 mb-8">Last updated: 05/24/2026</p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">1. Acceptance of Terms</h2>
         <p className="mb-4">
@@ -92,8 +92,8 @@ export default function TermsConditions() {
           The Service may process information you provide, including project notes, client
           information, plan files, uploaded documents, pricing context, trade information, scopes of
           work, and related materials. The Service may use proprietary prompts, templates, workflows,
-          formatting logic, OCR or document parsing, and third-party infrastructure or AI services
-          to generate, analyze, structure, or format content.
+          formatting logic, OCR, visual analysis, document parsing, and third-party infrastructure
+          or AI services to generate, analyze, structure, or format content.
         </p>
         <p className="mb-4">
           We may add, change, suspend, limit, or discontinue features at any time. We do not
@@ -178,12 +178,13 @@ export default function TermsConditions() {
           sensitive regulated data.
         </p>
 
-        <h2 className="text-xl font-semibold mt-6 mb-2">7. AI, OCR, Estimating, and Professional Review</h2>
+        <h2 className="text-xl font-semibold mt-6 mb-2">7. AI, OCR, Vision Analysis, Estimating, and Professional Review</h2>
         <p className="mb-4">
           The Service uses automation and AI-assisted processing. Outputs may include estimates,
-          pricing suggestions, scope language, summaries, plan observations, safety items, conflict
-          detection results, RFIs, proposal language, change-order language, verification lists, and
-          other project or document content ("Output").
+          pricing suggestions, scope language, summaries, text-based or image-based plan
+          observations, safety items, conflict detection results, RFIs, proposal language,
+          change-order language, verification lists, and other project or document content
+          ("Output").
         </p>
         <p className="mb-4">
           Output is provided only as a drafting, analysis, formatting, and workflow-support tool.
@@ -217,7 +218,7 @@ export default function TermsConditions() {
           <li>Stripe for checkout, subscription billing, payment processing, and billing portal tools;</li>
           <li>Resend for transactional email, account, support, and billing-related communications;</li>
           <li>API2PDF for converting HTML-based proposal content into downloadable PDF files;</li>
-          <li>Open-source or commercial libraries, including OCR, document parsing, UI, and application dependencies.</li>
+          <li>Open-source or commercial libraries, including OCR, visual analysis support, document parsing, UI, and application dependencies.</li>
         </ul>
         <p className="mb-4">
           Third-party terms, privacy policies, service limits, security practices, outages, changes,

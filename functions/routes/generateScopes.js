@@ -185,11 +185,12 @@ const generateTradeScopesFromPlans = async (files, openAiApiKey) => {
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: "gpt-5",
+        model: "gpt-5.2",
         reasoningEffort: "medium",
         responseFormat: getScopeResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
-Review one chunk of the OCR-extracted construction plan text and generate trade scopes 
+Review one chunk of construction plan context and generate trade scopes. The context may include
+OCR-extracted image text, PDF text extraction, and visual PDF/page summaries,
 written the way a contractor would prepare bid scope notes.
 
 Additional task rules:
@@ -219,7 +220,7 @@ ${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
 - Do not leave supported work unassigned just because it is indirect, note-based, or coordination-driven.
 - Include materials only as broad material categories, not exact quantities.
 - Use classification carefully:
-  confirmed = directly supported by extracted text.
+  confirmed = directly supported by extracted text or a visual page summary.
   inferred = reasonable scope implication, but not directly stated.
   unknown = scope appears possible but is not sufficiently supported.
 - Each item must be:
@@ -262,7 +263,7 @@ Return exactly this shape:
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: "gpt-5",
+    model: "gpt-5.2",
     reasoningEffort: "medium",
     responseFormat: getScopeResponseFormat(),
     systemPrompt: buildEstimatorSystemPrompt(`

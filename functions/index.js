@@ -3,7 +3,7 @@ const { setGlobalOptions } = require("firebase-functions/v2");
 const cors = require("cors");
 const { defineSecret } = require("firebase-functions/params");
 
-setGlobalOptions({ maxInstances: 10 });
+setGlobalOptions({ maxInstances: 10, invoker: "public" });
 
 /* --------------------------------------------------
    SECRETS (DEFINE HERE ONLY)
@@ -280,7 +280,7 @@ exports.deletePlanAnalysisProject = onRequest(
 exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 600,
+    timeoutSeconds: 1080,
     memory: "2GiB",
   },
   async (req, res) => {

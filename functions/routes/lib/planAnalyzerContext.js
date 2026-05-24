@@ -211,8 +211,12 @@ const normalizeUsage = (usage) => {
     return null;
   }
 
-  const inputTokens = Number(usage.prompt_tokens);
-  const outputTokens = Number(usage.completion_tokens);
+  const inputTokens = Number(
+    usage.prompt_tokens ?? usage.input_tokens
+  );
+  const outputTokens = Number(
+    usage.completion_tokens ?? usage.output_tokens
+  );
   const totalTokens = Number(usage.total_tokens);
 
   if (
@@ -399,6 +403,84 @@ const createJsonCompletion = async ({
   }
 };
 
+const convertChatResponseFormatForResponses = (responseFormat) => {
+  if (!responseFormat) return null;
+
+  if (responseFormat.type === "json_schema" && responseFormat.json_schema) {
+    return {
+      type: "json_schema",
+      ...responseFormat.json_schema,
+    };
+  }
+
+  return responseFormat;
+};
+
+const getResponseOutputText = (response) => {
+  if (typeof response?.output_text === "string") {
+    return response.output_text;
+  }
+
+  const output = Array.isArray(response?.output) ? response.output : [];
+  return output
+    .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+    .map((contentItem) => contentItem?.text || "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+};
+
+const modelSupportsResponsesReasoningEffort = (model) =>
+  /^gpt-5\b/i.test(String(model || "")) || /^o\d/i.test(String(model || ""));
+
+const createResponsesJsonCompletion = async ({
+  openai,
+  model,
+  reasoningEffort = "medium",
+  systemPrompt,
+  userContent,
+  responseFormat,
+}) => {
+  const payload = {
+    model,
+    input: [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
+      {
+        role: "user",
+        content: userContent,
+      },
+    ],
+  };
+
+  const textFormat = convertChatResponseFormatForResponses(responseFormat);
+  if (textFormat) {
+    payload.text = {
+      format: textFormat,
+    };
+  }
+
+  if (reasoningEffort && modelSupportsResponsesReasoningEffort(model)) {
+    payload.reasoning = {
+      effort: reasoningEffort,
+    };
+  }
+
+  const response = await openai.responses.create(payload);
+  const content = getResponseOutputText(response);
+
+  try {
+    return {
+      parsed: JSON.parse(content),
+      usage: response.usage || null,
+    };
+  } catch (error) {
+    throw new Error(`Invalid JSON returned from AI analysis: ${content || "empty response"}`);
+  }
+};
+
 const loadProjectPlanFiles = async (firestore, projectId) => {
   const fileSnapshot = await firestore.collection(`planProjects/${projectId}/files`).get();
 
@@ -472,6 +554,7 @@ module.exports = {
   DEFAULT_SECTION_SEPARATOR,
   buildScopeContext,
   createJsonCompletion,
+  createResponsesJsonCompletion,
   createPlanContextChunks,
   formatUsageMetrics,
   getChunkProcessingConcurrency,

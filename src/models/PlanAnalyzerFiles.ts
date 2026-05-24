@@ -7,6 +7,7 @@ export interface PlanProjectFileRecord {
   sourceFileName?: string;
   fileUrl?: string;
   fileKind?: string;
+  analysisMethod?: "pdf_hybrid_full" | "pdf_hybrid_sampled" | "pdf_hybrid" | "pdf_text_extraction" | "image_ocr" | "pdf_visual_fallback" | "image_visual_fallback" | string;
   contentType?: string;
   sourcePageNumber?: number;
   sourcePageCount?: number;

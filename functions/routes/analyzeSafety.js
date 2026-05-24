@@ -114,7 +114,7 @@ const generateSafetyAnalysis = async (files, openAiApiKey) => {
         reasoningEffort: "medium",
         responseFormat: getSafetyResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
-Analyze one chunk of OCR-extracted plan text for safety and code-risk items that should be reviewed before
+Analyze one chunk of plan context for safety and code-risk items that should be reviewed before
 construction, pricing, permitting, or bid submission.
 
 Focus only on:
@@ -133,7 +133,7 @@ Additional task rules:
 - Every returned item must have requiresReview set to true.
 - Severity must be one of: "low", "medium", "high", "critical".
 - Do not include generic safety boilerplate.
-- Do not cite code sections unless explicitly present in the extracted plan text.
+- Do not cite code sections unless explicitly present in the extracted text or visual page summary.
 
 Return exactly:
 {

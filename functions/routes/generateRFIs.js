@@ -91,7 +91,7 @@ const generateRfiPackage = async (files, openAiApiKey) => {
         reasoningEffort: "medium",
         responseFormat: getRfiResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
-Review one chunk of OCR-extracted plan text before bid submission and identify missing information, unclear
+Review one chunk of plan context before bid submission and identify missing information, unclear
 assemblies, incomplete details, and coordination risks that should affect bid qualifications.
 
 Additional task rules:
@@ -102,7 +102,7 @@ Additional task rules:
 - contingencyNotes should capture pricing or scope-risk qualifiers tied to missing, unclear, or unsupported information.
 - Focus on genuine plan gaps, not generic boilerplate.
 - Do not include assumptions that contradict the plans.
-- Do not create RFIs for items already clearly answered in the extracted text.
+- Do not create RFIs for items already clearly answered in the extracted text or visual page summary.
 
 Return exactly this JSON shape:
 {

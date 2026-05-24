@@ -47,7 +47,7 @@ export default function PrivacyPolicy() {
         <h1 className="text-3xl font-bold mb-2">
           Privacy Policy - Suros Logic Systems, LLC
         </h1>
-        <p className="text-sm text-gray-600 mb-8">Last updated: 05/16/2026</p>
+        <p className="text-sm text-gray-600 mb-8">Last updated: 05/24/2026</p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">1. Who We Are</h2>
         <p className="mb-4">
@@ -114,12 +114,13 @@ export default function PrivacyPolicy() {
           not intentionally store full payment card numbers on our own systems.
         </p>
 
-        <h3 className="text-lg font-semibold mt-4 mb-2">3.4 Files, OCR, and Generated Output</h3>
+        <h3 className="text-lg font-semibold mt-4 mb-2">3.4 Files, OCR, Visual Analysis, and Generated Output</h3>
         <p className="mb-4">
           If you upload files or generate documents, we may process file names, file types, file
-          sizes, storage paths, download URLs, extracted text, OCR output, AI prompts, AI responses,
-          generated proposal content, generated PDF requests, and related metadata needed to provide
-          the requested feature.
+          sizes, storage paths, download URLs, file contents, extracted text, OCR output, scanned
+          pages, images, visual observations from uploaded files, sampled PDF pages, AI prompts, AI
+          responses, generated proposal content, generated PDF requests, and related metadata needed
+          to provide the requested feature.
         </p>
 
         <h3 className="text-lg font-semibold mt-4 mb-2">3.5 Automatic, Device, and Usage Information</h3>
@@ -152,7 +153,7 @@ export default function PrivacyPolicy() {
           <li>Provide, operate, maintain, and personalize the Service;</li>
           <li>Create accounts, authenticate users, manage profiles, and protect access;</li>
           <li>Process checkout, subscriptions, invoices, billing status, cancellations, and payment-related support;</li>
-          <li>Upload, store, parse, OCR, analyze, summarize, structure, format, and generate project content;</li>
+          <li>Upload, store, parse, OCR, visually analyze, summarize, structure, format, and generate project content;</li>
           <li>Generate estimates, proposals, change orders, plan-analysis results, RFIs, safety reviews, conflict reports, and related outputs;</li>
           <li>Convert HTML or document content into downloadable PDF files when requested;</li>
           <li>Send password resets, transactional emails, account notices, product updates, and support messages;</li>
@@ -168,7 +169,9 @@ export default function PrivacyPolicy() {
           Some Service features use third-party AI infrastructure, including OpenAI API services, to
           process your inputs and generate or assist with outputs. Information sent for AI
           processing may include project notes, plan text, scopes, pricing context, uploaded-file
-          text, client or project details, and other Customer Data needed to fulfill your request.
+          text, uploaded PDFs or images, scanned plan pages, visual content from uploaded files,
+          sampled-page PDFs, client or project details, and other Customer Data needed to fulfill
+          your request.
         </p>
         <p className="mb-4">
           We use AI outputs as drafting and workflow support. You are responsible for reviewing and

@@ -123,7 +123,7 @@ const generateConflictAnalysis = async (files, openAiApiKey) => {
         reasoningEffort: "medium",
         responseFormat: getConflictResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
-Compare the OCR-extracted plan text inside this chunk and detect meaningful coordination
+Compare the plan context inside this chunk and detect meaningful coordination
 conflicts that could affect pricing, construction, trade coordination, materials, or change-
 order exposure.
 

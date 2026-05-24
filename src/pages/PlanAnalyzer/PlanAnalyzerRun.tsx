@@ -186,12 +186,12 @@ const PIPELINE_STEP_ENDPOINTS: Record<PipelineStep, string> = {
 };
 
 const PIPELINE_STEP_TIMEOUT_SECONDS: Record<PipelineStep, number> = {
-  analyze: 420,
+  analyze: 1080,
   generateScopes: 1200,
-  generateVerification: 600,
-  analyzeSafety: 600,
+  generateVerification: 720,
+  analyzeSafety: 720,
   detectConflicts: 720,
-  generateRFIs: 900,
+  generateRFIs: 1080,
 };
 
 type PlanAnalysisFailurePayload = {

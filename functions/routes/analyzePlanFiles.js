@@ -2,11 +2,13 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const pdfParse = require("pdf-parse");
+const { PDFDocument } = require("pdf-lib");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
   buildPlanModuleSummaryData,
   createJsonCompletion,
+  createResponsesJsonCompletion,
   createPlanContextChunks,
   getPlanModuleDocPath,
   logUsageTotals,
@@ -33,8 +35,13 @@ const storage = admin.storage();
 
 const DISCIPLINE_CODES = ["A", "S", "M", "E", "P", "C", "L", "T", "F", "FP", "R", "I", "G"];
 const MAX_SUMMARY_CHUNK_LENGTH = 75000;
-const MIN_PDF_TEXT_LENGTH = 80;
-const MIN_IMAGE_TEXT_LENGTH = 80;
+const MIN_PDF_TEXT_LENGTH = 800;
+const MIN_IMAGE_TEXT_LENGTH = 800;
+const PDF_VISION_FALLBACK_MIN_TEXT_LENGTH = 5000;
+const PDF_VISION_FALLBACK_MIN_AVG_PAGE_TEXT_LENGTH = 800;
+const PDF_VISION_FALLBACK_MIN_USEFUL_PAGE_RATIO = 0.85;
+const PDF_FULL_HYBRID_MAX_STRONG_TEXT_PAGES = 25;
+const PDF_SAMPLED_VISUAL_MAX_PAGES = 15;
 
 const getFileNameFromUrl = (fileUrl, index) => {
   try {
@@ -287,7 +294,428 @@ const extractImageText = async (buffer) => {
   return normalizeWhitespace(result?.data?.text || "");
 };
 
-const createPageEntry = ({ fileName, fileUrl, fileKind, rawText, sourcePageNumber, sourcePageCount }) => {
+const getImageMimeType = (fileName, contentType) => {
+  const normalizedType = String(contentType || "").toLowerCase();
+  if (/^image\/(png|jpe?g|webp|gif)$/.test(normalizedType)) {
+    return normalizedType === "image/jpg" ? "image/jpeg" : normalizedType;
+  }
+
+  const normalizedName = String(fileName || "").toLowerCase();
+  if (normalizedName.endsWith(".png")) return "image/png";
+  if (normalizedName.endsWith(".webp")) return "image/webp";
+  if (normalizedName.endsWith(".gif")) return "image/gif";
+  if (/\.(jpe?g)$/i.test(normalizedName)) return "image/jpeg";
+  return null;
+};
+
+const buildBase64FileDataUrl = (buffer, mimeType) =>
+  `data:${mimeType};base64,${buffer.toString("base64")}`;
+
+const createSampledPdfBuffer = async (buffer, selectedPageNumbers) => {
+  const sourcePdf = await PDFDocument.load(buffer);
+  const pageCount = sourcePdf.getPageCount();
+  const sourcePageIndexes = uniqueStrings(selectedPageNumbers)
+    .map((pageNumber) => Number(pageNumber))
+    .filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= pageCount)
+    .map((pageNumber) => pageNumber - 1);
+
+  if (!sourcePageIndexes.length) {
+    throw new Error("No valid PDF pages were selected for sampled visual analysis.");
+  }
+
+  const sampledPdf = await PDFDocument.create();
+  const copiedPages = await sampledPdf.copyPages(sourcePdf, sourcePageIndexes);
+  copiedPages.forEach((page) => sampledPdf.addPage(page));
+
+  return Buffer.from(await sampledPdf.save());
+};
+
+const createVisionAnalysisError = (fileName, error) => {
+  const detail = error instanceof Error ? error.message : "Unknown vision analysis error";
+  return new Error(`Vision analysis failed for ${fileName || "PDF file"}: ${detail}`);
+};
+
+const logPlanAnalysisMethod = ({ projectId, fileName, method, pageCount, reason = "" }) => {
+  console.log(
+    `[analyzePlanFiles] Extraction method | projectId=${projectId || "unknown"} | file="${fileName || "unknown"}" | method=${method} | pages=${pageCount || 0}${reason ? ` | reason=${reason}` : ""}`
+  );
+};
+
+const getPdfTextExtractionMetrics = (extracted) => {
+  const pageCount = Math.max(Number(extracted?.pageCount || 0), 1);
+  const rawTextLength = normalizeWhitespace(extracted?.rawText || "").length;
+  const averagePageTextLength = rawTextLength / pageCount;
+  const pages = Array.isArray(extracted?.pages) ? extracted.pages : [];
+  const pagesWithUsefulText = pages.filter(
+    (page) => normalizeWhitespace(page?.rawText || "").length >= MIN_PDF_TEXT_LENGTH
+  ).length;
+  const usefulPageRatio = pages.length ? pagesWithUsefulText / pages.length : 0;
+  const isWeak =
+    rawTextLength < PDF_VISION_FALLBACK_MIN_TEXT_LENGTH ||
+    averagePageTextLength < PDF_VISION_FALLBACK_MIN_AVG_PAGE_TEXT_LENGTH ||
+    usefulPageRatio < PDF_VISION_FALLBACK_MIN_USEFUL_PAGE_RATIO;
+
+  return {
+    pageCount,
+    rawTextLength,
+    averagePageTextLength,
+    pagesWithUsefulText,
+    usefulPageRatio,
+    isWeak,
+  };
+};
+
+const formatPdfTextQualityReason = (metrics) =>
+  [
+    `text_quality=${metrics.isWeak ? "weak" : "strong"}`,
+    `chars=${metrics.rawTextLength}`,
+    `avg_chars_per_page=${Math.round(metrics.averagePageTextLength)}`,
+    `useful_page_ratio=${metrics.usefulPageRatio.toFixed(2)}`,
+  ].join(" ");
+
+const selectPdfVisualSamplePages = (extracted, maxPages = PDF_SAMPLED_VISUAL_MAX_PAGES) => {
+  const metrics = getPdfTextExtractionMetrics(extracted);
+  const pageCount = metrics.pageCount;
+  const limit = Math.max(1, Math.min(Number(maxPages) || PDF_SAMPLED_VISUAL_MAX_PAGES, pageCount));
+  if (pageCount <= limit) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+
+  const pages = Array.isArray(extracted?.pages) ? extracted.pages : [];
+  const selected = new Set([1, pageCount]);
+  const addPage = (pageNumber) => {
+    const normalized = Number(pageNumber);
+    if (Number.isFinite(normalized) && normalized >= 1 && normalized <= pageCount) {
+      selected.add(normalized);
+    }
+  };
+
+  pages
+    .map((page, index) => ({
+      pageNumber: Number(page?.pageNumber || index + 1),
+      textLength: normalizeWhitespace(page?.rawText || "").length,
+    }))
+    .filter(
+      (page) =>
+        page.textLength < MIN_PDF_TEXT_LENGTH ||
+        page.textLength < metrics.averagePageTextLength * 0.25
+    )
+    .sort((left, right) => left.textLength - right.textLength)
+    .slice(0, Math.max(2, Math.floor(limit / 3)))
+    .forEach((page) => addPage(page.pageNumber));
+
+  for (let index = 1; selected.size < limit && index <= limit; index += 1) {
+    const pageNumber = Math.round(1 + ((pageCount - 1) * index) / limit);
+    addPage(pageNumber);
+  }
+
+  for (let pageNumber = 1; selected.size < limit && pageNumber <= pageCount; pageNumber += 1) {
+    addPage(pageNumber);
+  }
+
+  return Array.from(selected).sort((left, right) => left - right).slice(0, limit);
+};
+
+const choosePdfAnalysisMode = (extracted) => {
+  const metrics = getPdfTextExtractionMetrics(extracted);
+  if (metrics.isWeak) {
+    return {
+      method: "pdf_hybrid_full",
+      metrics,
+      selectedPageNumbers: null,
+      reason: formatPdfTextQualityReason(metrics),
+    };
+  }
+
+  if (metrics.pageCount <= PDF_FULL_HYBRID_MAX_STRONG_TEXT_PAGES) {
+    return {
+      method: "pdf_hybrid_full",
+      metrics,
+      selectedPageNumbers: null,
+      reason: `${formatPdfTextQualityReason(metrics)} page_count_within_full_hybrid_limit`,
+    };
+  }
+
+  const selectedPageNumbers = selectPdfVisualSamplePages(extracted);
+  return {
+    method: "pdf_hybrid_sampled",
+    metrics,
+    selectedPageNumbers,
+    reason: `${formatPdfTextQualityReason(metrics)} large_text_rich_pdf sampled_pages=${selectedPageNumbers.join(",")}`,
+  };
+};
+
+const buildVisualPageRawText = (page, fileName, sourceKind) => {
+  const visibleText = normalizeWhitespace(page?.visibleText || "");
+  const visualSummary = normalizeWhitespace(page?.visualSummary || "");
+  const notableWorkItems = uniqueStrings(page?.notableWorkItems);
+  const sheetNumber = String(page?.sheetNumber || "").trim();
+  const title = String(page?.title || "").trim();
+  const discipline = String(page?.discipline || "").trim();
+
+  return [
+    `VISUAL DOCUMENT ANALYSIS: ${fileName}`,
+    `SOURCE KIND: ${sourceKind}`,
+    sheetNumber ? `VISIBLE SHEET NUMBER: ${sheetNumber}` : "",
+    title ? `VISIBLE TITLE: ${title}` : "",
+    discipline ? `VISIBLE DISCIPLINE: ${discipline}` : "",
+    visibleText ? `VISIBLE TEXT:\n${visibleText}` : "",
+    visualSummary ? `VISUAL SUMMARY:\n${visualSummary}` : "",
+    notableWorkItems.length ? `NOTABLE WORK ITEMS:\n${notableWorkItems.map((item) => `- ${item}`).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+};
+
+const createVisualPageEntries = ({ fileName, fileUrl, fileKind, sourceKind, pages }) => {
+  const normalizedPages = Array.isArray(pages) ? pages : [];
+  const sourcePageCount = Math.max(normalizedPages.length, 1);
+
+  return normalizedPages
+    .map((page, index) => {
+      const pageNumber = Number(page?.pageNumber || index + 1);
+      const rawText = buildVisualPageRawText(page, fileName, sourceKind);
+      if (!rawText) return null;
+
+      return createPageEntry({
+        fileName,
+        fileUrl,
+        fileKind,
+        analysisMethod: sourceKind,
+        rawText,
+        sourcePageNumber: Number.isFinite(pageNumber) ? pageNumber : index + 1,
+        sourcePageCount,
+      });
+    })
+    .filter(Boolean);
+};
+
+const remapSampledVisualPages = (pages, originalPageNumbers) => {
+  if (!Array.isArray(originalPageNumbers) || !originalPageNumbers.length) {
+    return pages;
+  }
+
+  return (Array.isArray(pages) ? pages : []).map((page, index) => {
+    const sampledPageNumber = Number(page?.pageNumber || index + 1);
+    const originalPageNumber = originalPageNumbers[sampledPageNumber - 1] || originalPageNumbers[index];
+
+    return {
+      ...page,
+      pageNumber: Number(originalPageNumber || sampledPageNumber),
+    };
+  });
+};
+
+const buildHybridPageRawText = ({ fileName, extractedText, visualText }) =>
+  [
+    `HYBRID PDF ANALYSIS: ${fileName}`,
+    normalizeWhitespace(extractedText)
+      ? `LOCAL PDF TEXT EXTRACTION:\n${normalizeWhitespace(extractedText)}`
+      : "",
+    normalizeWhitespace(visualText)
+      ? `VISUAL PDF ANALYSIS:\n${normalizeWhitespace(visualText)}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+
+const createPdfHybridPageEntries = ({
+  fileName,
+  fileUrl,
+  fileKind,
+  analysisMethod,
+  extracted,
+  visualPages,
+}) => {
+  const extractedPages = Array.isArray(extracted?.pages) ? extracted.pages : [];
+  const sourcePageCount = Math.max(
+    Number(extracted?.pageCount || 0),
+    extractedPages.length,
+    Array.isArray(visualPages) ? visualPages.length : 0,
+    1
+  );
+  const extractedByPage = new Map(
+    extractedPages.map((page, index) => [
+      Number(page?.pageNumber || index + 1),
+      normalizeWhitespace(page?.rawText || ""),
+    ])
+  );
+  const visualByPage = new Map(
+    (Array.isArray(visualPages) ? visualPages : []).map((page, index) => [
+      Number(page?.sourcePageNumber || index + 1),
+      normalizeWhitespace(page?.rawText || ""),
+    ])
+  );
+  const pageNumbers = Array.from(
+    new Set([
+      ...Array.from({ length: sourcePageCount }, (_, index) => index + 1),
+      ...extractedByPage.keys(),
+      ...visualByPage.keys(),
+    ])
+  )
+    .filter((pageNumber) => Number.isFinite(pageNumber) && pageNumber > 0)
+    .sort((left, right) => left - right);
+
+  return pageNumbers
+    .map((pageNumber) => {
+      const rawText = buildHybridPageRawText({
+        fileName,
+        extractedText: extractedByPage.get(pageNumber) || "",
+        visualText: visualByPage.get(pageNumber) || "",
+      });
+
+      if (!rawText) return null;
+
+      return createPageEntry({
+        fileName,
+        fileUrl,
+        fileKind,
+        analysisMethod,
+        rawText,
+        sourcePageNumber: pageNumber,
+        sourcePageCount,
+      });
+    })
+    .filter(Boolean);
+};
+
+const analyzeVisualDocument = async ({
+  buffer,
+  contentType,
+  fileName,
+  fileUrl,
+  fileKind,
+  openai,
+  originalPageNumbers = null,
+}) => {
+  if (!openai) {
+    throw new Error("OPENAI_API_KEY not found in environment");
+  }
+
+  const isPdf = fileKind === "pdf";
+  const imageMimeType = isPdf ? "" : getImageMimeType(fileName, contentType);
+  if (!isPdf && !imageMimeType) {
+    throw new Error("Visual image analysis supports PNG, JPEG, WEBP, and non-animated GIF files.");
+  }
+
+  const fileInput = isPdf
+    ? {
+        type: "input_file",
+        filename: fileName,
+        file_data: buildBase64FileDataUrl(buffer, "application/pdf"),
+      }
+    : {
+        type: "input_image",
+        image_url: buildBase64FileDataUrl(buffer, imageMimeType),
+      };
+
+  const isSampledPdf = isPdf && Array.isArray(originalPageNumbers) && originalPageNumbers.length > 0;
+  const selectedPageInstruction = isSampledPdf
+    ? `This PDF contains only sampled pages from the original PDF. Analyze every page in this sampled PDF. The sampled-page to original-page mapping is: ${originalPageNumbers.map((pageNumber, index) => `sample page ${index + 1} = original page ${pageNumber}`).join("; ")}. Return pageNumber using the sampled PDF page number.`
+    : "Create one page entry per visible page when possible.";
+
+  const { parsed, usage } = await createResponsesJsonCompletion({
+    openai,
+    model: "gpt-5.2",
+    reasoningEffort: "medium",
+    responseFormat: {
+      type: "json_schema",
+      json_schema: {
+        name: "visual_plan_file_analysis",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            pages: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  pageNumber: { type: "integer" },
+                  sheetNumber: { type: "string" },
+                  title: { type: "string" },
+                  discipline: { type: "string" },
+                  visibleText: { type: "string" },
+                  visualSummary: { type: "string" },
+                  notableWorkItems: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                },
+                required: [
+                  "pageNumber",
+                  "sheetNumber",
+                  "title",
+                  "discipline",
+                  "visibleText",
+                  "visualSummary",
+                  "notableWorkItems",
+                ],
+              },
+            },
+          },
+          required: ["pages"],
+        },
+      },
+    },
+    systemPrompt: buildEstimatorSystemPrompt(`
+Analyze uploaded construction plan files visually. This visual analysis is combined with local text extraction for
+PDFs and used as a fallback for image uploads when ordinary OCR is too weak.
+
+Additional task rules:
+- Inspect the page image(s), title blocks, notes, diagrams, tables, schedules, dimensions, callouts, and visible labels.
+- Extract visible text where possible, but also summarize meaningful visual information that is not plain text.
+- Use cautious language for visual inferences. Say "appears" or "likely" when the page is unclear.
+- Do not invent quantities, code requirements, dimensions, or materials that are not visible.
+- Keep each visualSummary focused on project scope and plan-relevant information.
+- If a field is not visible, return an empty string for that field.
+
+Return JSON exactly matching the schema.
+    `),
+    userContent: [
+      fileInput,
+      {
+        type: "input_text",
+        text: `Analyze this ${isPdf ? "PDF plan set" : "uploaded plan image"} named "${fileName}" for plan analysis. ${selectedPageInstruction}`,
+      },
+    ],
+  });
+
+  const visualPages = isSampledPdf
+    ? remapSampledVisualPages(parsed?.pages, originalPageNumbers)
+    : parsed?.pages;
+
+  const pages = createVisualPageEntries({
+    fileName,
+    fileUrl,
+    fileKind,
+    sourceKind: isPdf ? "pdf_visual_analysis" : "image_visual_fallback",
+    pages: visualPages,
+  });
+
+  if (!pages.length) {
+    throw new Error("Visual plan analysis did not return usable page details.");
+  }
+
+  return {
+    pages,
+    usage,
+  };
+};
+
+const createPageEntry = ({
+  fileName,
+  fileUrl,
+  fileKind,
+  analysisMethod,
+  rawText,
+  sourcePageNumber,
+  sourcePageCount,
+}) => {
   const lines = extractLines(rawText);
   const detectedSheetNumber = detectSheetNumber(lines, rawText);
   const detectedTitle = detectTitle(lines, detectedSheetNumber);
@@ -302,6 +730,7 @@ const createPageEntry = ({ fileName, fileUrl, fileKind, rawText, sourcePageNumbe
     sourceFileName: fileName,
     fileUrl,
     fileKind,
+    analysisMethod,
     sourcePageNumber: typeof sourcePageNumber === "number" ? sourcePageNumber : 1,
     sourcePageCount: typeof sourcePageCount === "number" ? sourcePageCount : 1,
     detectedSheetNumber,
@@ -330,6 +759,7 @@ const buildAnalyzedFileDocData = ({
   sourceFileName: file.sourceFileName,
   fileUrl: file.fileUrl,
   fileKind: file.fileKind,
+  analysisMethod: file.analysisMethod,
   sourcePageNumber: file.sourcePageNumber,
   sourcePageCount: file.sourcePageCount,
   detectedSheetNumber: file.detectedSheetNumber,
@@ -387,7 +817,7 @@ const summarizeProjectFromPlans = async (files, openAiApiKey) => {
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: "gpt-5-mini",
+        model: "gpt-5.2",
         reasoningEffort: "medium",
         responseFormat: {
           type: "json_schema",
@@ -419,7 +849,8 @@ const summarizeProjectFromPlans = async (files, openAiApiKey) => {
           },
         },
         systemPrompt: buildEstimatorSystemPrompt(`
-Review one chunk of a larger OCR-extracted plan set and summarize only what this chunk supports.
+Review one chunk of a larger plan set and summarize only what this chunk supports. The chunk may contain
+OCR-extracted image text, PDF text extraction, and visual PDF/page summaries.
 
 Additional task rules:
 - projectTypeSignals should list likely project categories suggested by this chunk, such as remodel, addition,
@@ -427,7 +858,9 @@ Additional task rules:
 - affectedAreas must be a deduplicated array of concise room, zone, or site area names.
 - scopeSummary should be 2 to 4 sentences focused on work scope, not metadata.
 - notableWorkItems should be concise contractor-style work items or systems present in this chunk.
-- Do not describe anything as confirmed unless supported by the extracted text.
+- Do not describe anything as confirmed unless supported by the extracted text or visual page summary.
+- Write scopeSummary as client-facing project scope language. Do not mention chunks, chunk summaries,
+  extracted text, OCR, visual analysis, page records, or the analyzer process.
 
 Return exactly:
 {
@@ -456,7 +889,7 @@ Return exactly:
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: "gpt-5-mini",
+    model: "gpt-5.2",
     reasoningEffort: "medium",
     responseFormat: {
       type: "json_schema",
@@ -483,7 +916,8 @@ Return exactly:
       },
     },
     systemPrompt: buildEstimatorSystemPrompt(`
-Combine chunk-level summaries from a full OCR-extracted plan set into one complete project overview.
+Combine chunk-level summaries from a full plan set into one complete project overview. Some chunks may include
+hybrid PDF context that combines local text extraction with visual page summaries.
 
 Additional task rules:
 - Use all chunk summaries together.
@@ -492,6 +926,8 @@ Additional task rules:
 - summary should be 3 to 6 sentences and reflect the overall work, not sheet metadata.
 - Weigh repeated signals more heavily than one-off hints.
 - Do not describe anything as confirmed unless supported by the provided chunk summaries.
+- Write summary as a direct project description for a contractor or estimator. Do not mention chunks,
+  chunk summaries, extracted text, OCR, visual analysis, page records, or the analyzer process.
 
 Return exactly:
 {
@@ -500,7 +936,7 @@ Return exactly:
   "summary": "string"
 }
     `),
-    userContent: serializeChunkResults(contextChunks, chunkSummaries, "PROJECT CHUNK"),
+    userContent: serializeChunkResults(contextChunks, chunkSummaries, "SOURCE SUMMARY"),
   });
 
   const projectType = String(aggregated?.projectType || "").trim();
@@ -524,7 +960,8 @@ Return exactly:
   };
 };
 
-const analyzeSingleFile = async (uploadedFile, index) => {
+const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
+  const { projectId = "" } = options;
   const { buffer, contentType } = await downloadUploadedPlanFile(uploadedFile);
   const fileName = uploadedFile.name || getFileNameFromUrl(uploadedFile.downloadURL || "", index);
   const fileUrl = uploadedFile.downloadURL || "";
@@ -532,39 +969,89 @@ const analyzeSingleFile = async (uploadedFile, index) => {
 
   if (fileKind === "pdf") {
     const extracted = await extractPdfPages(buffer);
-    if (extracted.rawText.length < MIN_PDF_TEXT_LENGTH) {
-      throw new Error(
-        "Text could not be extracted from this PDF. It is likely a scanned or image-based PDF, which this analyzer does not support."
-      );
+    const pdfMode = choosePdfAnalysisMode(extracted);
+
+    logPlanAnalysisMethod({
+      projectId,
+      fileName,
+      method: pdfMode.method,
+      pageCount: pdfMode.metrics.pageCount,
+      reason: pdfMode.reason,
+    });
+
+    let visualAnalysis;
+    try {
+      const visualBuffer = pdfMode.selectedPageNumbers
+        ? await createSampledPdfBuffer(buffer, pdfMode.selectedPageNumbers)
+        : buffer;
+
+      visualAnalysis = await analyzeVisualDocument({
+        buffer: visualBuffer,
+        contentType,
+        fileName,
+        fileUrl,
+        fileKind,
+        openai,
+        originalPageNumbers: pdfMode.selectedPageNumbers,
+      });
+    } catch (error) {
+      throw createVisionAnalysisError(fileName, error);
     }
 
-    return extracted.pages
-      .filter((page) => normalizeWhitespace(page.rawText).length > 0)
-      .map((page) =>
-        createPageEntry({
-          fileName,
-          fileUrl,
-          fileKind,
-          rawText: page.rawText,
-          sourcePageNumber: page.pageNumber,
-          sourcePageCount: extracted.pageCount,
-        })
-      );
+    logUsageTotals("analyzePlanFilesHybrid", [
+      { title: pdfMode.method, usage: visualAnalysis.usage },
+    ]);
+
+    return createPdfHybridPageEntries({
+      fileName,
+      fileUrl,
+      fileKind,
+      analysisMethod: pdfMode.method,
+      extracted,
+      visualPages: visualAnalysis.pages,
+    });
   }
 
   if (fileKind === "image") {
     const rawText = await extractImageText(buffer);
     if (rawText.length < MIN_IMAGE_TEXT_LENGTH) {
-      throw new Error(
-        "Text could not be extracted from this image. Please upload a clearer file with readable text."
-      );
+      logPlanAnalysisMethod({
+        projectId,
+        fileName,
+        method: "image_visual_fallback",
+        pageCount: 1,
+        reason: "weak_image_ocr",
+      });
+
+      const visualAnalysis = await analyzeVisualDocument({
+        buffer,
+        contentType,
+        fileName,
+        fileUrl,
+        fileKind,
+        openai,
+      });
+
+      logUsageTotals("analyzePlanFilesVisualFallback", [
+        { title: "visual_image", usage: visualAnalysis.usage },
+      ]);
+
+      return visualAnalysis.pages;
     }
+
+    logPlanAnalysisMethod({
+      projectId,
+      fileName,
+      method: "image_ocr",
+      pageCount: 1,
+    });
 
     return [
       createPageEntry({
         fileName,
         fileUrl,
         fileKind,
+        analysisMethod: "image_ocr",
         rawText,
         sourcePageNumber: 1,
         sourcePageCount: 1,
@@ -620,9 +1107,10 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
     );
 
     let analyzedFiles = [];
+    const visualOpenai = openAiApiKey ? new OpenAI({ apiKey: openAiApiKey }) : null;
 
     try {
-      analyzedFiles = await analyzeSingleFile(uploadedFile, 0);
+      analyzedFiles = await analyzeSingleFile(uploadedFile, 0, visualOpenai, { projectId });
     } catch (error) {
       const fileName = uploadedFile?.name || getFileNameFromUrl(uploadedFile?.downloadURL || "", 0);
       console.error(`Plan analysis failed for ${fileName}:`, error);
@@ -699,6 +1187,7 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
         detectedTitle: file.detectedTitle,
         discipline: file.discipline,
         revisionDate: file.revisionDate,
+        analysisMethod: file.analysisMethod,
         rawText: file.rawText,
       })),
       fileErrors,
@@ -751,4 +1240,15 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       fileErrors,
     });
   }
+};
+
+module.exports.__test__ = {
+  buildBase64FileDataUrl,
+  buildHybridPageRawText,
+  choosePdfAnalysisMode,
+  createSampledPdfBuffer,
+  createVisionAnalysisError,
+  logPlanAnalysisMethod,
+  remapSampledVisualPages,
+  selectPdfVisualSamplePages,
 };
