@@ -280,7 +280,7 @@ exports.deletePlanAnalysisProject = onRequest(
 exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],
-    timeoutSeconds: 1080,
+    timeoutSeconds: 1200,
     memory: "2GiB",
   },
   async (req, res) => {

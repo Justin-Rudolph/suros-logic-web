@@ -3,6 +3,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const pdfParse = require("pdf-parse");
 const { PDFDocument } = require("pdf-lib");
+const path = require("path");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
 const {
@@ -42,6 +43,13 @@ const PDF_VISION_FALLBACK_MIN_AVG_PAGE_TEXT_LENGTH = 800;
 const PDF_VISION_FALLBACK_MIN_USEFUL_PAGE_RATIO = 0.85;
 const PDF_FULL_HYBRID_MAX_STRONG_TEXT_PAGES = 25;
 const PDF_SAMPLED_VISUAL_MAX_PAGES = 15;
+const PDF_WEAK_VISUAL_BATCH_CONCURRENCY = 6;
+const PDF_PAGE_RENDER_BASE_SCALE = 4;
+const PDF_PAGE_RENDER_MAX_DIMENSION = 4096;
+const PDF_PAGE_RENDER_MAX_PIXELS = 18000000;
+
+let pdfRendererDependenciesPromise = null;
+let pdfjsStandardFontDataUrl = null;
 
 const getFileNameFromUrl = (fileUrl, index) => {
   try {
@@ -311,8 +319,102 @@ const getImageMimeType = (fileName, contentType) => {
 const buildBase64FileDataUrl = (buffer, mimeType) =>
   `data:${mimeType};base64,${buffer.toString("base64")}`;
 
-const createSampledPdfBuffer = async (buffer, selectedPageNumbers) => {
-  const sourcePdf = await PDFDocument.load(buffer);
+const loadPdfRendererDependencies = async () => {
+  if (!pdfRendererDependenciesPromise) {
+    pdfRendererDependenciesPromise = (async () => {
+      const canvas = require("@napi-rs/canvas");
+
+      if (!globalThis.DOMMatrix && canvas.DOMMatrix) {
+        globalThis.DOMMatrix = canvas.DOMMatrix;
+      }
+      if (!globalThis.ImageData && canvas.ImageData) {
+        globalThis.ImageData = canvas.ImageData;
+      }
+      if (!globalThis.Path2D && canvas.Path2D) {
+        globalThis.Path2D = canvas.Path2D;
+      }
+
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      return {
+        createCanvas: canvas.createCanvas,
+        pdfjs,
+      };
+    })();
+  }
+
+  return pdfRendererDependenciesPromise;
+};
+
+const getPdfPageRenderScale = (viewport) => {
+  const width = Number(viewport?.width || 0);
+  const height = Number(viewport?.height || 0);
+  const dimensionScale = Math.min(
+    PDF_PAGE_RENDER_BASE_SCALE,
+    width > 0 ? PDF_PAGE_RENDER_MAX_DIMENSION / width : PDF_PAGE_RENDER_BASE_SCALE,
+    height > 0 ? PDF_PAGE_RENDER_MAX_DIMENSION / height : PDF_PAGE_RENDER_BASE_SCALE
+  );
+  const pixelScale =
+    width > 0 && height > 0
+      ? Math.sqrt(PDF_PAGE_RENDER_MAX_PIXELS / (width * height))
+      : PDF_PAGE_RENDER_BASE_SCALE;
+
+  return Math.max(1, Math.min(PDF_PAGE_RENDER_BASE_SCALE, dimensionScale, pixelScale));
+};
+
+const encodeCanvasAsPng = async (canvas) => {
+  if (typeof canvas.encode === "function") {
+    return Buffer.from(await canvas.encode("png"));
+  }
+
+  if (typeof canvas.toBuffer === "function") {
+    return canvas.toBuffer("image/png");
+  }
+
+  throw new Error("PDF page renderer could not encode the rendered page image.");
+};
+
+const renderPdfPageToPng = async (pdfDocument, pageNumber) => {
+  const { createCanvas } = await loadPdfRendererDependencies();
+  const page = await pdfDocument.getPage(pageNumber);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = getPdfPageRenderScale(baseViewport);
+  const viewport = page.getViewport({ scale });
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const canvasContext = canvas.getContext("2d");
+
+  await page.render({
+    canvasContext,
+    viewport,
+  }).promise;
+
+  const buffer = await encodeCanvasAsPng(canvas);
+  page.cleanup();
+
+  return {
+    buffer,
+    contentType: "image/png",
+    width: Math.ceil(viewport.width),
+    height: Math.ceil(viewport.height),
+    scale,
+  };
+};
+
+const loadPdfForRendering = async (buffer) => {
+  const { pdfjs } = await loadPdfRendererDependencies();
+  if (!pdfjsStandardFontDataUrl) {
+    pdfjsStandardFontDataUrl = `${path.join(path.dirname(require.resolve("pdfjs-dist/package.json")), "standard_fonts")}${path.sep}`;
+  }
+
+  return pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    disableWorker: true,
+    standardFontDataUrl: pdfjsStandardFontDataUrl,
+    useSystemFonts: true,
+    verbosity: pdfjs.VerbosityLevel.ERRORS,
+  }).promise;
+};
+
+const createPdfSubsetBuffer = async (sourcePdf, selectedPageNumbers) => {
   const pageCount = sourcePdf.getPageCount();
   const sourcePageIndexes = uniqueStrings(selectedPageNumbers)
     .map((pageNumber) => Number(pageNumber))
@@ -328,6 +430,11 @@ const createSampledPdfBuffer = async (buffer, selectedPageNumbers) => {
   copiedPages.forEach((page) => sampledPdf.addPage(page));
 
   return Buffer.from(await sampledPdf.save());
+};
+
+const createSampledPdfBuffer = async (buffer, selectedPageNumbers) => {
+  const sourcePdf = await PDFDocument.load(buffer);
+  return createPdfSubsetBuffer(sourcePdf, selectedPageNumbers);
 };
 
 const createVisionAnalysisError = (fileName, error) => {
@@ -589,32 +696,40 @@ const analyzeVisualDocument = async ({
   fileKind,
   openai,
   originalPageNumbers = null,
+  visualTextGuidance = "",
+  visualInputMimeType = "",
 }) => {
   if (!openai) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
   const isPdf = fileKind === "pdf";
-  const imageMimeType = isPdf ? "" : getImageMimeType(fileName, contentType);
+  const imageMimeType = visualInputMimeType || (isPdf ? "" : getImageMimeType(fileName, contentType));
+  const useImageInput = Boolean(imageMimeType);
   if (!isPdf && !imageMimeType) {
     throw new Error("Visual image analysis supports PNG, JPEG, WEBP, and non-animated GIF files.");
   }
 
-  const fileInput = isPdf
+  const fileInput = useImageInput
+    ? {
+        type: "input_image",
+        image_url: buildBase64FileDataUrl(buffer, imageMimeType),
+      }
+    : isPdf
     ? {
         type: "input_file",
         filename: fileName,
         file_data: buildBase64FileDataUrl(buffer, "application/pdf"),
       }
-    : {
-        type: "input_image",
-        image_url: buildBase64FileDataUrl(buffer, imageMimeType),
-      };
+    : null;
 
   const isSampledPdf = isPdf && Array.isArray(originalPageNumbers) && originalPageNumbers.length > 0;
   const selectedPageInstruction = isSampledPdf
-    ? `This PDF contains only sampled pages from the original PDF. Analyze every page in this sampled PDF. The sampled-page to original-page mapping is: ${originalPageNumbers.map((pageNumber, index) => `sample page ${index + 1} = original page ${pageNumber}`).join("; ")}. Return pageNumber using the sampled PDF page number.`
+    ? useImageInput && originalPageNumbers.length === 1
+      ? `This image is a high-resolution rendering of original PDF page ${originalPageNumbers[0]}. Analyze this page carefully. Return pageNumber as 1.`
+      : `This PDF contains only sampled pages from the original PDF. Analyze every page in this sampled PDF. The sampled-page to original-page mapping is: ${originalPageNumbers.map((pageNumber, index) => `sample page ${index + 1} = original page ${pageNumber}`).join("; ")}. Return pageNumber using the sampled PDF page number.`
     : "Create one page entry per visible page when possible.";
+  const fileSpecificGuidance = String(visualTextGuidance || "").trim();
 
   const { parsed, usage } = await createResponsesJsonCompletion({
     openai,
@@ -667,8 +782,17 @@ Analyze uploaded construction plan files visually. This visual analysis is combi
 PDFs and used as a fallback for image uploads when ordinary OCR is too weak.
 
 Additional task rules:
-- Inspect the page image(s), title blocks, notes, diagrams, tables, schedules, dimensions, callouts, and visible labels.
-- Extract visible text where possible, but also summarize meaningful visual information that is not plain text.
+- Inspect the page image(s), including drawings, title blocks, notes, diagrams, tables, schedules, dimensions,
+  callouts, labels, and legends.
+- For PDFs, this visual analysis will be combined with local PDF text extraction. Avoid duplicating text that appears
+  to have been captured cleanly by local extraction unless the visual version clarifies formatting, numbers,
+  relationships, or table/schedule structure.
+- In visibleText, transcribe as much readable construction-relevant text as practical from the page, especially text
+  likely to be missing, poorly extracted, visually structured, or important to scope. Prioritize notes, schedules,
+  legends, callouts, dimensions, room/material/finish/equipment labels, and sheet identifiers over boilerplate title
+  block or legal text.
+- Do not only summarize readable text. Put readable text in visibleText first, then use visualSummary for visual
+  context, drawings, diagrams, layout, scope implications, and meaningful information that is not plain text.
 - Use cautious language for visual inferences. Say "appears" or "likely" when the page is unclear.
 - Do not invent quantities, code requirements, dimensions, or materials that are not visible.
 - Keep each visualSummary focused on project scope and plan-relevant information.
@@ -680,7 +804,11 @@ Return JSON exactly matching the schema.
       fileInput,
       {
         type: "input_text",
-        text: `Analyze this ${isPdf ? "PDF plan set" : "uploaded plan image"} named "${fileName}" for plan analysis. ${selectedPageInstruction}`,
+        text: [
+          `Analyze this ${isPdf ? "PDF plan set" : "uploaded plan image"} named "${fileName}" for plan analysis.`,
+          selectedPageInstruction,
+          fileSpecificGuidance ? `File-specific visible-text guidance: ${fileSpecificGuidance}` : "",
+        ].filter(Boolean).join(" "),
       },
     ],
   });
@@ -704,6 +832,72 @@ Return JSON exactly matching the schema.
   return {
     pages,
     usage,
+  };
+};
+
+const createSinglePageBatches = (pageCount) => {
+  const normalizedPageCount = Math.max(Number(pageCount || 0), 0);
+  return Array.from({ length: normalizedPageCount }, (_, index) => ({
+    pageNumber: index + 1,
+    label: `Page ${index + 1}`,
+  }));
+};
+
+const analyzePdfVisualPageBatches = async ({
+  buffer,
+  contentType,
+  fileName,
+  fileUrl,
+  fileKind,
+  openai,
+  pageCount,
+  visualTextGuidance,
+}) => {
+  const renderedPdf = await loadPdfForRendering(buffer);
+  const pageBatches = createSinglePageBatches(
+    Math.min(Number(pageCount || 0), renderedPdf.numPages || 0)
+  );
+
+  const batchUsages = [];
+  let batchPages = [];
+
+  try {
+    batchPages = await mapWithConcurrency(
+      pageBatches,
+      async (batch, index) => {
+        const originalPageNumber = batch.pageNumber;
+        const renderedPage = await renderPdfPageToPng(renderedPdf, originalPageNumber);
+        const visualAnalysis = await analyzeVisualDocument({
+          buffer: renderedPage.buffer,
+          contentType: renderedPage.contentType,
+          fileName,
+          fileUrl,
+          fileKind,
+          openai,
+          originalPageNumbers: [originalPageNumber],
+          visualInputMimeType: renderedPage.contentType,
+          visualTextGuidance: `${visualTextGuidance} The attached image is a high-resolution ${renderedPage.width}x${renderedPage.height}px rendering of one PDF page; use the rendered image for reading dense or small text.`,
+        });
+
+        batchUsages[index] = visualAnalysis.usage;
+
+        return {
+          data: visualAnalysis.pages,
+          usage: visualAnalysis.usage,
+        };
+      },
+      {
+        label: "analyzePlanFilesVisualBatches",
+        concurrency: PDF_WEAK_VISUAL_BATCH_CONCURRENCY,
+      }
+    );
+  } finally {
+    await renderedPdf.destroy?.();
+  }
+
+  return {
+    pages: batchPages.flat(),
+    usage: sumUsage(batchUsages),
   };
 };
 
@@ -981,19 +1175,37 @@ const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
 
     let visualAnalysis;
     try {
-      const visualBuffer = pdfMode.selectedPageNumbers
-        ? await createSampledPdfBuffer(buffer, pdfMode.selectedPageNumbers)
-        : buffer;
+      const visualTextGuidance = pdfMode.metrics.isWeak
+        ? "Local PDF text extraction was weak for this file, so visibleText is the primary source of readable plan text. Do not collapse readable note blocks, schedules, tables, callouts, or code/general notes into a short summary. Transcribe as much legible construction-relevant text as practical, preserving line breaks, labels, numbers, dimensions, sheet references, and schedule/table relationships when visible."
+        : "Local PDF text extraction was strong for this file. Focus visibleText on readable text that is missing, poorly extracted, visually structured, or needed to clarify schedules, tables, callouts, dimensions, labels, or sheet relationships.";
 
-      visualAnalysis = await analyzeVisualDocument({
-        buffer: visualBuffer,
-        contentType,
-        fileName,
-        fileUrl,
-        fileKind,
-        openai,
-        originalPageNumbers: pdfMode.selectedPageNumbers,
-      });
+      if (pdfMode.metrics.isWeak) {
+        visualAnalysis = await analyzePdfVisualPageBatches({
+          buffer,
+          contentType,
+          fileName,
+          fileUrl,
+          fileKind,
+          openai,
+          pageCount: pdfMode.metrics.pageCount,
+          visualTextGuidance,
+        });
+      } else {
+        const visualBuffer = pdfMode.selectedPageNumbers
+          ? await createSampledPdfBuffer(buffer, pdfMode.selectedPageNumbers)
+          : buffer;
+
+        visualAnalysis = await analyzeVisualDocument({
+          buffer: visualBuffer,
+          contentType,
+          fileName,
+          fileUrl,
+          fileKind,
+          openai,
+          originalPageNumbers: pdfMode.selectedPageNumbers,
+          visualTextGuidance,
+        });
+      }
     } catch (error) {
       throw createVisionAnalysisError(fileName, error);
     }
@@ -1030,6 +1242,7 @@ const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
         fileUrl,
         fileKind,
         openai,
+        visualTextGuidance: "Image OCR was weak for this file, so visibleText is the primary source of readable plan text. Transcribe as much legible construction-relevant text as practical before summarizing visual context.",
       });
 
       logUsageTotals("analyzePlanFilesVisualFallback", [
@@ -1246,9 +1459,12 @@ module.exports.__test__ = {
   buildBase64FileDataUrl,
   buildHybridPageRawText,
   choosePdfAnalysisMode,
+  createSinglePageBatches,
   createSampledPdfBuffer,
   createVisionAnalysisError,
+  loadPdfForRendering,
   logPlanAnalysisMethod,
   remapSampledVisualPages,
+  renderPdfPageToPng,
   selectPdfVisualSamplePages,
 };

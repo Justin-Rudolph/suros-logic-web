@@ -186,7 +186,7 @@ const PIPELINE_STEP_ENDPOINTS: Record<PipelineStep, string> = {
 };
 
 const PIPELINE_STEP_TIMEOUT_SECONDS: Record<PipelineStep, number> = {
-  analyze: 1080,
+  analyze: 1200,
   generateScopes: 1200,
   generateVerification: 720,
   analyzeSafety: 720,
