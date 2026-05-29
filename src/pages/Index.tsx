@@ -10,6 +10,7 @@ import surosLogo from "@/assets/suros-logo-new.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+import { isProtectedDevHost } from "@/lib/devAccess";
 
 const DEMO_VIDEO_URL = "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%204.14.26.mp4?alt=media&token=950c161a-e3ad-4413-8e34-757dcb59b667";
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
@@ -24,8 +25,14 @@ const Index = () => {
   const [checkoutError, setCheckoutError] = useState("");
   const [existingAccount, setExistingAccount] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const isDevAccessCheckoutBlocked = !user && isProtectedDevHost();
 
   useEffect(() => {
+    if (isDevAccessCheckoutBlocked) {
+      window.localStorage.removeItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
+      return;
+    }
+
     const savedDraft = window.localStorage.getItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
     if (!savedDraft) return;
 
@@ -50,7 +57,7 @@ const Index = () => {
     } catch {
       window.localStorage.removeItem(TRIAL_DIALOG_DRAFT_STORAGE_KEY);
     }
-  }, []);
+  }, [isDevAccessCheckoutBlocked]);
 
   useEffect(() => {
     if (!isTrialDialogOpen && !checkoutEmail && !legalAccepted) return;
@@ -74,6 +81,12 @@ const Index = () => {
 
   const makePayment = async () => {
     if (isCheckoutLoading) return;
+
+    if (isDevAccessCheckoutBlocked) {
+      setExistingAccount(false);
+      setCheckoutError("Sign in with a dev-approved account to start checkout here.");
+      return;
+    }
 
     const normalizedEmail = checkoutEmail.trim().toLowerCase();
 
@@ -658,11 +671,17 @@ const Index = () => {
                   className="w-full bg-primary hover:bg-primary/90"
                   size="lg"
                   onClick={() => {
+                    if (isDevAccessCheckoutBlocked) return;
                     setCheckoutError("");
                     setExistingAccount(false);
                     setIsTrialDialogOpen(true);
                   }}
-                  disabled={isCheckoutLoading}
+                  disabled={isCheckoutLoading || isDevAccessCheckoutBlocked}
+                  title={
+                    isDevAccessCheckoutBlocked
+                      ? "Sign in with a dev-approved account to start checkout here."
+                      : undefined
+                  }
                 >
                   Start 30-Day Free Trial
                 </Button>

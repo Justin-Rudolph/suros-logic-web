@@ -2,26 +2,12 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useAuth } from "@/context/AuthContext";
+import {
+  allowedDevAccessEmails,
+  isProtectedDevHost,
+  publicDevAccessPaths,
+} from "@/lib/devAccess";
 import "@/styles/gradients.css";
-
-const parseCsv = (value: string | undefined) =>
-  (value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const configuredDevHosts = parseCsv(import.meta.env.VITE_DEV_ACCESS_HOSTS);
-const protectedDevHosts = Array.from(new Set(configuredDevHosts));
-
-const allowedEmails = parseCsv(import.meta.env.VITE_DEV_ACCESS_ALLOWED_EMAILS).map(
-  (email) => email.toLowerCase()
-);
-
-const publicDevAccessPaths = new Set(["/auth", "/forgot-password"]);
-
-const isProtectedDevHost = () =>
-  typeof window !== "undefined" &&
-  protectedDevHosts.includes(window.location.hostname);
 
 function DevAccessBlocked({
   email,
@@ -81,7 +67,7 @@ export default function DevAccessGate({ children }: { children: ReactNode }) {
     return null;
   }
 
-  if (allowedEmails.length === 0) {
+  if (allowedDevAccessEmails.length === 0) {
     return (
       <DevAccessBlocked message="This dev environment is protected, but no allowed emails have been configured." />
     );
@@ -97,7 +83,7 @@ export default function DevAccessGate({ children }: { children: ReactNode }) {
 
   const email = user.email?.toLowerCase() || null;
 
-  if (!email || !allowedEmails.includes(email)) {
+  if (!email || !allowedDevAccessEmails.includes(email)) {
     return (
       <DevAccessBlocked
         email={user.email}
