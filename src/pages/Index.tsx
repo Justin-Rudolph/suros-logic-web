@@ -19,8 +19,10 @@ import { useAuth } from "@/context/AuthContext";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { isProtectedDevHost } from "@/lib/devAccess";
 
-const DEMO_VIDEO_URL =
-  "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%204.14.26.mp4?alt=media&token=950c161a-e3ad-4413-8e34-757dcb59b667";
+const BID_FORM_VIDEO_URL =
+  "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%205.30.26.mp4?alt=media&token=a592d11b-0e67-4a0b-9b89-33f910e5ddcf";
+const PLAN_ANALYZER_VIDEO_URL = 
+  "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Plan_Analyzer_User_Guide.mp4?alt=media&token=83239a41-928d-47fc-af77-3bbda2ee2fcd";
 const LANDING_CHECKOUT_SOURCE = "landing_quickstart";
 const TRIAL_DIALOG_DRAFT_STORAGE_KEY = "suros-logic-trial-dialog-draft";
 
@@ -842,46 +844,75 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Testimonials */}
       {/* Demo Video */}
-      <section id="demo-video" className="scroll-mt-24 py-20 px-6">
-        <div className="container mx-auto max-w-5xl">
+      <section id="demo-video" className="scroll-mt-24 py-20 px-4 sm:px-6">
+        <div className="container mx-auto max-w-7xl">
           <div className="text-center mb-10 space-y-4">
-            <h2 className="text-4xl font-bold">Watch the demo</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Watch the demos</h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              See how a project moves from bid details into a workspace with proposal tools, change
-              orders, and project files.
+              See the platform in action — from building a bid to analyzing a full set of plan drawings.
             </p>
           </div>
 
-          <Card className="bg-card/80 backdrop-blur border-primary/20 shadow-xl shadow-primary/10 overflow-hidden">
-            <CardContent className="p-4 sm:p-6">
-              <div className="rounded-2xl overflow-hidden border border-border bg-black">
-                <video
-                  className="w-full h-auto"
-                  controls
-                  preload="metadata"
-                  playsInline
-                  poster={demoVideoThumbnail}
-                >
-                  <source src={DEMO_VIDEO_URL} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-              <p className="text-sm text-muted-foreground mt-4 text-center">
-                Having trouble with playback?{" "}
-                <a
-                  href={DEMO_VIDEO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline underline-offset-4 hover:text-primary/80"
-                >
-                  Open the demo video in a new tab
-                </a>
-                .
-              </p>
-            </CardContent>
-          </Card>
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Video 1 */}
+            <Card className="bg-card/80 backdrop-blur border-primary/20 shadow-xl shadow-primary/10 overflow-hidden">
+              <CardContent className="p-4 sm:p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-foreground">Bid Form Creation &amp; Bid Workspace</h3>
+                <div className="rounded-xl overflow-hidden border border-border bg-black flex items-center justify-center">
+                  <video
+                    className="w-full h-auto max-h-[280px] object-contain"
+                    controls
+                    preload="metadata"
+                    playsInline
+                    poster={demoVideoThumbnail}
+                  >
+                    <source src={BID_FORM_VIDEO_URL} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  <a
+                    href={BID_FORM_VIDEO_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
+                    Open in a new tab
+                  </a>
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Video 2 */}
+            <Card className="bg-card/80 backdrop-blur border-primary/20 shadow-xl shadow-primary/10 overflow-hidden">
+              <CardContent className="p-4 sm:p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-foreground">Plan Analyzer</h3>
+                <div className="rounded-xl overflow-hidden border border-border bg-black flex items-center justify-center">
+                  <video
+                    className="w-full h-auto max-h-[280px] object-contain"
+                    controls
+                    preload="metadata"
+                    playsInline
+                    poster={demoVideoThumbnail}
+                  >
+                    <source src={PLAN_ANALYZER_VIDEO_URL} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  <a
+                    href={PLAN_ANALYZER_VIDEO_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
+                    Open in a new tab
+                  </a>
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </section>
 
@@ -898,7 +929,7 @@ const Index = () => {
 
           <div>
             <Card
-              className="bg-card border-primary/20 hover:border-primary/70 hover:shadow-xl hover:shadow-primary/30 transition-all min-h-[380px] sm:h-[420px] flex flex-col"
+              className="bg-card border-primary/20 hover:border-primary/70 hover:shadow-xl hover:shadow-primary/30 transition-all h-[540px] sm:h-[420px] flex flex-col"
               onMouseEnter={() => setTestimonialPaused(true)}
               onMouseLeave={() => setTestimonialPaused(false)}
             >
@@ -909,7 +940,7 @@ const Index = () => {
                   ))}
                 </div>
 
-                <blockquote className="text-base sm:text-xl text-foreground leading-relaxed mb-6 sm:mb-8 flex-1 overflow-hidden">
+                <blockquote className="text-base sm:text-xl text-foreground leading-relaxed mb-6 sm:mb-8 flex-1 overflow-y-auto">
                   &ldquo;{TESTIMONIALS[testimonialIndex].quote}&rdquo;
                 </blockquote>
 
@@ -953,6 +984,7 @@ const Index = () => {
               </CardContent>
             </Card>
 
+            {/* Testimonials */}
             <div className="flex justify-center gap-2 mt-6">
               {TESTIMONIALS.map((_, idx) => (
                 <button
@@ -1009,7 +1041,7 @@ const Index = () => {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="scroll-mt-24 py-20 px-6 bg-card/30">
+      <section id="pricing" className="scroll-mt-24 py-20 px-4 sm:px-6 bg-card/30 overflow-x-hidden">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Simple pricing that pays for itself</h2>
