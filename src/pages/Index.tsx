@@ -1046,7 +1046,7 @@ const Index = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Simple pricing that pays for itself</h2>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
             <Card className="relative overflow-visible bg-card border-primary/40 hover:border-primary/70 hover:shadow-xl hover:shadow-primary/30 transition-all">
               <CardContent className="p-8 space-y-6">
                 <div className="pointer-events-none absolute -right-3 -top-4 sm:-right-5 sm:-top-5 z-10 rotate-[12deg] border border-primary/40 bg-primary px-3 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.16em] text-primary-foreground shadow-lg shadow-primary/30">
@@ -1056,7 +1056,7 @@ const Index = () => {
                 </div>
                 <h3 className="text-2xl font-bold text-primary">Quick Start Bid Bundle</h3>
                 <div className="space-y-2">
-                  <div className="flex items-end gap-3">
+                  <div className="flex flex-wrap items-end gap-3">
                     <div className="text-2xl font-semibold text-muted-foreground line-through">
                       $300/month
                     </div>
