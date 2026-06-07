@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { Check, Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -81,14 +81,6 @@ type ModalState =
       badgeClassName: string;
     }
   | null;
-
-type PipelineStep =
-  | "analyze"
-  | "generateScopes"
-  | "generateVerification"
-  | "analyzeSafety"
-  | "detectConflicts"
-  | "generateRFIs";
 
 type PlanAnalyzerTabId =
   | "overview"
@@ -174,92 +166,6 @@ const buildConflictSelectionId = (index: number) => `conflict::${index}`;
 const buildRfiSelectionId = (sectionKey: keyof RfiPackage, index: number) => `${sectionKey}::${index}`;
 const PLAN_ANALYSIS_SUPPORT_MESSAGE =
   "This analysis failed. Please contact an admin at support@suroslogic.com.";
-const PLAN_ANALYSIS_TIMEOUT_GRACE_MS = 5000;
-
-const PIPELINE_STEP_ENDPOINTS: Record<PipelineStep, string> = {
-  analyze: "analyzePlanFiles",
-  generateScopes: "generateScopes",
-  generateVerification: "generateVerificationChecklist",
-  analyzeSafety: "analyzeSafety",
-  detectConflicts: "detectConflicts",
-  generateRFIs: "generateRFIs",
-};
-
-const PIPELINE_STEP_TIMEOUT_SECONDS: Record<PipelineStep, number> = {
-  analyze: 1200,
-  generateScopes: 1200,
-  generateVerification: 720,
-  analyzeSafety: 720,
-  detectConflicts: 720,
-  generateRFIs: 1080,
-};
-
-type PlanAnalysisFailurePayload = {
-  projectId: string;
-  moduleType: PlanModuleType;
-  error: string;
-};
-
-const getModuleTypeForPipelineStep = (step: PipelineStep): PlanModuleType => {
-  if (step === "analyze") return "overview";
-  if (step === "generateScopes") return "scopes";
-  if (step === "generateVerification") return "verification";
-  if (step === "analyzeSafety") return "safety";
-  if (step === "detectConflicts") return "conflicts";
-  return "rfi";
-};
-
-const isFunctionTimeoutStatus = (status?: number) => status === 408 || status === 504;
-
-const isFunctionRequestFailureError = (error: unknown) =>
-  error instanceof TypeError && error.message === "Failed to fetch";
-
-const isAbortError = (error: unknown) =>
-  error instanceof Error && error.name === "AbortError";
-
-const didStepReachTimeoutWindow = (step: PipelineStep, startedAt: number) => {
-  const timeoutMillis = PIPELINE_STEP_TIMEOUT_SECONDS[step] * 1000;
-  const elapsedMillis = Date.now() - startedAt;
-  return elapsedMillis >= Math.max(timeoutMillis - PLAN_ANALYSIS_TIMEOUT_GRACE_MS, 0);
-};
-
-const getFunctionTimeoutErrorMessage = (step: PipelineStep) => {
-  if (step === "analyze") return "The plan file analysis function timed out.";
-  if (step === "generateScopes") return "The generate scopes function timed out.";
-  if (step === "generateVerification") return "The verification checklist function timed out.";
-  if (step === "analyzeSafety") return "The safety analysis function timed out.";
-  if (step === "detectConflicts") return "The conflict detection function timed out.";
-  return "The RFI generation function timed out.";
-};
-
-const getFunctionRequestFailureMessage = (step: PipelineStep) => {
-  if (step === "analyze") return "The plan file analysis request failed before a response was received.";
-  if (step === "generateScopes") return "The generate scopes request failed before a response was received.";
-  if (step === "generateVerification") return "The verification checklist request failed before a response was received.";
-  if (step === "analyzeSafety") return "The safety analysis request failed before a response was received.";
-  if (step === "detectConflicts") return "The conflict detection request failed before a response was received.";
-  return "The RFI generation request failed before a response was received.";
-};
-
-const getFunctionResponseErrorMessage = (
-  step: PipelineStep,
-  status: number,
-  payload: { error?: unknown; details?: unknown }
-) => {
-  if (isFunctionTimeoutStatus(status)) {
-    return getFunctionTimeoutErrorMessage(step);
-  }
-
-  if (typeof payload.details === "string") {
-    return payload.details;
-  }
-
-  if (typeof payload.error === "string") {
-    return payload.error;
-  }
-
-  return `The ${step} step failed.`;
-};
 
 const haveSameIds = (left: string[], right: string[]) => {
   if (left.length !== right.length) {
@@ -387,23 +293,23 @@ const isProjectFailed = (project: PlanProjectDoc | null) =>
   getModuleStatus(project, "conflicts") === "failed" ||
   getModuleStatus(project, "rfi") === "failed";
 
-const getProcessingCopy = (step: PipelineStep | null, project: PlanProjectDoc | null) => {
-  if (step === "analyze" || getOverviewStatus(project) === "processing") {
+const getProcessingCopy = (project: PlanProjectDoc | null) => {
+  if (getOverviewStatus(project) === "processing") {
     return "Upload complete. Running plan analysis...";
   }
-  if (step === "generateScopes" || getModuleStatus(project, "scopes") === "processing") {
+  if (getModuleStatus(project, "scopes") === "processing") {
     return "Analysis complete. Generating trade scopes...";
   }
-  if (step === "generateVerification" || getModuleStatus(project, "verification") === "processing") {
+  if (getModuleStatus(project, "verification") === "processing") {
     return "Scopes complete. Generating verification checklist...";
   }
-  if (step === "analyzeSafety" || getModuleStatus(project, "safety") === "processing") {
+  if (getModuleStatus(project, "safety") === "processing") {
     return "Verification complete. Running safety review...";
   }
-  if (step === "detectConflicts" || getModuleStatus(project, "conflicts") === "processing") {
+  if (getModuleStatus(project, "conflicts") === "processing") {
     return "Safety review complete. Detecting cross-sheet conflicts...";
   }
-  if (step === "generateRFIs" || getModuleStatus(project, "rfi") === "processing") {
+  if (getModuleStatus(project, "rfi") === "processing") {
     return "Conflict detection complete. Generating RFIs and estimator notes...";
   }
   return "Project upload complete.";
@@ -471,7 +377,7 @@ const getStatusValue = (project: PlanProjectDoc | null) => {
     return "Analyzed";
   }
   if (getOverviewStatus(project) === "failed") return "Analysis Failed";
-  if (getOverviewStatus(project) === "processing") return "Analyzing";
+  if (getOverviewStatus(project) === "processing") return "Analyzing Overview";
   return project.status === "uploaded" ? "Uploaded" : project.status || "Uploaded";
 };
 
@@ -522,7 +428,6 @@ export default function PlanAnalyzerRun() {
   const [projectMissing, setProjectMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<ModalState>(null);
-  const [activeStep, setActiveStep] = useState<PipelineStep | null>(null);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const [showProgressPanel, setShowProgressPanel] = useState(true);
   const [progressPanelFading, setProgressPanelFading] = useState(false);
@@ -823,52 +728,6 @@ export default function PlanAnalyzerRun() {
     [draftFavoriteItemIds]
   );
 
-  const nextStep = useMemo<PipelineStep | null>(() => {
-    if (!project || !project.uploadedFiles?.length) {
-      return null;
-    }
-
-    if (
-      getOverviewStatus(project) === "failed" ||
-      getModuleStatus(project, "scopes") === "failed" ||
-      getModuleStatus(project, "verification") === "failed" ||
-      getModuleStatus(project, "safety") === "failed" ||
-      getModuleStatus(project, "conflicts") === "failed" ||
-      getModuleStatus(project, "rfi") === "failed"
-    ) {
-      return null;
-    }
-
-    if (
-      getOverviewStatus(project) !== "completed" &&
-      getOverviewStatus(project) !== "completed_with_errors"
-    ) {
-      return getOverviewStatus(project) === "processing" ? null : "analyze";
-    }
-
-    if (getModuleStatus(project, "scopes") !== "completed") {
-      return getModuleStatus(project, "scopes") === "processing" ? null : "generateScopes";
-    }
-
-    if (isOptionalStepEnabled(project, "verification") && getModuleStatus(project, "verification") !== "completed") {
-      return getModuleStatus(project, "verification") === "processing" ? null : "generateVerification";
-    }
-
-    if (isOptionalStepEnabled(project, "safety") && getModuleStatus(project, "safety") !== "completed") {
-      return getModuleStatus(project, "safety") === "processing" ? null : "analyzeSafety";
-    }
-
-    if (isOptionalStepEnabled(project, "conflicts") && getModuleStatus(project, "conflicts") !== "completed") {
-      return getModuleStatus(project, "conflicts") === "processing" ? null : "detectConflicts";
-    }
-
-    if (isOptionalStepEnabled(project, "rfi") && getModuleStatus(project, "rfi") !== "completed") {
-      return getModuleStatus(project, "rfi") === "processing" ? null : "generateRFIs";
-    }
-
-    return null;
-  }, [project]);
-
   const hasFailed = isProjectFailed(project);
   const progressMetrics = useMemo(() => {
     if (!project) {
@@ -929,8 +788,7 @@ export default function PlanAnalyzerRun() {
     !hasFailed &&
     !isFullyAnalyzed &&
     Boolean(
-      activeStep ||
-        getOverviewStatus(project) === "processing" ||
+      getOverviewStatus(project) === "processing" ||
         getModuleStatus(project, "scopes") === "processing" ||
         getModuleStatus(project, "verification") === "processing" ||
         getModuleStatus(project, "safety") === "processing" ||
@@ -1094,200 +952,6 @@ export default function PlanAnalyzerRun() {
     selectedScopeItemIds,
     selectedVerificationItemIds,
   ]);
-
-  const markPlanAnalysisFailed = useCallback(async (failure: PlanAnalysisFailurePayload) => {
-    if (!user) {
-      throw new Error("Please sign in before updating this plan analysis.");
-    }
-
-    const token = await user.getIdToken();
-    const response = await fetch(`${getFunctionsBaseUrl()}/markPlanAnalysisFailed`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(failure),
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(
-        typeof payload?.error === "string"
-          ? payload.error
-        : "Failed to release plan analysis quota."
-      );
-    }
-  }, [user]);
-
-  const applyClientSideFailureState = useCallback(
-    (moduleType: PlanModuleType, errorMessage: string) => {
-      if (!projectId) return;
-
-      const failedModuleSummary = {
-        moduleType,
-        docPath: getPlanModuleSummaryDocPath(projectId, moduleType),
-        status: "failed" as const,
-        error: errorMessage,
-      };
-
-      setProject((current) =>
-        current
-          ? {
-              ...current,
-              status: "failed",
-              modules: {
-                ...current.modules,
-                [moduleType]: {
-                  ...current.modules[moduleType],
-                  ...failedModuleSummary,
-                },
-              },
-            }
-          : current
-      );
-
-      if (moduleType === "overview") {
-        setOverviewModule((current) => ({
-          ...(current || { projectId, moduleType: "overview" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      } else if (moduleType === "scopes") {
-        setScopesModule((current) => ({
-          ...(current || { projectId, moduleType: "scopes" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      } else if (moduleType === "verification") {
-        setVerificationModule((current) => ({
-          ...(current || { projectId, moduleType: "verification" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      } else if (moduleType === "safety") {
-        setSafetyModule((current) => ({
-          ...(current || { projectId, moduleType: "safety" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      } else if (moduleType === "conflicts") {
-        setConflictsModule((current) => ({
-          ...(current || { projectId, moduleType: "conflicts" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      } else if (moduleType === "rfi") {
-        setRfiModule((current) => ({
-          ...(current || { projectId, moduleType: "rfi" }),
-          status: "failed",
-          error: errorMessage,
-        }));
-      }
-
-      setActiveStep(null);
-      setShowProgressPanel(false);
-      setProgressPanelFading(false);
-    },
-    [projectId]
-  );
-
-  useEffect(() => {
-    if (!projectId || !project || !nextStep || activeStep || !user) {
-      return;
-    }
-
-    const projectRef = doc(firestore, "planProjects", projectId);
-
-    const runStep = async () => {
-      setActiveStep(nextStep);
-      let stepStartedAt = 0;
-
-      try {
-        const token = await user.getIdToken();
-
-        if (nextStep === "analyze") {
-          await updateDoc(projectRef, { "modules.overview.status": "processing" });
-        }
-
-        stepStartedAt = Date.now();
-        const abortController = new AbortController();
-        const timeoutHandle = window.setTimeout(
-          () => abortController.abort(),
-          PIPELINE_STEP_TIMEOUT_SECONDS[nextStep] * 1000 + PLAN_ANALYSIS_TIMEOUT_GRACE_MS
-        );
-
-        const response = await fetch(
-          `${getFunctionsBaseUrl()}/${PIPELINE_STEP_ENDPOINTS[nextStep]}`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ projectId }),
-            signal: abortController.signal,
-          }
-        ).finally(() => {
-          window.clearTimeout(timeoutHandle);
-        });
-
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          const processingError = new Error(
-            getFunctionResponseErrorMessage(nextStep, response.status, payload)
-          );
-          (processingError as Error & { statusCode?: number }).statusCode = response.status;
-          throw processingError;
-        }
-      } catch (error) {
-        console.error(`Plan analyzer step failed: ${nextStep}`, error);
-        const requestFailedBeforeResponse =
-          isFunctionRequestFailureError(error) || isAbortError(error);
-        const errorMessage =
-          requestFailedBeforeResponse && didStepReachTimeoutWindow(nextStep, stepStartedAt)
-            ? getFunctionTimeoutErrorMessage(nextStep)
-            : requestFailedBeforeResponse
-            ? getFunctionRequestFailureMessage(nextStep)
-            : error instanceof Error
-              ? error.message
-              : "A processing step failed for this project.";
-        const statusCode =
-          error instanceof Error
-            ? (error as Error & { statusCode?: number }).statusCode
-            : undefined;
-        const shouldMarkProjectFailed = ![401, 403, 409].includes(Number(statusCode));
-
-        if (projectId && shouldMarkProjectFailed) {
-          const failure = {
-            projectId,
-            moduleType: getModuleTypeForPipelineStep(nextStep),
-            error: errorMessage,
-          };
-
-          applyClientSideFailureState(failure.moduleType, errorMessage);
-
-          if (user) {
-            try {
-              await markPlanAnalysisFailed(failure);
-            } catch (markFailedError) {
-              console.error("Failed to release plan analysis quota after client-side processing failure:", markFailedError);
-            }
-          }
-        }
-
-        toast({
-          title: "Project processing failed",
-          description: PLAN_ANALYSIS_SUPPORT_MESSAGE,
-          variant: "destructive",
-        });
-      } finally {
-        setActiveStep(null);
-      }
-    };
-
-    void runStep();
-  }, [activeStep, applyClientSideFailureState, markPlanAnalysisFailed, nextStep, project, projectId, toast, user]);
 
   const openScopeModal = (tradeKey: string, label: string) => {
     const items = Array.isArray(scopeResult?.[tradeKey]) ? scopeResult[tradeKey] : [];
@@ -2458,7 +2122,7 @@ export default function PlanAnalyzerRun() {
                           <span />
                         </span>
                       </div>
-                      <p className="plan-progress-copy">{getProcessingCopy(activeStep, project)}</p>
+                      <p className="plan-progress-copy">{getProcessingCopy(project)}</p>
                     </div>
                     <span className="plan-progress-value">{Math.round(visibleProgress)}%</span>
                   </div>

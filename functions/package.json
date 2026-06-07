@@ -13,6 +13,7 @@
   },
   "main": "index.js",
   "dependencies": {
+    "@google-cloud/tasks": "^5.5.2",
     "@napi-rs/canvas": "^0.1.100",
     "cors": "^2.8.6",
     "firebase-admin": "^13.7.0",

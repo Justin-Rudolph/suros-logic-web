@@ -166,6 +166,13 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
 
     await batch.commit();
 
+    try {
+      const { enqueuePipelineStep } = require("./lib/planPipelineTasks");
+      await enqueuePipelineStep(projectId);
+    } catch (enqueueError) {
+      console.error(`[pipeline] Failed to enqueue first pipeline step for ${projectId}:`, enqueueError);
+    }
+
     return res.json({ projectId });
   } catch (error) {
     console.error("Failed to finalize plan analysis upload:", error);

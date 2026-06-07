@@ -1275,7 +1275,7 @@ const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
   throw new Error(`Unsupported file type for ${fileName}`);
 };
 
-module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) {
+module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey, adminContext = null) {
   const projectId = String(req.body?.projectId || "").trim();
   let fileErrors = [];
   let uploadedFile = null;
@@ -1285,7 +1285,9 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey) 
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    const { projectData } = await verifyPlanProjectOwner(firestore, req, projectId);
+    const { projectData } = adminContext
+      ? adminContext
+      : await verifyPlanProjectOwner(firestore, req, projectId);
     assertPlanAnalysisCanProcess(projectData);
 
     uploadedFile = Array.isArray(projectData.uploadedFiles) ? projectData.uploadedFiles[0] : null;

@@ -224,7 +224,7 @@ ${serializeChunkResults(contextChunks, chunkFindings, "VERIFICATION CHUNK")}
   return parseChecklistPayload(aggregated);
 };
 
-module.exports = async function generateVerificationChecklistHandler(req, res, openAiApiKey) {
+module.exports = async function generateVerificationChecklistHandler(req, res, openAiApiKey, adminContext = null) {
   const projectId = String(req.body?.projectId || "").trim();
 
   try {
@@ -232,7 +232,9 @@ module.exports = async function generateVerificationChecklistHandler(req, res, o
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    const { projectData } = await verifyPlanProjectOwner(firestore, req, projectId);
+    const { projectData } = adminContext
+      ? adminContext
+      : await verifyPlanProjectOwner(firestore, req, projectId);
     assertPlanAnalysisCanProcess(projectData);
 
     const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "verification"));

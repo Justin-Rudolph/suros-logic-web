@@ -208,7 +208,7 @@ Return exactly:
   return parseConflictPayload(aggregated);
 };
 
-module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
+module.exports = async function detectConflictsHandler(req, res, openAiApiKey, adminContext = null) {
   const projectId = String(req.body?.projectId || "").trim();
 
   try {
@@ -216,7 +216,9 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey) {
       return res.status(400).json({ error: "projectId is required." });
     }
 
-    const { projectData } = await verifyPlanProjectOwner(firestore, req, projectId);
+    const { projectData } = adminContext
+      ? adminContext
+      : await verifyPlanProjectOwner(firestore, req, projectId);
     assertPlanAnalysisCanProcess(projectData);
 
     const moduleRef = firestore.doc(getPlanModuleDocPath(projectId, "conflicts"));

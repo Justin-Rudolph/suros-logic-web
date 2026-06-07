@@ -24,6 +24,7 @@ It includes:
 - Firebase Functions v2 + Firebase Admin
 - Stripe API (subscriptions + billing portal + webhooks)
 - OpenAI API (estimate generation, plan analysis, scope extraction)
+- Google Cloud Tasks (server-side plan analysis pipeline orchestration)
 - pdf-lib (temporary sampled PDFs for large plan analysis)
 - Resend (password setup and reset emails)
 
@@ -50,7 +51,7 @@ It includes:
 - **Protected dashboard** (`/dashboard`) for bid operations.
 - **Bid form** (`/form/bid_form`) with line items, pricing math, and submission webhook.
 - **Bid history + saved bids** (`/view-bids`, `/bids/history`) backed by Firestore.
-- **Plan Analyzer** (`/plan-analyzer`) for uploaded plan PDFs/images, overview generation, scopes, verification checklists, safety notes, conflicts, and RFIs.
+- **Plan Analyzer** (`/plan-analyzer`) for uploaded plan PDFs/images, overview generation, scopes, verification checklists, safety notes, conflicts, and RFIs. The analysis pipeline runs entirely server-side via Cloud Tasks — the browser is a passive Firestore listener and does not drive pipeline steps.
 - **Billing management** (`/billing`) via Stripe customer portal.
 - **Legal pages** (`/privacy`, `/terms`).
 
@@ -234,6 +235,41 @@ Deploy to production:
 npm run build
 firebase deploy --project prod
 ```
+
+---
+
+## Plan Analyzer Pipeline (Cloud Tasks)
+
+The Plan Analyzer pipeline runs server-side via Google Cloud Tasks. When a user finalizes an upload, `finalizePlanAnalysisUpload` enqueues a Cloud Task. `runPlanPipelineStep` (a private Cloud Function) picks it up, runs the next pending step inline, and self-chains by enqueuing the next task until all steps are complete or one fails.
+
+### One-Time GCP Setup Per Environment
+
+Run these commands once per Firebase project (replace `PROJECT_ID` and `PROJECT_NUMBER` accordingly):
+
+```bash
+gcloud tasks queues create plan-pipeline \
+  --location=us-central1 \
+  --project=PROJECT_ID
+
+gcloud iam service-accounts create plan-pipeline-invoker \
+  --display-name="Plan Pipeline Task Invoker" \
+  --project=PROJECT_ID
+
+gcloud tasks queues add-iam-policy-binding plan-pipeline \
+  --location=us-central1 \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/cloudtasks.enqueuer" \
+  --project=PROJECT_ID
+
+# Run after deploying functions:
+gcloud functions add-invoker-policy-binding runPlanPipelineStep \
+  --region=us-central1 \
+  --member="serviceAccount:plan-pipeline-invoker@PROJECT_ID.iam.gserviceaccount.com" \
+  --project=PROJECT_ID
+```
+
+- Dev project ID: `suros-logic-dev` (project number: `596460376196`)
+- Prod project ID: `suros-logic`
 
 ---
 

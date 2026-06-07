@@ -118,24 +118,24 @@ const getProjectStatusLabel = (project: PlanProjectRecord) => {
   if (project.status === "failed") return "Analysis Failed";
   if (isProjectFullyAnalyzed(project)) return "Fully Analyzed";
   if (getModuleStatus(project, "rfi") === "processing") return "Generating RFIs";
+  if (getModuleStatus(project, "conflicts") === "processing") return "Detecting Conflicts";
+  if (getModuleStatus(project, "safety") === "processing") return "Analyzing Safety";
+  if (getModuleStatus(project, "verification") === "processing") return "Generating Verification";
+  if (getModuleStatus(project, "scopes") === "processing") return "Generating Scopes";
+  if (getOverviewStatus(project) === "processing") return "Analyzing Overview";
+  if (getOverviewStatus(project) === "queued") return "Starting Analysis...";
   if (getModuleStatus(project, "rfi") === "queued") return "RFI Queued";
   if (getModuleStatus(project, "conflicts") === "completed") return "Conflict Checked";
-  if (getModuleStatus(project, "conflicts") === "processing") return "Detecting Conflicts";
   if (getModuleStatus(project, "conflicts") === "queued") return "Conflicts Queued";
   if (getModuleStatus(project, "safety") === "completed") return "Safety Reviewed";
-  if (getModuleStatus(project, "safety") === "processing") return "Analyzing Safety";
   if (getModuleStatus(project, "safety") === "queued") return "Safety Queued";
   if (getModuleStatus(project, "verification") === "completed") return "Verified";
-  if (getModuleStatus(project, "verification") === "processing") return "Generating Verification";
   if (getModuleStatus(project, "verification") === "queued") return "Verification Queued";
   if (getModuleStatus(project, "scopes") === "completed") return "Scoped";
-  if (getModuleStatus(project, "scopes") === "processing") return "Generating Scopes";
   if (getModuleStatus(project, "scopes") === "queued") return "Scopes Queued";
   if (getOverviewStatus(project) === "completed" || getOverviewStatus(project) === "completed_with_errors") {
     return "Overview Analyzed";
   }
-  if (getOverviewStatus(project) === "processing") return "Analyzing Overview";
-  if (getOverviewStatus(project) === "queued") return "Overview Queued";
   if (getOverviewStatus(project) === "failed") return "Analysis Failed";
   if (project.status === "uploaded") return "Uploaded";
   if (project.status === "processing") return "Processing";

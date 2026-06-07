@@ -210,6 +210,28 @@ exports.finalizePlanAnalysisUpload = onRequest(
   }
 );
 
+/* --------------------------------------------------
+   RUN PLAN PIPELINE STEP (internal — Cloud Tasks target)
+-------------------------------------------------- */
+
+exports.runPlanPipelineStep = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 1200,
+    memory: "2GiB",
+    invoker: [`plan-pipeline-invoker@${process.env.GCLOUD_PROJECT || "suros-logic"}.iam.gserviceaccount.com`],
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const runPlanPipelineStepHandler = require("./routes/runPlanPipelineStep");
+
+    await runPlanPipelineStepHandler(req, res, OPENAI_API_KEY.value());
+  }
+);
+
 exports.cancelPlanAnalysisReservation = onRequest(
   {
     timeoutSeconds: 60,
