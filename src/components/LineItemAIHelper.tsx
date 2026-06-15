@@ -1,24 +1,6 @@
 import { useEffect, useState } from "react";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
-
-type EstimateTier = {
-  material_cost: string;
-  labor_cost: string;
-  total_cost: string;
-  description?: string;
-};
-
-type EstimateResponse = {
-  status: "complete" | "incomplete";
-  questions?: string[];
-  estimate?: EstimateTier;
-  explanation?: string;
-  merged_scope?: string;
-  estimates?: {
-    average_price?: EstimateTier;
-    high_tier_price?: EstimateTier;
-  };
-};
+import { EstimateResponse, SavedEstimate } from "@/pages/Form/types";
 
 interface Props {
   tradeName?: string | null;
@@ -26,6 +8,8 @@ interface Props {
   zipCode: string | null;
   onApplyTotal?: (amount: number) => void;
   onUpdateScope?: (scope: string) => void;
+  initialEstimate?: SavedEstimate;
+  onSaveEstimate?: (estimate: EstimateResponse) => void;
 }
 
 export default function LineItemAIHelper({
@@ -34,9 +18,15 @@ export default function LineItemAIHelper({
   zipCode,
   onApplyTotal,
   onUpdateScope,
+  initialEstimate,
+  onSaveEstimate,
 }: Props) {
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<EstimateResponse | null>(null);
+  const [response, setResponse] = useState<EstimateResponse | null>(
+    initialEstimate
+      ? { status: initialEstimate.status, estimates: { average_price: initialEstimate.average_price, high_tier_price: initialEstimate.high_tier_price } }
+      : null
+  );
   const [open, setOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState<"average_price" | "high_tier_price">("average_price");
   const [showBypassWarning, setShowBypassWarning] = useState(false);
@@ -135,6 +125,7 @@ export default function LineItemAIHelper({
         questionsAlreadyAsked: !shouldAskInitialQuestions,
       });
       setResponse(data);
+      if (data?.status === "complete") onSaveEstimate?.(data);
       setOpen(true);
     } catch (err) {
       console.error(err);
@@ -159,8 +150,8 @@ export default function LineItemAIHelper({
         bypass: true,
       });
 
-      // Only update response
       setResponse(data);
+      if (data?.status === "complete") onSaveEstimate?.(data);
 
     } catch (err) {
       console.error(err);

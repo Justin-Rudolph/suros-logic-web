@@ -1,8 +1,34 @@
+export type EstimateTier = {
+  material_cost: string;
+  labor_cost: string;
+  total_cost: string;
+  description?: string;
+};
+
+export type EstimateResponse = {
+  status: "complete" | "incomplete";
+  questions?: string[];
+  estimate?: EstimateTier;
+  explanation?: string;
+  merged_scope?: string;
+  estimates?: {
+    average_price?: EstimateTier;
+    high_tier_price?: EstimateTier;
+  };
+};
+
+export type SavedEstimate = {
+  status: "complete";
+  average_price?: EstimateTier;
+  high_tier_price?: EstimateTier;
+};
+
 export interface LineItem {
   trade: string;
   scope: string;
   material_labor_included: "Yes" | "No";
   line_total: string | number;
+  estimate?: SavedEstimate;
 }
 
 export interface BidFormState {
