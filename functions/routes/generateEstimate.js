@@ -15,6 +15,7 @@ module.exports = async function generateEstimateHandler(
       questionsAlreadyAsked,
       mode,
       responses,
+      siblingLineItems,
     } = req.body || {};
     const normalizedTradeName =
       typeof tradeName === "string" ? tradeName.trim() : "";
@@ -143,8 +144,8 @@ ${answeredResponses
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
-      reasoning_effort: "medium",
+      model: "gpt-5.2",
+      reasoning_effort: "high",
       messages: [
         {
           role: "system",
@@ -182,14 +183,25 @@ Respond only in the following JSON format:
 Requirements:
 
 - If BYPASS MODE is TRUE, you must generate a complete estimate even if information is missing.
-- When bypassing, use regional material and labor cost averages based on the provided zip code (ONLY if no zip code assume reasonable contractor industry averages for missing information).
-- If FORCE QUESTION MODE is TRUE, you must return "status": "incomplete" with 3 to 6 useful clarification questions and you must not return an estimate.
+- When bypassing, use regional material and labor cost averages based on the provided zip code 
+(ONLY if no zip code assume reasonable contractor industry averages for missing information).
+- If FORCE QUESTION MODE is TRUE, you must return "status": "incomplete" with clarification questions and you must not return 
+an estimate. Ask only questions where the answer would directly and meaningfully change the price estimate — 
+things like scope size, quantity, material tier, structural vs. cosmetic work, demo vs. install, access difficulty, or 
+finish level. Do not ask about things that have little pricing impact (scheduling, preferences, contact info, etc.). 
+Ask as many questions as are genuinely needed to price accurately based on what was entered — no artificial 
+minimum or maximum — but do not ask redundant or low-impact questions. 
+NEVER ask confirmation questions that simply restate or paraphrase information already 
+present in the scope and ask "is that correct?" or "is that right?" — if something is already stated in the scope, 
+treat it as fact and do not ask the user to confirm it. Only ask about information that is genuinely missing or ambiguous and 
+where the answer would change the price.
 - FORCE QUESTION MODE takes priority over all other estimate-generation instructions.
 - If QUESTIONS ALREADY ASKED is TRUE, you must generate a complete estimate using the available details and reasonable contractor assumptions for missing information.
 - Do NOT return "incomplete" when bypass mode is TRUE or QUESTIONS ALREADY ASKED is TRUE.
 - If a trade name is provided, treat it as the controlling trade context for interpreting the scope of work and pricing the job.
 - Use the trade name to decide whether the work is demolition, installation, repair, finishing, etc. Do not price the scope as a different trade just because the scope mentions an item that could belong to multiple trades.
 - Example: if the trade name is "Demo" and the scope mentions cabinets, estimate demolition/removal/disposal pricing for cabinets, not cabinet installation pricing.
+- If OTHER LINE ITEMS are provided in the request, those scopes are being estimated separately. Never include their costs in this estimate, and never ask questions about work that is already described in those other line items.
 
 Normal behavior (when bypass mode is FALSE and QUESTIONS ALREADY ASKED is FALSE):
 - If required information is missing, return "status": "incomplete" and include clarification questions inside the "questions" array.
@@ -208,7 +220,10 @@ If sufficient information is available (or bypass mode is TRUE):
   - material_cost as a dollar amount
   - labor_cost as a dollar amount
   - total_cost as a dollar amount
-  - description: a detailed explanation (maximum 10 sentences) explaining how you determined the material and labor costs for that specific tier. Base your calculations strictly on the information given in the request, and clearly break out how each cost was derived.
+  - description: a breakdown of how you determined the costs for that specific tier, formatted as bullet points. 
+  Each bullet must start with "- " and cover one distinct point (e.g. a specific material cost, a labor rate, 
+  a quantity assumption, a regional factor). Base your calculations strictly on the information given in the request. 
+  Use as many bullets as needed to clearly explain the estimate, but keep each bullet concise.
 - Also set the top-level "estimate" equal to the "average_price" tier and set the top-level "explanation" equal to the "average_price.description" for backward compatibility.
 
 Formatting Requirements:
@@ -229,6 +244,14 @@ Trade Name: ${tradeName || "Not Provided"}
 
 Scope of Work:
 ${description}
+${Array.isArray(siblingLineItems) && siblingLineItems.length
+  ? `
+OTHER LINE ITEMS ALREADY PRICED IN THIS BID (DO NOT DOUBLE-COUNT):
+${siblingLineItems.map((li, i) => `${i + 1}. Trade: ${li.trade || "Not Provided"}\n   Scope: ${li.scope || "Not Provided"}`).join("\n")}
+
+IMPORTANT: The line items above are separate scopes of work that have already been (or will be) estimated and priced independently. Do NOT include any costs for work described in those line items in this estimate. Do NOT ask clarifying questions about work that is already described in those other line items.
+`
+  : ""}
           `,
         },
       ],
@@ -254,12 +277,11 @@ ${description}
       return res.json({
         status: "incomplete",
         questions: questions.length
-          ? questions.slice(0, 6)
+          ? questions
           : [
-              "What materials should be used?",
               "What are the approximate dimensions or square footage?",
-              "Are there any demolition, prep, or disposal needs?",
-              "Are there any access, timeline, or site conditions that could affect labor?",
+              "What material quality level is expected (standard, mid-grade, or premium)?",
+              "Does this include demolition or removal of existing materials?",
             ],
       });
     }

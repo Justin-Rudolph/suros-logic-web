@@ -1457,6 +1457,10 @@ const BidForm: React.FC = () => {
                                                         scope={item.scope}
                                                         zipCode={extractZipCode(form.company_address)}
                                                         initialEstimate={item.estimate}
+                                                        siblingLineItems={lineItems
+                                                            .filter((_, i) => i !== index)
+                                                            .map((li) => ({ trade: li.trade, scope: li.scope }))
+                                                        }
                                                         onSaveEstimate={(estimate) => {
                                                             const normalized = {
                                                                 status: "complete" as const,
