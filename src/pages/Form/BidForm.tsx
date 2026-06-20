@@ -11,7 +11,8 @@ import React, {
 } from "react";
 
 import "./BidForm.css";
-import { GripVertical, Trash2 } from "lucide-react";
+import { GripVertical, Info, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
@@ -83,6 +84,7 @@ const emptyLineItem: LineItem = {
     scope: "",
     material_labor_included: "Yes",
     line_total: "",
+    margin_percentage: "",
 };
 
 const BidForm: React.FC = () => {
@@ -465,10 +467,11 @@ const BidForm: React.FC = () => {
     /** -------------------------------
      * AUTO CALCULATE TOTAL COSTS (subtotal + contingency + tax)
      --------------------------------*/
-    const subtotal = lineItems.reduce(
-        (sum, item) => sum + parseMoney(item.line_total),
-        0
-    );
+    const subtotal = lineItems.reduce((sum, item) => {
+        const base = parseMoney(item.line_total);
+        const marginPct = parsePercent(item.margin_percentage ?? "");
+        return sum + roundMoney(base * (1 + marginPct / 100));
+    }, 0);
 
     const taxPct = parsePercent(form.tax_percentage);
     const contingencyPct = parsePercent(form.contingency_percentage);
@@ -926,12 +929,16 @@ const BidForm: React.FC = () => {
         const convertMoney = (v: string | number) =>
             Number(String(v).replace(/[^0-9.]/g, "")) || 0;
 
-        const preparedLineItems = lineItems.map((item) => ({
-            trade: item.trade,
-            scope: item.scope.split(/\r?\n/).filter(Boolean),
-            material_labor_included: item.material_labor_included,
-            line_total: convertMoney(item.line_total),
-        }));
+        const preparedLineItems = lineItems.map((item) => {
+            const base = convertMoney(item.line_total);
+            const marginPct = Number((item.margin_percentage ?? "").replace(/[^0-9.]/g, "")) || 0;
+            return {
+                trade: item.trade,
+                scope: item.scope.split(/\r?\n/).filter(Boolean),
+                material_labor_included: item.material_labor_included,
+                line_total: Math.round(base * (1 + marginPct / 100) * 100) / 100,
+            };
+        });
 
         const payload = {
             ...form,
@@ -1488,6 +1495,42 @@ const BidForm: React.FC = () => {
                                                             )
                                                         }
                                                     />
+                                                </div>
+
+                                                <label style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "8px" }}>
+                                                    Margin (%):
+                                                    <Tooltip delayDuration={100}>
+                                                        <TooltipTrigger asChild>
+                                                            <Info size={14} style={{ cursor: "pointer", color: "#888", flexShrink: 0 }} />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent style={{ maxWidth: 260 }}>
+                                                            Add a profit margin to this line item. It's calculated as a percentage of the line total and added to your subtotal. This is not shown to the customer — they only see the final price.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </label>
+                                                <div className="tax-row">
+                                                    <div className="percent-input-wrapper">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="0"
+                                                            value={item.margin_percentage ?? ""}
+                                                            onChange={(e) =>
+                                                                handleLineItemChange(
+                                                                    index,
+                                                                    "margin_percentage",
+                                                                    e.target.value.replace(/[^0-9.]/g, "")
+                                                                )
+                                                            }
+                                                        />
+                                                        <span className="percent-suffix">%</span>
+                                                    </div>
+                                                    <div className="tax-amount text-black">
+                                                        {parseMoney(item.line_total) > 0 && parsePercent(item.margin_percentage ?? "") > 0
+                                                            ? `${formatDollarWithCommas(
+                                                                roundMoney(parseMoney(item.line_total) * parsePercent(item.margin_percentage ?? "") / 100)
+                                                            )} margin`
+                                                            : ""}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

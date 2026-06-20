@@ -28,6 +28,7 @@ export interface LineItem {
   scope: string;
   material_labor_included: "Yes" | "No";
   line_total: string | number;
+  margin_percentage?: string;
   estimate?: SavedEstimate;
 }
 
