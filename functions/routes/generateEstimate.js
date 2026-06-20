@@ -70,6 +70,8 @@ Rules:
 - If a clarification answer is vague, keep it vague instead of making it more specific.
 - Preserve all valid details already present in the existing scope.
 - You may correct obvious spelling mistakes and minor grammar issues so the final scope reads clearly, but you must not change the meaning or add new facts.
+- Every line must describe a contractor action or task — something the contractor will do, remove, install, protect, disconnect, or handle. Never write factual statements or observations (e.g. "There are no gas lines" is wrong; "No gas line disconnection required" or "Disconnect electrical connections prior to demo" is correct).
+- Phrase each line using active contractor language: remove, demo, disconnect, protect, install, patch, cap, haul, coordinate, etc.
 - Return the final scope as clean plain text with one bullet item per line whenever possible.
 - Each line should begin with "- ".
 - Do not include headings, commentary, notes, or JSON outside the required format.
