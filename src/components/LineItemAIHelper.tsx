@@ -16,6 +16,7 @@ interface Props {
   initialEstimate?: SavedEstimate;
   onSaveEstimate?: (estimate: EstimateResponse) => void;
   siblingLineItems?: SiblingLineItem[];
+  currentLineTotal?: string;
 }
 
 export default function LineItemAIHelper({
@@ -27,6 +28,7 @@ export default function LineItemAIHelper({
   initialEstimate,
   onSaveEstimate,
   siblingLineItems,
+  currentLineTotal,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<EstimateResponse | null>(
@@ -253,7 +255,18 @@ export default function LineItemAIHelper({
         {response && (
           <button
             type="button"
-            onClick={() => { if (!loading) setOpen(true); }}
+            onClick={() => {
+              if (loading) return;
+              const highTier = getTierEstimate(response, "high_tier_price");
+              if (highTier && currentLineTotal) {
+                const lineTotalNum = parseCurrencyToNumber(currentLineTotal);
+                const premiumNum = parseCurrencyToNumber(highTier.total_cost);
+                setSelectedTier(lineTotalNum === premiumNum ? "high_tier_price" : "average_price");
+              } else {
+                setSelectedTier("average_price");
+              }
+              setOpen(true);
+            }}
             disabled={loading}
             style={{
               height: "40px", padding: "0 12px",
@@ -615,7 +628,7 @@ export default function LineItemAIHelper({
                           marginBottom: "10px",
                         }}>
                           <div style={{
-                            fontSize: "10px", fontWeight: 700,
+                            fontSize: "11px", fontWeight: 700,
                             color: "#9CA3AF", letterSpacing: "0.06em",
                             textTransform: "uppercase", marginBottom: "4px",
                           }}>
@@ -644,7 +657,7 @@ export default function LineItemAIHelper({
                               padding: "11px 14px",
                             }}>
                               <div style={{
-                                fontSize: "10px", fontWeight: 700,
+                                fontSize: "11px", fontWeight: 700,
                                 color: "#9CA3AF", letterSpacing: "0.05em",
                                 textTransform: "uppercase", marginBottom: "3px",
                               }}>
@@ -679,18 +692,18 @@ export default function LineItemAIHelper({
                                     <li key={i} style={{
                                       display: "flex",
                                       gap: "7px",
-                                      fontSize: "12px",
-                                      color: "#6B7280",
+                                      fontSize: "14px",
+                                      color: "#111827",
                                       lineHeight: 1.6,
                                       paddingBottom: i < lines.length - 1 ? "5px" : 0,
                                     }}>
-                                      <span style={{ color: "#9CA3AF", flexShrink: 0, marginTop: "1px" }}>—</span>
+                                      <span style={{ color: "#6B7280", flexShrink: 0, marginTop: "1px" }}>—</span>
                                       <span>{line.replace(/^-+\s*/, "")}</span>
                                     </li>
                                   ))}
                                 </ul>
                               ) : (
-                                <p style={{ margin: 0, fontSize: "12px", color: "#6B7280", lineHeight: 1.6 }}>
+                                <p style={{ margin: 0, fontSize: "14px", color: "#111827", lineHeight: 1.6 }}>
                                   {raw.trim()}
                                 </p>
                               )}

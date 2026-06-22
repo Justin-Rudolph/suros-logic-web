@@ -1493,6 +1493,7 @@ const BidForm: React.FC = () => {
                                                                 updatedScope
                                                             )
                                                         }
+                                                        currentLineTotal={item.line_total}
                                                         onApplyTotal={(amount) =>
                                                             handleLineItemChange(
                                                                 index,
