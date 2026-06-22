@@ -482,6 +482,12 @@ const BidForm: React.FC = () => {
 
     const totalWithExtras = roundMoney(subtotal + taxAmount + contingencyAmount);
 
+    const totalMargin = lineItems.reduce((sum, item) => {
+        const base = parseMoney(item.line_total);
+        const marginPct = parsePercent(item.margin_percentage ?? "");
+        return sum + roundMoney(base * (marginPct / 100));
+    }, 0);
+
     const depositPct = parsePercent(form.deposit_percentage);
 
     const depositAmount = roundMoney(totalWithExtras * (depositPct / 100));
@@ -1540,7 +1546,7 @@ const BidForm: React.FC = () => {
 
                                 <h2>Contingency</h2>
 
-                                <label>Contingency (%):</label>
+                                <label>Contingency (% of Line Items + Margin):</label>
                                 <div className="tax-row">
                                     <div className="percent-input-wrapper">
                                         <input
@@ -1580,7 +1586,30 @@ const BidForm: React.FC = () => {
 
                                 <h2>Totals & Payment</h2>
 
-                                <label>Tax (%):</label>
+                                {totalMargin > 0 && (
+                                    <>
+                                        <label style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                            Total Margin:
+                                            <Tooltip delayDuration={100}>
+                                                <TooltipTrigger asChild>
+                                                    <Info size={14} style={{ cursor: "pointer", color: "#888", flexShrink: 0 }} />
+                                                </TooltipTrigger>
+                                                <TooltipContent style={{ maxWidth: 260 }}>
+                                                    Total profit margin across all line items. Not shown on the proposal sent to the customer.
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formatDollarWithCommas(totalMargin)}
+                                            readOnly
+                                            className="input-readonly"
+                                            placeholder="$"
+                                        />
+                                    </>
+                                )}
+
+                                <label>Tax (% of Line Items + Margin):</label>
                                 <div className="tax-row">
                                     <div className="percent-input-wrapper">
                                         <input
@@ -1622,7 +1651,7 @@ const BidForm: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <label>Total Costs (Line Items + Contingency + Tax):</label>
+                                <label>Total Costs (Line Items + Margin + Contingency + Tax):</label>
                                 <input
                                     type="text"
                                     id="total_costs"
