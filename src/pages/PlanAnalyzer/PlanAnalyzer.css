@@ -282,6 +282,59 @@
   line-height: 1.5;
 }
 
+.plan-notes-field {
+  margin: 20px 0;
+}
+
+.plan-section-divider {
+  margin: 24px 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.plan-notes-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 18, 30, 0.52);
+  color: #ffffff;
+  font: inherit;
+  resize: vertical;
+  min-height: 96px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.plan-notes-input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.plan-notes-input:focus {
+  outline: none;
+  border-color: rgba(78, 168, 228, 0.58);
+  box-shadow: 0 0 0 3px rgba(78, 168, 228, 0.14);
+  background: rgba(16, 24, 38, 0.72);
+}
+
+.plan-notes-input:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.plan-notes-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.plan-notes-counter {
+  margin-top: 10px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .plan-dropzone {
   position: relative;
   padding: 40px 28px;

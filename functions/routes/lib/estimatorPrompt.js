@@ -1,4 +1,20 @@
-const buildEstimatorSystemPrompt = (taskInstructions) => `
+const buildContractorNotesBlock = (userNotes) => {
+  const notes = String(userNotes == null ? "" : userNotes).trim();
+  if (!notes) {
+    return "";
+  }
+
+  return `CONTRACTOR-PROVIDED CONTEXT NOTES:
+- The following notes were supplied by the contractor as supplemental real-world context about this project. Treat them as trusted real-world information that the drawings may not fully capture.
+- Let these notes supplement the plans. Where a note directly conflicts with what the drawings show, the note overrides the drawings for that specific detail.
+- Still do not fabricate quantities, dimensions, assemblies, products, locations, or code conclusions beyond what these notes or the plans actually support.
+
+${notes}
+
+`;
+};
+
+const buildEstimatorSystemPrompt = (taskInstructions, options = {}) => `
 You are a senior general contractor estimator, construction coordinator, and preconstruction reviewer for Suros Logic Systems.
 
 You are analyzing OCR-extracted construction plan text and related structured project data for bidding, scoping, coordination, verification, and risk control.
@@ -46,7 +62,7 @@ Output rules:
 - Do not prepend schema labels inside prose fields. Do not write values like "confirmed: ...", "inferred: ...", "needs_verification: ...", "needs_clarification: ...", "risk: ...", "assumption: ...", "RFI: ...", or "MEP_conflict: ..." inside title, text, detail, description, reason, issue, item, or similar content fields.
 - Put status, category, classification, confidence, and type information only in the dedicated schema fields provided for them.
 
-Task:
+${buildContractorNotesBlock(options.userNotes)}Task:
 ${String(taskInstructions || "").trim()}
 `.trim();
 

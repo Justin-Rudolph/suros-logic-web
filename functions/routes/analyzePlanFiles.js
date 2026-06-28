@@ -993,7 +993,7 @@ const writeAnalyzedFiles = async ({
   }
 };
 
-const summarizeProjectFromPlans = async (files, openAiApiKey) => {
+const summarizeProjectFromPlans = async (files, openAiApiKey, userNotes = "") => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -1129,7 +1129,7 @@ Return exactly:
   "affectedAreas": ["Area 1", "Area 2"],
   "summary": "string"
 }
-    `),
+    `, { userNotes }),
     userContent: serializeChunkResults(contextChunks, chunkSummaries, "SOURCE SUMMARY"),
   });
 
@@ -1342,7 +1342,7 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey, 
       throw new Error("No uploaded files could be analyzed.");
     }
 
-    const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey);
+    const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey, projectData?.userNotes);
 
     const latestProjectSnap = await firestore.doc(`planProjects/${projectId}`).get();
     assertPlanAnalysisCanProcess(latestProjectSnap.data() || {});

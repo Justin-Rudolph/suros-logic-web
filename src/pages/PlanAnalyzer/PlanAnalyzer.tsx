@@ -264,6 +264,7 @@ export default function PlanAnalyzer() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [projects, setProjects] = useState<PlanProjectRecord[]>([]);
   const [projectTitle, setProjectTitle] = useState("");
+  const [projectNotes, setProjectNotes] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -587,6 +588,7 @@ export default function PlanAnalyzer() {
         title: trimmedProjectTitle,
         uploadedFile: uploadedResult,
         analysisOptions: analysisToggles,
+        userNotes: projectNotes.trim(),
       });
 
       toast({
@@ -597,6 +599,7 @@ export default function PlanAnalyzer() {
 
       setSelectedFile(null);
       setProjectTitle("");
+      setProjectNotes("");
       setUploadProgress(0);
       navigate(`/plan-analyzer/${projectId}`);
     } catch (error) {
@@ -842,9 +845,32 @@ export default function PlanAnalyzer() {
             </div>
           </div>
 
+          <hr className="plan-section-divider" />
+
+          <div className="plan-notes-field">
+            <label htmlFor="plan-project-notes" className="plan-summary-label">
+              Additional Notes (Optional)
+            </label>
+            <textarea
+              id="plan-project-notes"
+              className="plan-notes-input"
+              placeholder="Describe anything the plan set doesn't capture, real-world conditions that differ from the drawings, or any other context that will help the analysis be more accurate."
+              value={projectNotes}
+              onChange={(event) => setProjectNotes(event.target.value)}
+              disabled={isUploading || !canUploadPlanAnalysis}
+              maxLength={2000}
+              rows={4}
+            />
+            <div className="plan-notes-footer">
+              <span className="plan-notes-counter">{projectNotes.length}/2000</span>
+            </div>
+          </div>
+
+          <hr className="plan-section-divider" />
+
           <div className="plan-analysis-options">
             <div className="plan-analysis-options-header">
-              <span className="plan-summary-label">Optional analysis modules</span>
+              <span className="plan-summary-label">Analysis Modules (Optional)</span>
               <p className="plan-section-subtitle">
                 Plan overview analysis and trade scope analysis always run. Turn on any additional reviews you want included.
               </p>

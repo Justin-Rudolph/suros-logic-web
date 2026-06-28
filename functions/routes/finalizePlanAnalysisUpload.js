@@ -18,6 +18,16 @@ const firestore = admin.firestore();
 const MODULE_TYPES = ["overview", "scopes", "verification", "safety", "conflicts", "rfi"];
 const OPTIONAL_MODULE_TYPES = ["verification", "safety", "conflicts", "rfi"];
 
+const MAX_USER_NOTES_LENGTH = 2000;
+
+const sanitizeUserNotes = (rawNotes) => {
+  if (rawNotes == null) {
+    return "";
+  }
+
+  return String(rawNotes).trim().slice(0, MAX_USER_NOTES_LENGTH);
+};
+
 const normalizeAnalysisOptions = (analysisOptions) => ({
   verification: analysisOptions?.verification === true,
   safety: analysisOptions?.safety === true,
@@ -101,6 +111,7 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
 
     const analysisOptions = normalizeAnalysisOptions(req.body?.analysisOptions || {});
     const title = String(req.body?.title || "").trim();
+    const userNotes = sanitizeUserNotes(req.body?.userNotes);
     const modules = {
       overview: buildPlanModuleSummaryData(projectId, "overview", "queued"),
       scopes: buildPlanModuleSummaryData(projectId, "scopes", "queued"),
@@ -139,6 +150,7 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
         status: "uploaded",
         uploadedFiles: [uploadedFile],
         analysisOptions,
+        userNotes,
         modules,
       },
       { merge: true }

@@ -168,7 +168,7 @@ const parseScopePayload = (parsed) => {
   return scopes;
 };
 
-const generateTradeScopesFromPlans = async (files, openAiApiKey) => {
+const generateTradeScopesFromPlans = async (files, openAiApiKey, userNotes = "") => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -248,7 +248,7 @@ Return exactly this shape:
   "electrical": [],
   "HVAC": []
 }
-      `),
+      `, { userNotes }),
         userContent: chunk.text,
       });
       chunkUsages[index] = usage;
@@ -317,7 +317,7 @@ Return exactly this shape:
   "electrical": [],
   "HVAC": []
 }
-    `),
+    `, { userNotes }),
     userContent: serializeChunkResults(contextChunks, chunkScopes, "SCOPE CHUNK"),
   });
 
@@ -378,7 +378,7 @@ module.exports = async function generateScopesHandler(req, res, openAiApiKey, ad
       throw missingFilesError;
     }
 
-    const scopes = await generateTradeScopesFromPlans(files, openAiApiKey);
+    const scopes = await generateTradeScopesFromPlans(files, openAiApiKey, projectData?.userNotes);
 
     const completedAt = FieldValue.serverTimestamp();
 

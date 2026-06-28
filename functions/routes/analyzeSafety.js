@@ -91,7 +91,7 @@ const parseSafetyPayload = (parsed) => {
   return items.map(sanitizeSafetyItem).filter(Boolean);
 };
 
-const generateSafetyAnalysis = async (files, openAiApiKey) => {
+const generateSafetyAnalysis = async (files, openAiApiKey, userNotes = "") => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -145,7 +145,7 @@ Return exactly:
     }
   ]
 }
-      `),
+      `, { userNotes }),
         userContent: chunk.text,
       });
       chunkUsages[index] = usage;
@@ -183,7 +183,7 @@ Return exactly:
     }
   ]
 }
-    `),
+    `, { userNotes }),
     userContent: serializeChunkResults(contextChunks, chunkFindings, "SAFETY CHUNK"),
   });
 
@@ -244,7 +244,7 @@ module.exports = async function analyzeSafetyHandler(req, res, openAiApiKey, adm
       throw missingFilesError;
     }
 
-    const safety = await generateSafetyAnalysis(files, openAiApiKey);
+    const safety = await generateSafetyAnalysis(files, openAiApiKey, projectData?.userNotes);
 
     const completedAt = FieldValue.serverTimestamp();
 
