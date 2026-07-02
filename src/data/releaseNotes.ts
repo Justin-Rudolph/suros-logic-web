@@ -2,6 +2,34 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.4.0",
+    date: "July 2, 2026",
+    highlights: [
+      "Added the ability to upload your company logo from the Edit Profile screen — once uploaded, it appears automatically on your bid forms and change order forms for a more branded, professional presentation.",
+      "Added an editable prepared-by name to the bid form proposal so clients can see who put the proposal together.",
+      "Updated the change order form to match the bid forms' styling for a more consistent, professional look across your documents.",
+    ],
+  },
+  {
+    version: "v3.3.0",
+    date: "June 28, 2026",
+    highlights: [
+      "Plan Analyzer now processes uploads in the cloud, so you no longer have to stay on the page while a plan is analyzed — leave, move around the app, or start another analysis and come back when it's done.",
+      "Added optional notes at upload time so you can share context about a plan that the AI factors into its analysis.",
+      "Improved reliability and handling of large plan sets during processing.",
+    ],
+  },
+  {
+    version: "v3.2.0",
+    date: "June 22, 2026",
+    highlights: [
+      "AI estimates are now saved and restored on bid forms, so your generated estimates stay with the bid.",
+      "Redesigned the AI estimate experience with clearer context, better error handling, and cleaner, more modern styling.",
+      "Added per-line-item margin percentages and a total margin display, with clearer calculation labels throughout the bid form.",
+      "Improved AI scope output so clarification answers are rewritten as clear contractor actions.",
+    ],
+  },
+  {
     version: "v3.1.0",
     date: "May 24, 2026",
     highlights: [
