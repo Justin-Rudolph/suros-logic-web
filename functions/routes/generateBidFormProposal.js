@@ -70,6 +70,7 @@ module.exports = async function generateBidFormProposalHandler(
           : asNumber(payload.tax_percentage),
       deposit_percentage: asNumber(payload.deposit_percentage),
       weekly_payments: Number(payload.weekly_payments) || 0,
+      prepared_by: String(payload.salesperson || "").trim(),
       line_items: lineItems.map((item) => ({
         trade: String(item?.trade || "").trim(),
         material_labor_included:

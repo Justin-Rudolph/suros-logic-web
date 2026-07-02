@@ -21,6 +21,21 @@ export const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const sanitizeChipColor = (color?: string) => {
+  const trimmed = String(color || "").trim();
+  if (trimmed.toLowerCase() === "transparent") return "transparent";
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : "#ffffff";
+};
+
+const buildLogoChipHtml = (logoUrl?: string, chipColor?: string) => {
+  const trimmed = String(logoUrl || "").trim();
+  if (!trimmed) return "";
+
+  const background = sanitizeChipColor(chipColor);
+
+  return `<span style="display:inline-block; background:${background}; border-radius:8px; padding:8px 10px;"><img src="${escapeHtml(trimmed)}" alt="Company logo" style="max-height:130px; max-width:320px; object-fit:contain; display:block;" /></span>`;
+};
+
 const parseCurrencyValue = (value: string) => {
   const amount = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
   return Number.isFinite(amount) ? amount : 0;
@@ -85,7 +100,14 @@ const toReasonParagraph = (value: string) => {
   return escapeHtml(normalized);
 };
 
-export const renderChangeOrderProposalHtml = (document: ChangeOrderProposalDocument) => `<!DOCTYPE html>
+export const renderChangeOrderProposalHtml = (
+  document: ChangeOrderProposalDocument,
+  logoUrl?: string,
+  chipColor?: string
+) => {
+  const logoChip = buildLogoChipHtml(logoUrl, chipColor);
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -131,22 +153,25 @@ export const renderChangeOrderProposalHtml = (document: ChangeOrderProposalDocum
   <tr>
     <td>
       <h1 style="margin:0; font-size:32px;">${escapeHtml(document.company_name)}</h1>
-      <div style="margin-top:6px; font-size:20px;">${escapeHtml(document.company_address)}</div>
-      <div style="font-size:20px;">${escapeHtml(document.company_phone)}</div>
-      <div style="font-size:20px;">
+      <div>${escapeHtml(document.company_address)}</div>
+      <div>${escapeHtml(document.company_phone)}</div>
+      <div>
         <a href="mailto:${escapeHtml(document.company_email)}" style="color:#e3f2fd; text-decoration:none;">
           ${escapeHtml(document.company_email)}
         </a>
       </div>
     </td>
-    <td align="right">
-      <h2 style="margin:0; font-size:28px;">Change Order Form</h2>
-      <div style="font-size:20px;">${escapeHtml(formatReadableDate(document.date_of_issue))}</div>
-    </td>
+    ${logoChip ? `<td align="right" style="vertical-align:middle; padding-right:24px; line-height:0;">${logoChip}</td>` : ""}
   </tr>
 </table>
 
-<div style="padding:24px;">
+<div style="padding:20px 24px 24px;">
+
+<!-- CHANGE ORDER TITLE + DATE -->
+<div style="margin-bottom:30px;">
+  <h2 style="margin:0; font-size:26px; color:#2A3439;">Change Order Form</h2>
+  <div style="font-size:24px; color:#111;">${escapeHtml(formatReadableDate(document.date_of_issue))}</div>
+</div>
 
 <!-- JOB + CLIENT -->
 <table cellpadding="10" cellspacing="0" style="border:2px solid #2A3439; background:#ffffff;">
@@ -308,3 +333,4 @@ export const renderChangeOrderProposalHtml = (document: ChangeOrderProposalDocum
 </div>
 </body>
 </html>`;
+};

@@ -26,6 +26,21 @@ export const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const sanitizeChipColor = (color?: string) => {
+  const trimmed = String(color || "").trim();
+  if (trimmed.toLowerCase() === "transparent") return "transparent";
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : "#ffffff";
+};
+
+const buildLogoChipHtml = (logoUrl?: string, chipColor?: string) => {
+  const trimmed = String(logoUrl || "").trim();
+  if (!trimmed) return "";
+
+  const background = sanitizeChipColor(chipColor);
+
+  return `<span style="display:inline-block; background:${background}; border-radius:8px; padding:8px 10px;"><img src="${escapeHtml(trimmed)}" alt="Company logo" style="max-height:130px; max-width:320px; object-fit:contain; display:block;" /></span>`;
+};
+
 export const formatUsd = (value: number) => currencyFormatter.format(value || 0);
 
 export const formatInvoiceDate = (value: string) => {
@@ -89,34 +104,38 @@ const buildCompanySloganMarkup = (value: string) => {
   return `<em style="font-size:22px;">&ldquo;${escapeHtml(trimmed)}&rdquo;</em>`;
 };
 
-const buildExpandedScopeLines = (lineItem: BidFormProposalLineItem) => {
-  return lineItem.expanded_scope_lines
-    .filter((line) => line.trim())
-    .map(
-      (line) =>
-        `      <p style="margin: 0 0 4px; page-break-inside: avoid; break-inside: avoid;">${escapeHtml(line.trim())}</p>`
-    )
-    .join("\n");
-};
+const buildScopeLineHtml = (line: string) =>
+  `      <p style="margin: 0 0 4px; page-break-inside: avoid; break-inside: avoid;">${escapeHtml(line.trim())}</p>`;
 
 const buildLineItemsRows = (lineItems: BidFormProposalLineItem[]) =>
   lineItems
     .map((lineItem, index) => {
+      const scopeLines = lineItem.expanded_scope_lines.filter((line) => line.trim());
+      const [firstScopeLine, ...remainingScopeLines] = scopeLines;
+      const firstScopeHtml = firstScopeLine ? `\n${buildScopeLineHtml(firstScopeLine)}` : "";
+      const remainingScopeHtml = remainingScopeLines.map(buildScopeLineHtml).join("\n");
+
       return `<tr style="page-break-inside: auto; break-inside: auto;">
   <td style="vertical-align: top; padding: 8px; border-right: 0.25px solid #000; border-bottom: 0.25px solid #000; page-break-inside: auto; break-inside: auto;">${index + 1}</td>
   <td style="vertical-align: top; padding: 8px; border-right: 0.25px solid #000; border-bottom: 0.25px solid #000; page-break-inside: auto; break-inside: auto;">
-    <div style="font-weight: bold; font-size: 24px;"><u>${escapeHtml(lineItem.trade)}</u></div>
-    <div style="font-style: italic; font-size: 22px;">Material &amp; Labor Included: ${escapeHtml(lineItem.material_labor_included)}</div>
-    <div>
-${buildExpandedScopeLines(lineItem)}
+    <!-- Keep the trade title, Material & Labor line, and the first scope line together so a title never gets orphaned at a page bottom -->
+    <div style="page-break-inside: avoid; break-inside: avoid;">
+      <div style="font-weight: bold; font-size: 24px;"><u>${escapeHtml(lineItem.trade)}</u></div>
+      <div style="font-style: italic; font-size: 22px;">Material &amp; Labor Included: ${escapeHtml(lineItem.material_labor_included)}</div>${firstScopeHtml}
     </div>
+${remainingScopeHtml}
   </td>
   <td style="vertical-align: top; padding: 8px; text-align: right; border-bottom: 0.25px solid #000; font-weight: bold; font-size: 24px; page-break-inside: auto; break-inside: auto;">${formatUsd(Number(lineItem.line_total) || 0)}</td>
 </tr>`;
     })
     .join("\n\n");
 
-export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
+export const renderBidEditorHtml = (
+  document: BidFormProposalDocument,
+  logoUrl?: string,
+  chipColor?: string
+) => {
+  const logoChip = buildLogoChipHtml(logoUrl, chipColor);
   const {
     numericTaxPercentage,
     subtotal,
@@ -189,26 +208,27 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
         </a>
       </div>
     </td>
+    ${logoChip ? `<td align="right" style="vertical-align:middle; padding-right:24px; line-height:0;">${logoChip}</td>` : ""}
   </tr>
 </table>
 
-<div style="padding:24px;">
+<div style="padding:12px 24px 24px;">
 
 <!-- INVOICE META -->
 <table cellpadding="8" cellspacing="0">
   <tr>
-    <td style="padding-bottom:0;">
+    <td style="padding-bottom:0; padding-left:0;">
       <strong style="font-size:26px; color:#2A3439;">Invoice Date</strong>
     </td>
-    <td style="text-align:right; padding-bottom:0;">
+    <td style="text-align:right; padding-bottom:0; padding-right:0;">
       <strong style="font-size:26px; color:#2A3439;">INVOICE #${escapeHtml(document.invoice_number)}</strong>
     </td>
   </tr>
   <tr>
-    <td style="padding-top:0;">
+    <td style="padding-top:0; padding-left:0;">
       ${escapeHtml(formatInvoiceDate(document.invoice_date))}
     </td>
-    <td style="text-align:right; padding-top:0;">
+    <td style="text-align:right; padding-top:0; padding-right:0;">
       ${buildCompanySloganMarkup(document.company_slogan)}
     </td>
   </tr>
@@ -322,7 +342,8 @@ export const renderBidEditorHtml = (document: BidFormProposalDocument) => {
 
   <div style="margin-bottom:40px;">
     <strong style="color:#2A3439;">Quotation prepared by:</strong>
-    <div style="border-bottom:2px solid #2A3439; margin-top:40px; width:420px;"></div>
+    <div style="margin-top:18px;">${escapeHtml(document.prepared_by || "")}</div>
+    <div style="border-bottom:2px solid #2A3439; margin-top:20px; width:420px;"></div>
   </div>
 
   <div style="margin-bottom:40px; font-size:22px;">

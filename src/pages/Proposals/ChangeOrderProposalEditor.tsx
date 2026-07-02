@@ -338,8 +338,12 @@ export default function ChangeOrderProposalEditor() {
 
   const previewHtml = useMemo(() => {
     if (!effectiveDocumentData) return "";
-    return renderChangeOrderProposalHtml(effectiveDocumentData);
-  }, [effectiveDocumentData]);
+    return renderChangeOrderProposalHtml(
+      effectiveDocumentData,
+      profile?.companyLogoUrl,
+      profile?.companyLogoChipColor
+    );
+  }, [effectiveDocumentData, profile?.companyLogoUrl, profile?.companyLogoChipColor]);
 
   const updateField = <K extends keyof ChangeOrderProposalDocument>(
     field: K,
@@ -358,7 +362,11 @@ export default function ChangeOrderProposalEditor() {
   const persistProposalChanges = async () => {
     if (!record?.id || !effectiveDocumentData || !user) return null;
 
-    const html = renderChangeOrderProposalHtml(effectiveDocumentData);
+    const html = renderChangeOrderProposalHtml(
+      effectiveDocumentData,
+      profile?.companyLogoUrl,
+      profile?.companyLogoChipColor
+    );
 
     await updateDoc(doc(firestore, "changeOrderProposals", record.id), {
       documentData: effectiveDocumentData,
@@ -399,10 +407,14 @@ export default function ChangeOrderProposalEditor() {
       const saved = await persistProposalChanges();
       if (!saved) return;
 
-      const pdfFileName = (saved.documentData.title || record?.title || "change-order")
-        .trim()
-        .replace(/[^a-zA-Z0-9-_]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "change-order";
+      const projectName = String(saved.documentData.job_name || "").trim();
+      const rawPdfFileName = projectName
+        ? `Change Order - ${projectName}`
+        : "Change Order";
+      const pdfFileName = rawPdfFileName
+        .replace(/[^a-zA-Z0-9-_ ]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() || "Change Order";
 
       const response = await fetch(`${getFunctionsBaseUrl()}/downloadBidFormProposalPdf`, {
         method: "POST",
@@ -435,7 +447,7 @@ export default function ChangeOrderProposalEditor() {
       const objectUrl = window.URL.createObjectURL(pdfBlob);
       const link = window.document.createElement("a");
       link.href = objectUrl;
-      link.download = data.fileName || `${pdfFileName}.pdf`;
+      link.download = `${pdfFileName}.pdf`;
       window.document.body.appendChild(link);
       link.click();
       link.remove();
@@ -640,46 +652,68 @@ export default function ChangeOrderProposalEditor() {
 
       <div className="bid-editor-document-shell">
         <div className={`bid-editor-document ${isReadOnly ? "is-read-only" : ""}`}>
+          <table cellPadding={16} cellSpacing={0} style={{ background: "#2A3439", color: "white" }}>
+            <tbody>
+              <tr>
+                <td>
+                  <EditableField
+                    value={documentData.company_name}
+                    onChange={(value) => updateField("company_name", value)}
+                    className="bid-editor-company-name"
+                  />
+                  <EditableField
+                    value={documentData.company_address}
+                    onChange={(value) => updateField("company_address", value)}
+                    className="bid-editor-header-line bid-editor-header-inverse"
+                  />
+                  <EditableField
+                    value={documentData.company_phone}
+                    onChange={(value) => updateField("company_phone", value)}
+                    className="bid-editor-header-line bid-editor-header-inverse"
+                  />
+                  <EditableField
+                    value={documentData.company_email}
+                    onChange={(value) => updateField("company_email", value)}
+                    className="bid-editor-header-line bid-editor-header-link"
+                  />
+                </td>
+                {profile?.companyLogoUrl && (
+                  <td align="right" style={{ verticalAlign: "middle", paddingRight: 24, lineHeight: 0 }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        background: profile.companyLogoChipColor || "#ffffff",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <img
+                        src={profile.companyLogoUrl}
+                        alt="Company logo"
+                        style={{
+                          maxHeight: 96,
+                          maxWidth: 240,
+                          objectFit: "contain",
+                          display: "block",
+                          marginLeft: "auto",
+                        }}
+                      />
+                    </span>
+                  </td>
+                )}
+              </tr>
+            </tbody>
+          </table>
+
           <div className="bid-editor-document-inner">
-            <table cellPadding={16} cellSpacing={0} style={{ background: "#2A3439", color: "white" }}>
-              <tbody>
-                <tr>
-                  <td>
-                    <EditableField
-                      value={documentData.company_name}
-                      onChange={(value) => updateField("company_name", value)}
-                      className="bid-editor-company-name"
-                    />
-                    <EditableField
-                      value={documentData.company_address}
-                      onChange={(value) => updateField("company_address", value)}
-                      className="bid-editor-header-line"
-                      style={{ marginTop: 6, fontSize: 20 }}
-                    />
-                    <EditableField
-                      value={documentData.company_phone}
-                      onChange={(value) => updateField("company_phone", value)}
-                      className="bid-editor-header-line"
-                      style={{ fontSize: 20 }}
-                    />
-                    <EditableField
-                      value={documentData.company_email}
-                      onChange={(value) => updateField("company_email", value)}
-                      className="bid-editor-header-line"
-                      style={{ fontSize: 20, color: "#e3f2fd" }}
-                    />
-                  </td>
-                  <td align="right">
-                    <div className="change-order-editor-side-heading">Change Order Form</div>
-                    <DateDisplayField
-                      value={documentData.date_of_issue}
-                      onChange={(value) => updateField("date_of_issue", value)}
-                      align="right"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div style={{ margin: "8px 0 30px", color: "#2A3439" }}>
+              <div className="change-order-editor-side-heading">Change Order Form</div>
+              <DateDisplayField
+                value={documentData.date_of_issue}
+                onChange={(value) => updateField("date_of_issue", value)}
+                align="left"
+              />
+            </div>
 
             <table cellPadding={10} cellSpacing={0} className="bid-editor-card-table">
               <tbody>

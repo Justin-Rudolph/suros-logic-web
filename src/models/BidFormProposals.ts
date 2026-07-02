@@ -31,6 +31,7 @@ export interface BidFormProposalDocument {
   tax_percentage: number | "N/A";
   deposit_percentage: number;
   weekly_payments: number;
+  prepared_by?: string;
   line_items: BidFormProposalLineItem[];
 }
 

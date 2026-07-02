@@ -556,6 +556,16 @@
   color: #2a3439;
 }
 
+.bid-editor-signature-input {
+  display: block;
+  max-width: 420px;
+  margin-top: 18px;
+}
+
+.bid-editor-signature-line.bid-editor-signature-line-tight {
+  margin-top: 20px;
+}
+
 .bid-editor-signature-line {
   margin-top: 40px;
   width: min(100%, 420px);

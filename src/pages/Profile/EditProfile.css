@@ -184,3 +184,266 @@
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================= */
+/* COMPANY LOGO UPLOADER          */
+/* ============================= */
+
+.logo-field {
+  grid-column: 1 / -1;
+}
+
+.logo-uploader {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.logo-preview,
+.logo-dropzone {
+  flex-shrink: 0;
+  width: 138px;
+  height: 116px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.logo-preview {
+  padding: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease;
+}
+
+.logo-preview img {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  display: block;
+}
+
+/* checkerboard indicates "no background" */
+.logo-preview[data-transparent="true"] {
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.10) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.10) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.10) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.10) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.logo-dropzone {
+  flex-direction: column;
+  gap: 7px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12.5px;
+}
+
+.logo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.logo-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.logo-uploader .logo-btn {
+  margin-bottom: 0;
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.18s, border-color 0.18s, transform 0.05s;
+}
+
+.logo-uploader .logo-btn:active {
+  transform: translateY(1px);
+}
+
+.logo-uploader .logo-btn-primary {
+  background: #ff4a3d;
+  color: #fff;
+}
+
+.logo-uploader .logo-btn-primary:hover {
+  background: #e44736;
+}
+
+.logo-uploader .logo-btn-ghost {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.logo-uploader .logo-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.logo-hint {
+  margin: -2px 0 0;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.logo-color-block {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 3px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.logo-color-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.logo-uploader .logo-switch {
+  margin-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.logo-uploader .logo-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.logo-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.logo-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s;
+}
+
+.logo-switch-input:checked + .logo-toggle {
+  background: #ff4a3d;
+}
+
+.logo-switch-input:checked + .logo-toggle::after {
+  transform: translateX(18px);
+}
+
+.logo-switch-input:focus-visible + .logo-toggle {
+  box-shadow: 0 0 0 3px rgba(255, 74, 61, 0.4);
+}
+
+.logo-color-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.logo-color-word {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.logo-uploader .logo-swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.18s, transform 0.05s, box-shadow 0.18s;
+}
+
+.logo-uploader .logo-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.logo-uploader .logo-swatch:active {
+  transform: translateY(1px);
+}
+
+.logo-uploader .logo-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.logo-uploader .logo-swatch::-webkit-color-swatch { border: none; border-radius: 7px; }
+.logo-uploader .logo-swatch::-moz-color-swatch { border: none; border-radius: 7px; }
+
+.logo-error {
+  margin-top: 10px;
+  display: block;
+  color: #ffb4ab;
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .logo-uploader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .logo-preview,
+  .logo-dropzone {
+    width: 100%;
+  }
+
+  .logo-color-block {
+    gap: 12px;
+  }
+
+  .logo-color-pick {
+    padding-left: 0;
+    border-left: none;
+  }
+}

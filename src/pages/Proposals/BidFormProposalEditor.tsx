@@ -329,8 +329,12 @@ export default function BidFormProposalEditor() {
 
   const previewHtml = useMemo(() => {
     if (!effectiveDocumentData) return "";
-    return renderBidEditorHtml(effectiveDocumentData);
-  }, [effectiveDocumentData]);
+    return renderBidEditorHtml(
+      effectiveDocumentData,
+      profile?.companyLogoUrl,
+      profile?.companyLogoChipColor
+    );
+  }, [effectiveDocumentData, profile?.companyLogoUrl, profile?.companyLogoChipColor]);
 
   const updateField = <K extends keyof BidFormProposalDocument>(
     field: K,
@@ -476,7 +480,11 @@ export default function BidFormProposalEditor() {
   const persistProposalChanges = async () => {
     if (!record?.id || !effectiveDocumentData || !user) return null;
 
-    const html = renderBidEditorHtml(effectiveDocumentData);
+    const html = renderBidEditorHtml(
+      effectiveDocumentData,
+      profile?.companyLogoUrl,
+      profile?.companyLogoChipColor
+    );
 
     await updateDoc(doc(firestore, "bidFormProposals", record.id), {
       documentData: effectiveDocumentData,
@@ -722,6 +730,29 @@ export default function BidFormProposalEditor() {
                     className="bid-editor-header-line bid-editor-header-link"
                   />
                 </td>
+                {profile?.companyLogoUrl && (
+                  <td align="right" style={{ verticalAlign: "middle", paddingRight: 24, lineHeight: 0 }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        background: profile.companyLogoChipColor || "#ffffff",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <img
+                        src={profile.companyLogoUrl}
+                        alt="Company logo"
+                        style={{
+                          maxHeight: 96,
+                          maxWidth: 240,
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </span>
+                  </td>
+                )}
               </tr>
             </tbody>
           </table>
@@ -730,7 +761,7 @@ export default function BidFormProposalEditor() {
             <table cellPadding={8} cellSpacing={0}>
               <tbody>
                 <tr>
-                  <td>
+                  <td style={{ paddingLeft: 0 }}>
                     <strong className="bid-editor-label-lg">Invoice Date</strong>
                     <DateDisplayField
                       value={documentData.invoice_date}
@@ -738,7 +769,7 @@ export default function BidFormProposalEditor() {
                       readOnly={isReadOnly}
                     />
                   </td>
-                  <td style={{ textAlign: "right" }}>
+                  <td style={{ textAlign: "right", paddingRight: 0 }}>
                     <div className="bid-editor-invoice-heading">
                       <strong className="bid-editor-label-lg bid-editor-invoice-label">
                         INVOICE #
@@ -1007,7 +1038,12 @@ export default function BidFormProposalEditor() {
             <div className="bid-editor-signature-section">
               <div className="bid-editor-signature-block">
                 <strong className="bid-editor-signature-label">Quotation prepared by:</strong>
-                <div className="bid-editor-signature-line" />
+                <EditableField
+                  value={documentData.prepared_by ?? ""}
+                  onChange={(value) => updateField("prepared_by", value)}
+                  className="bid-editor-signature-input"
+                />
+                <div className="bid-editor-signature-line bid-editor-signature-line-tight" />
               </div>
 
               <div className="bid-editor-contract-copy">

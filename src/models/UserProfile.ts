@@ -19,6 +19,11 @@ export type UserProfile = {
   phone: string;
   email: string;
 
+  // Company logo (optional)
+  companyLogoUrl?: string;
+  companyLogoPath?: string;
+  companyLogoChipColor?: string; // background color of the logo chip on proposals/PDFs (hex, defaults to #ffffff)
+
   // System fields
   profileComplete: boolean;
   createdAt: Timestamp;
