@@ -342,7 +342,7 @@ export const renderBidEditorHtml = (
 
   <div style="margin-bottom:40px;">
     <strong style="color:#2A3439;">Quotation prepared by:</strong>
-    <div style="margin-top:18px;">${escapeHtml(document.prepared_by || "")}</div>
+    <div style="margin-top:18px; max-width:420px; white-space:pre-wrap; overflow-wrap:anywhere;">${escapeHtml(document.prepared_by || "")}</div>
     <div style="border-bottom:2px solid #2A3439; margin-top:20px; width:420px;"></div>
   </div>
 

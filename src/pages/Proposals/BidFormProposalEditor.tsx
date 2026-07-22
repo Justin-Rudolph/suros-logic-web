@@ -272,12 +272,19 @@ export default function BidFormProposalEditor() {
           return current;
         }
 
-        return nextRecord.documentData;
+        const incoming = nextRecord.documentData;
+
+        return {
+          ...incoming,
+          prepared_by: incoming.prepared_by?.trim()
+            ? incoming.prepared_by
+            : profile?.companyName ?? incoming.prepared_by ?? "",
+        };
       });
     });
 
     return unsubscribe;
-  }, [bidId, user]);
+  }, [bidId, user, profile?.companyName]);
 
   useEffect(() => {
     if (!documentData) return;
@@ -1042,6 +1049,8 @@ export default function BidFormProposalEditor() {
                   value={documentData.prepared_by ?? ""}
                   onChange={(value) => updateField("prepared_by", value)}
                   className="bid-editor-signature-input"
+                  multiline
+                  rows={1}
                 />
                 <div className="bid-editor-signature-line bid-editor-signature-line-tight" />
               </div>

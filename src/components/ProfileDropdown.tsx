@@ -45,6 +45,13 @@ export default function ProfileDropdown() {
             Terms & Conditions
           </Link>
 
+          <a
+            href="mailto:support@suroslogic.com?subject=Suros%20Logic%20Support%20Request"
+            className="dropdown-item"
+          >
+            Contact Support
+          </a>
+
           <button className="dropdown-item logout" onClick={logout}>
             Log Out
           </button>
