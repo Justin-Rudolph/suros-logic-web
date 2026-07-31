@@ -2,6 +2,18 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.5.0",
+    date: "July 31, 2026",
+    highlights: [
+      "Added team member seats so account owners can invite up to three teammates, each with their own login, working inside the same company account.",
+      "Added three access levels for teammates — their own work only, view everything but edit their own, or full access to everything in the account.",
+      "Teammates get everything a normal account has: bid forms, proposals, change orders, project files, and plan uploads, all sharing the account's company branding.",
+      "Each seat comes with its own monthly plan-analysis allowance, chosen when the seat is added and changeable at any time.",
+      "Added a Team screen (accessible in your settings) to add, edit, suspend, and reactivate seats, with a clear view of who is active and what the account costs each month.",
+      "Team member access now follows the account's subscription automatically, so seats are suspended if a subscription lapses and restored when it resumes.",
+    ],
+  },
+  {
     version: "v3.4.0",
     date: "July 2, 2026",
     highlights: [

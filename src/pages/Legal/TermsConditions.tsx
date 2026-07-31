@@ -47,7 +47,7 @@ export default function TermsConditions() {
         <h1 className="text-3xl font-bold mb-2">
           Terms & Conditions (Terms of Service) - Suros Logic Systems, LLC
         </h1>
-        <p className="text-sm text-gray-600 mb-8">Last updated: 05/24/2026</p>
+        <p className="text-sm text-gray-600 mb-8">Last updated: 07/31/2026</p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">1. Acceptance of Terms</h2>
         <p className="mb-4">
@@ -117,6 +117,26 @@ export default function TermsConditions() {
           security risk, violates these Terms, creates legal exposure, or threatens the integrity of
           the Service or another user.
         </p>
+        <p className="mb-4">
+          An account owner may invite other people to use the Service as team members within the
+          owner's account. The account owner selects each team member's access level and usage allowance,
+          and may change, suspend, remove, or restore a seat at any time. Each team member must use their
+          own login and must not share credentials. Sharing a login, or allowing anyone to use the
+          Service through another person's seat, violates these Terms, and we may suspend or
+          terminate the seat or the account for it.
+        </p>
+        <p className="mb-4">
+          The account owner is responsible for its team members, for their use of the Service, for
+          the access levels it grants them, and for all activity and charges under the account. The
+          account owner represents that it is authorized to provide each team member's email address
+          and to create an account on their behalf. Team members are bound by these Terms, and the
+          account owner is responsible for ensuring they comply with them.
+        </p>
+        <p className="mb-4">
+          Work created by a team member belongs to the account, not to the individual. The account
+          owner may view, edit, export, and delete all content in the account, including content
+          created by team members, and may grant other team members the ability to do the same.
+        </p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">5. Subscriptions, Trials, Billing, and Taxes</h2>
         <p className="mb-4">
@@ -134,9 +154,30 @@ export default function TermsConditions() {
           We disclose automatic-renewal terms in the checkout or order flow. You can manage or
           cancel your subscription through the billing portal when available or by contacting us at
           support@suroslogic.com. If you accepted a subscription online, we will provide an online
-          cancellation method. Cancellation stops future renewal charges but does not automatically
-          refund prior charges. Unless required by law or expressly stated in writing, all fees are
-          non-refundable.
+          cancellation method. Cancellation stops future renewal charges only: once a billing period
+          has been charged, that charge is not returned, in whole or in part, whether or not the
+          Service was used during that period. Unless required by law or expressly stated in writing,
+          all fees are non-refundable.
+        </p>
+        <p className="mb-4">
+          Team member seats are billed as a recurring add-on to
+          the account owner's subscription. Each seat is priced according to the usage allowance
+          selected for it, and the price for each option is shown before the seat is added or
+          changed. Seat charges are billed to the account owner's payment method on the same billing
+          cycle as the underlying subscription.
+        </p>
+        <p className="mb-4">
+          Adding a seat, removing a seat, or changing a seat's allowance mid-cycle may result in
+          prorated charges or credits applied by our payment processor. Removing a seat stops future
+          charges for it and ends that team member's access; it does not delete work that team member
+          created, which remains in the account. If the account owner's subscription lapses, is
+          canceled, or fails payment, team member access is suspended along with the owner's access,
+          and is restored if the subscription resumes.
+        </p>
+        <p className="mb-4">
+          Seat fees are non-refundable. Once a team member seat has been charged, that charge is not
+          returned, in whole or in part, whether or not the seat was used. Removing a seat stops future
+          charges for it only. Nothing here limits any refund right you have under applicable law.
         </p>
         <p className="mb-4">
           If applicable law requires advance renewal notices, reminder notices, or additional
@@ -371,6 +412,12 @@ export default function TermsConditions() {
           obligations incurred before termination. Provisions that by their nature should survive
           termination will survive, including intellectual property, confidentiality, disclaimers,
           limitation of liability, indemnification, dispute resolution, and payment obligations.
+        </p>
+        <p className="mb-4">
+          Suspension or termination of an account also suspends or terminates the access of every
+          team member in that account. An account owner may separately remove or suspend an
+          individual team member's seat at any time, which ends that person's access to the account
+          while leaving the account itself unaffected.
         </p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">18. Governing Law and Disputes</h2>

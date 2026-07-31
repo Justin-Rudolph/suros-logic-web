@@ -47,7 +47,7 @@ export default function PrivacyPolicy() {
         <h1 className="text-3xl font-bold mb-2">
           Privacy Policy - Suros Logic Systems, LLC
         </h1>
-        <p className="text-sm text-gray-600 mb-8">Last updated: 05/24/2026</p>
+        <p className="text-sm text-gray-600 mb-8">Last updated: 07/31/2026</p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">1. Who We Are</h2>
         <p className="mb-4">
@@ -147,6 +147,29 @@ export default function PrivacyPolicy() {
           you authorize others to provide to us.
         </p>
 
+        <h3 className="text-lg font-semibold mt-4 mb-2">3.8 Team Accounts and Member Seats</h3>
+        <p className="mb-4">
+          The Service allows an account owner to invite other people to work inside the owner's
+          account as team members. To create a seat, the account owner provides the team member's
+          email address, and we create a login for that person. The account owner selects each team
+          member's access level and monthly usage allowance, and may change, suspend, remove, or
+          restore a seat at any time.
+        </p>
+        <p className="mb-4">
+          Information created by a team member inside an account belongs to that account, not to the
+          individual. Depending on the access level the owner selects, work created by one team
+          member may be visible to, and editable by, the account owner and other team members. The
+          account owner can always see, edit, and delete everything in the account, including work
+          created by team members, and can see each team member's name, email address, seat settings,
+          and usage.
+        </p>
+        <p className="mb-4">
+          If you are a team member, the account owner controls your access and the data in the
+          account. Requests to access, correct, export, or delete information held in a team account
+          are generally directed to the account owner. Your access ends if the owner removes your
+          seat or the account's subscription lapses.
+        </p>
+
         <h2 className="text-xl font-semibold mt-6 mb-2">4. How We Use Information</h2>
         <p className="mb-4">We use information for the following purposes:</p>
         <ul className="list-disc ml-8 mb-4">
@@ -217,6 +240,7 @@ export default function PrivacyPolicy() {
           <li>With payment processors and financial institutions to complete transactions and prevent fraud;</li>
           <li>With AI, cloud, email, PDF, storage, and infrastructure providers needed to provide requested features;</li>
           <li>With your organization, account administrators, or authorized users when applicable;</li>
+          <li>Within a team account, with the account owner and other team members, to the extent allowed by the access level the account owner has selected;</li>
           <li>With professional advisors, insurers, auditors, and legal representatives;</li>
           <li>With government authorities, regulators, courts, or third parties when required by law or needed to protect rights, safety, security, or property;</li>
           <li>In connection with a merger, acquisition, financing, restructuring, bankruptcy, sale of assets, or similar business transaction;</li>
