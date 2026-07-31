@@ -198,6 +198,12 @@
   font-weight: 600;
 }
 
+.past-bid-open:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.35);
+  cursor: not-allowed;
+}
+
 .past-bid-actions {
   display: flex;
   flex-wrap: nowrap;
@@ -232,6 +238,18 @@
 .past-bid-delete-icon:hover {
   background: rgba(153, 27, 27, 0.38);
   color: #fecaca;
+}
+
+.past-bid-delete-icon:disabled {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.25);
+  cursor: not-allowed;
+}
+
+.past-bid-delete-icon:disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .change-order-list-wrap {
@@ -392,4 +410,39 @@
 .billing-modal-actions .danger:disabled {
   background: #b87979;
   cursor: not-allowed;
+}
+
+/* Creator attribution. Matches the timeline pill it sits beside. */
+.past-bid-badge-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.past-bid-owner-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.past-bid-owner-pill span {
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }

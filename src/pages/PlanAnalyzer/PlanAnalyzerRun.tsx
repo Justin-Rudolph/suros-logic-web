@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
+import { canEditRecord, getEffectiveCompanyProfile } from "@/lib/account";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { ConflictItem, PlanConflictsModuleRecord } from "@/models/PlanAnalyzerConflicts";
 import { PlanAnalysisResult, PlanOverviewModuleRecord } from "@/models/PlanAnalyzerOverview";
@@ -33,6 +34,9 @@ type FirestoreTimestampLike = {
 
 
 type PlanProjectDoc = PlanProjectRecord;
+
+const NO_EDIT_TITLE =
+  "Only the creator or an account owner/full-access teammate can change this analysis.";
 
 type ModalState =
   | {
@@ -419,6 +423,20 @@ export default function PlanAnalyzerRun() {
   const { profile, user } = useAuth();
 
   const [project, setProject] = useState<PlanProjectDoc | null>(null);
+  // Mirrors canWriteAccountDoc in firestore.rules: owners and full-access
+  // members can edit anything; view_all_edit_own members only their own
+  // projects. Reading and downloading stay open to anyone who can see it.
+  const canEditThisProject = canEditRecord(profile, project);
+  const hasActiveSubscription = profile?.isSubscribed === true;
+  // Both gates must pass. Subscription is checked here because "Add to New
+  // Bid" navigates into the bid form, which has no paywall of its own — so
+  // leaving these enabled while inactive is a way around the subscription.
+  const canModifyAnalysis = hasActiveSubscription && canEditThisProject;
+  const modifyBlockedReason = !hasActiveSubscription
+    ? "Your subscription is inactive. Reactivate it to save favorites or start a bid."
+    : !canEditThisProject
+      ? NO_EDIT_TITLE
+      : undefined;
   const [overviewModule, setOverviewModule] = useState<PlanOverviewModuleRecord | null>(null);
   const [scopesModule, setScopesModule] = useState<PlanScopesModuleRecord | null>(null);
   const [verificationModule, setVerificationModule] = useState<PlanVerificationModuleRecord | null>(null);
@@ -1034,6 +1052,7 @@ export default function PlanAnalyzerRun() {
   };
 
   const toggleDraftFavoriteSelection = (selectionId: string) => {
+    if (!canModifyAnalysis) return;
     setDraftFavoriteItemIds((current) =>
       current.includes(selectionId)
         ? current.filter((id) => id !== selectionId)
@@ -1102,6 +1121,7 @@ export default function PlanAnalyzerRun() {
   };
 
   const handleSaveFavoriteSelections = async () => {
+    if (!canModifyAnalysis) return;
     const config = getActiveModalFavoriteConfig();
 
     if (!config || !projectId) {
@@ -1197,6 +1217,7 @@ export default function PlanAnalyzerRun() {
   };
 
   const handleAddSelectedScopesToNewBid = async () => {
+    if (!canModifyAnalysis) return;
     if (!selectedScopeItems.length) {
       return;
     }
@@ -1236,14 +1257,23 @@ export default function PlanAnalyzerRun() {
         throw new Error("No formatted bid scopes were returned.");
       }
 
+      // BidForm skips its own branding lookup in prefill mode, so the snapshot
+      // has to carry the resolved values. Member seats hold no branding of
+      // their own — it lives on the owner's profile — so read it through the
+      // shared resolver rather than off `profile`. Awaited here instead of via
+      // useEffectiveCompanyProfile so the click can't race the lookup.
+      const branding = await getEffectiveCompanyProfile(profile);
+
       const today = new Date().toISOString().slice(0, 10);
       const prefillBid: BidFormPrefillState = {
         formSnapshot: {
-          company_name: profile?.companyName ?? "",
-          company_address: profile?.companyAddress ?? "",
+          company_name: branding.companyName,
+          company_address: branding.companyAddress,
+          // Phone and email stay the member's own contact details, matching
+          // how BidForm populates them for a non-prefill bid.
           company_phone: profile?.phone ?? "",
           company_email: profile?.email ?? "",
-          company_slogan: profile?.slogan ?? "",
+          company_slogan: branding.slogan,
           invoice_date: today,
           invoice_number: "",
           salesperson: "",
@@ -1386,11 +1416,14 @@ export default function PlanAnalyzerRun() {
                 {selectedScopeItems.length ? (
                   <button
                     type="button"
-                    className="plan-add-to-bid-button"
+                    className={`plan-add-to-bid-button${
+                      canModifyAnalysis ? "" : " is-permission-disabled"
+                    }`}
                     onClick={() => {
                       void handleAddSelectedScopesToNewBid();
                     }}
-                    disabled={isPreparingBidPrefill}
+                    disabled={isPreparingBidPrefill || !canModifyAnalysis}
+                    title={modifyBlockedReason}
                   >
                     {isPreparingBidPrefill ? "Preparing Bid..." : "Add to New Bid"}
                   </button>
@@ -1841,6 +1874,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(selectionId)}
                       aria-label={`Select ${cleanDisplayText(item.title)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(selectionId)}
@@ -1885,6 +1920,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(id)}
                       aria-label={`Select ${cleanDisplayText(item.title)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(id)}
@@ -1931,6 +1968,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(id)}
                       aria-label={`Select ${cleanDisplayText(item.item)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(id)}
@@ -1965,6 +2004,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(id)}
                       aria-label={`Select ${cleanDisplayText(item.issue)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(id)}
@@ -2001,6 +2042,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(id)}
                       aria-label={`Select ${cleanDisplayText(item.conflict)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(id)}
@@ -2048,6 +2091,8 @@ export default function PlanAnalyzerRun() {
                           ? " plan-detail-select-toggle-selected"
                           : ""
                       }`}
+                      disabled={!canModifyAnalysis}
+                      title={modifyBlockedReason}
                       onClick={() => toggleDraftFavoriteSelection(id)}
                       aria-label={`Select ${cleanDisplayText(item)}`}
                       aria-pressed={draftFavoriteItemIdSet.has(id)}
@@ -2072,11 +2117,14 @@ export default function PlanAnalyzerRun() {
             <div className="plan-detail-actions">
               <button
                 type="button"
-                className="plan-add-to-bid-button"
+                className={`plan-add-to-bid-button${
+                  canModifyAnalysis ? "" : " is-permission-disabled"
+                }`}
                 onClick={() => {
                   void handleSaveFavoriteSelections();
                 }}
-                disabled={isSavingFavorites}
+                disabled={isSavingFavorites || !canModifyAnalysis}
+                title={modifyBlockedReason}
               >
                 {isSavingFavorites ? "Saving..." : "Save Favorites"}
               </button>

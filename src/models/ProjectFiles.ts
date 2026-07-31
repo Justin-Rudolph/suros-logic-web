@@ -3,6 +3,8 @@ import { Timestamp } from "firebase/firestore";
 export interface ProjectFile {
     id: string;
     userId: string;
+    // Denormalized owner account id (owner's uid). Set at creation time.
+    accountId?: string;
     bidFormId: string;
     title: string;
     description: string;

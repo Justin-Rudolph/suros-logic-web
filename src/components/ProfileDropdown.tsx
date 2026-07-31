@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { isOwner } from "@/lib/account";
 import "./ProfileDropdown.css";
 
 // ✅ Import avatar correctly
@@ -8,7 +9,8 @@ import defaultAvatar from "@/assets/default-avatar.png";
 
 export default function ProfileDropdown() {
   const [open, setOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
+  const owner = isOwner(profile);
 
   return (
     <div className="profile-dropdown-wrapper">
@@ -36,6 +38,12 @@ export default function ProfileDropdown() {
           <Link to="/billing" className="dropdown-item">
             Manage Subscription
           </Link>
+
+          {owner && (
+            <Link to="/team" className="dropdown-item">
+              Team Seats
+            </Link>
+          )}
 
           <Link to="/privacy" className="dropdown-item">
             Privacy Policy

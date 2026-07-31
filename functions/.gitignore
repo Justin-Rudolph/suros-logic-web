@@ -1,3 +1,10 @@
 node_modules/
 *.local
 .env
+
+# Service-account / admin credentials (NEVER commit - this repo is public)
+service-account*.json
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+gcp-key*.json
+*.pem

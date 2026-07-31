@@ -2,7 +2,9 @@ import { useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { useParams } from "react-router-dom";
 
+import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
+import { canEditRecord } from "@/lib/account";
 import { BidProjectTimelineStage } from "@/models/BidForms";
 import { useBidWorkspaceContext } from "./bidWorkspaceContext";
 import "../Dashboard/Dashboard.css";
@@ -74,10 +76,14 @@ const getTimelineStage = (
 
 export default function BidWorkspaceOverview() {
   const { bidId } = useParams();
+  const { profile } = useAuth();
   const { bid } = useBidWorkspaceContext();
   const [isSavingStage, setIsSavingStage] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // A view_all_edit_own/own member can view this workspace's overview but not
+  // advance the project timeline unless they created the bid themselves.
+  const canEditThisBid = canEditRecord(profile, bid);
 
   const currentStage = getTimelineStage(bid?.projectTimelineStage, bid?.status);
   const currentStageIndex = TIMELINE_STAGES.findIndex(
@@ -95,7 +101,7 @@ export default function BidWorkspaceOverview() {
   const milestoneSummary = `${completedMilestones}/${totalMilestones} milestones`;
 
   const handleTimelineUpdate = async (stage: BidProjectTimelineStage) => {
-    if (!bidId || !bid || stage === currentStage) return;
+    if (!bidId || !bid || stage === currentStage || !canEditThisBid) return;
 
     setIsSavingStage(true);
     setFeedback(null);
@@ -210,9 +216,10 @@ export default function BidWorkspaceOverview() {
           {nextStage ? (
             <button
               type="button"
-              className="bid-overview-next-button"
+              className={`bid-overview-next-button${!canEditThisBid ? " is-permission-disabled" : ""}`}
               onClick={() => handleTimelineUpdate(nextStage.id)}
-              disabled={isSavingStage}
+              disabled={isSavingStage || !canEditThisBid}
+              title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
             >
               {isSavingStage
                 ? "Saving..."

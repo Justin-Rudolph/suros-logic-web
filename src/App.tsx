@@ -17,6 +17,7 @@ import Login from "./pages/Auth/Login";
 import { AuthProvider } from "./context/AuthContext";
 import DevAccessGate from "./routes/DevAccessGate";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import RequireSubscription from "./routes/RequireSubscription";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
 import PlanAnalyzer from "./pages/PlanAnalyzer/PlanAnalyzer";
@@ -36,6 +37,8 @@ import BidWorkspaceChangeOrders from "./pages/Bids/BidWorkspaceChangeOrders";
 import BidWorkspaceChangeOrderProposals from "./pages/Bids/BidWorkspaceChangeOrderProposals";
 import BidFormProposalEditor from "./pages/Proposals/BidFormProposalEditor";
 import ChangeOrderProposalEditor from "./pages/Proposals/ChangeOrderProposalEditor";
+
+import Team from "./pages/Team/Team";
 
 import PaymentSuccess from "./pages/Payments/PaymentSuccess";
 import PaymentFailure from "./pages/Payments/PaymentFailure";
@@ -87,6 +90,15 @@ const App = () => (
             />
 
             <Route
+              path="/team"
+              element={
+                <ProtectedRoute>
+                  <Team />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/plan-analyzer"
               element={
                 <ProtectedRoute>
@@ -126,7 +138,9 @@ const App = () => (
               path="/form/bid_form"
               element={
                 <ProtectedRoute>
-                  <BidForm />
+                  <RequireSubscription>
+                    <BidForm />
+                  </RequireSubscription>
                 </ProtectedRoute>
               }
             />
@@ -193,7 +207,14 @@ const App = () => (
                 element={<BidWorkspaceChangeOrderProposals />}
               />
               <Route path="project-files" element={<ProjectFiles />} />
-              <Route path="change-orders/new" element={<ChangeOrderForm />} />
+              <Route
+                path="change-orders/new"
+                element={
+                  <RequireSubscription>
+                    <ChangeOrderForm />
+                  </RequireSubscription>
+                }
+              />
               <Route
                 path="change-orders/:changeOrderId/form"
                 element={<ChangeOrderForm />}

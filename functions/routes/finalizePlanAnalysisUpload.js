@@ -143,6 +143,7 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
       projectRef,
       {
         userId: decodedToken.uid,
+        accountId: projectData.accountId || decodedToken.uid,
         projectId,
         title,
         updatedAt: FieldValue.serverTimestamp(),

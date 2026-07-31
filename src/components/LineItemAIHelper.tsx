@@ -17,6 +17,11 @@ interface Props {
   onSaveEstimate?: (estimate: EstimateResponse) => void;
   siblingLineItems?: SiblingLineItem[];
   currentLineTotal?: string;
+  /** False when the caller can't edit this workspace — "View Estimate" (a
+   * pure read of the already-generated estimate) stays enabled either way,
+   * but generating a new estimate or applying one to the line total, both of
+   * which mutate the bid, are disabled. Defaults to true. */
+  canEdit?: boolean;
 }
 
 export default function LineItemAIHelper({
@@ -29,6 +34,7 @@ export default function LineItemAIHelper({
   onSaveEstimate,
   siblingLineItems,
   currentLineTotal,
+  canEdit = true,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<EstimateResponse | null>(
@@ -220,23 +226,24 @@ export default function LineItemAIHelper({
         <button
           type="button"
           onClick={handleGenerateEstimateClick}
-          disabled={loading}
+          disabled={loading || !canEdit}
+          title={canEdit ? undefined : "You don't have permission to edit this teammate's bid."}
           style={{
             flexShrink: 0,
             height: "40px",
             padding: "0 12px",
-            background: loading ? "#7aa8cf" : "#1e73be",
+            background: loading || !canEdit ? "#7aa8cf" : "#1e73be",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
-            cursor: loading ? "not-allowed" : "pointer",
+            cursor: loading || !canEdit ? "not-allowed" : "pointer",
             fontSize: "12px",
             whiteSpace: "nowrap",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
-            opacity: loading ? 0.9 : 1,
+            opacity: loading || !canEdit ? 0.9 : 1,
           }}
         >
           {loading && (
@@ -411,6 +418,7 @@ export default function LineItemAIHelper({
                           onChange={(e) => handleQuestionResponseChange(q, e.target.value)}
                           placeholder="Type your response here..."
                           rows={2}
+                          readOnly={!canEdit}
                           style={{
                             width: "100%",
                             padding: "8px 11px",
@@ -442,17 +450,17 @@ export default function LineItemAIHelper({
                     <button
                       type="button"
                       onClick={() => setShowBypassWarning(true)}
-                      disabled={loading}
+                      disabled={loading || !canEdit}
                       style={{
                         background: "transparent",
                         color: "#6B7280",
                         border: "1px solid #D1D5DB",
                         padding: "8px 14px",
                         borderRadius: "6px",
-                        cursor: loading ? "not-allowed" : "pointer",
+                        cursor: loading || !canEdit ? "not-allowed" : "pointer",
                         fontWeight: 500,
                         fontSize: "12.5px",
-                        opacity: loading ? 0.6 : 1,
+                        opacity: loading || !canEdit ? 0.6 : 1,
                       }}
                     >
                       Bypass
@@ -476,14 +484,14 @@ export default function LineItemAIHelper({
                       <button
                         type="button"
                         onClick={handleAddResponses}
-                        disabled={!hasResponsesToAdd || loading}
+                        disabled={!hasResponsesToAdd || loading || !canEdit}
                         style={{
-                          background: !hasResponsesToAdd || loading ? "#E2E8F0" : "#1E73BE",
-                          color: !hasResponsesToAdd || loading ? "#9CA3AF" : "#fff",
+                          background: !hasResponsesToAdd || loading || !canEdit ? "#E2E8F0" : "#1E73BE",
+                          color: !hasResponsesToAdd || loading || !canEdit ? "#9CA3AF" : "#fff",
                           border: "none",
                           padding: "8px 18px",
                           borderRadius: "6px",
-                          cursor: !hasResponsesToAdd || loading ? "not-allowed" : "pointer",
+                          cursor: !hasResponsesToAdd || loading || !canEdit ? "not-allowed" : "pointer",
                           fontWeight: 600,
                           fontSize: "12.5px",
                         }}
@@ -737,16 +745,19 @@ export default function LineItemAIHelper({
                           </button>
                           <button
                             onClick={() => {
+                              if (!canEdit) return;
                               onApplyTotal?.(parseCurrencyToNumber(activeEstimate.total_cost));
                               setOpen(false);
                             }}
+                            disabled={!canEdit}
+                            title={canEdit ? undefined : "You don't have permission to edit this teammate's bid."}
                             style={{
-                              background: "#16A34A",
+                              background: canEdit ? "#16A34A" : "#9CA3AF",
                               color: "#fff",
                               border: "none",
                               padding: "8px 20px",
                               borderRadius: "6px",
-                              cursor: "pointer",
+                              cursor: canEdit ? "pointer" : "not-allowed",
                               fontWeight: 600,
                               fontSize: "13px",
                             }}
@@ -844,15 +855,15 @@ export default function LineItemAIHelper({
                 <button
                   type="button"
                   onClick={(e) => {
-                    if (loading) return;
+                    if (loading || !canEdit) return;
                     e.preventDefault();
                     e.stopPropagation();
                     setShowBypassWarning(false);
                     void bypassGenerate();
                   }}
-                  disabled={loading}
+                  disabled={loading || !canEdit}
                   style={{
-                    background: loading ? "#D97706" : "#B45309",
+                    background: loading || !canEdit ? "#D97706" : "#B45309",
                     color: "#fff",
                     border: "none",
                     padding: "8px 16px",

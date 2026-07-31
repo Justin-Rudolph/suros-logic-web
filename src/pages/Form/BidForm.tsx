@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
 import { useAuth } from "@/context/AuthContext";
+import { canEditRecord, getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
+import { useEffectiveCompanyProfile } from "@/hooks/useEffectiveCompanyProfile";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "@/styles/gradients.css";
 import {
@@ -92,6 +94,11 @@ const BidForm: React.FC = () => {
     const location = useLocation();
     const { bidId } = useParams();
     const { profile, loading, user } = useAuth();
+    // Members inherit the owner's branding (read-only); owners use their own.
+    // `loading` here covers the async owner-branding lookup for members, so we
+    // can hold the loading screen instead of flashing blank company fields.
+    const { branding: effectiveBranding, readOnly: brandingReadOnly, loading: isBrandingLoading } =
+        useEffectiveCompanyProfile();
 
     const [form, setForm] = useState<ExtendedBidFormState>(initialFormState);
     const [numLineItems, setNumLineItems] = useState("");
@@ -102,6 +109,18 @@ const BidForm: React.FC = () => {
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentBidId, setCurrentBidId] = useState<string | null>(null);
+    // Creator of the existing bid being edited (undefined for a brand-new bid,
+    // which the current user is always the creator of).
+    const [existingBidUserId, setExistingBidUserId] = useState<string | undefined>(undefined);
+    // True once the existing bid's data (and therefore its real permission
+    // check) has loaded — true immediately for a brand-new bid. Used to hold
+    // the loading screen instead of letting fields flash as read-only before
+    // canEditThisBid can be computed correctly.
+    const [isExistingBidLoaded, setIsExistingBidLoaded] = useState(!bidId);
+    // A view_all_edit_own/own member can view but not save/submit a workspace
+    // that isn't theirs — disable the controls rather than let them hit a
+    // permission error after the fact.
+    const canEditThisBid = !bidId || canEditRecord(profile, { userId: existingBidUserId });
     const [currentProjectTimelineStage, setCurrentProjectTimelineStage] = useState<BidProjectTimelineStage | undefined>(undefined);
     const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
 
@@ -156,15 +175,18 @@ const BidForm: React.FC = () => {
     useEffect(() => {
         if (!profile || isPrefillMode) return;
 
+        // company_name / company_address / slogan come from the effective
+        // branding (owner's values for members). phone / email stay the user's
+        // own editable contact info.
         setForm((prev) => ({
             ...prev,
-            company_name: profile.companyName ?? prev.company_name,
-            company_address: profile.companyAddress ?? prev.company_address,
+            company_name: effectiveBranding?.companyName ?? profile.companyName ?? prev.company_name,
+            company_address: effectiveBranding?.companyAddress ?? profile.companyAddress ?? prev.company_address,
             company_phone: profile.phone
                 ? formatPhone(profile.phone)
                 : prev.company_phone,
             company_email: profile.email ?? prev.company_email,
-            company_slogan: profile.slogan ?? prev.company_slogan,
+            company_slogan: effectiveBranding?.slogan ?? profile.slogan ?? prev.company_slogan,
         }));
 
         // Clear any validation errors for these fields once we auto-populate
@@ -175,13 +197,16 @@ const BidForm: React.FC = () => {
             company_phone: false,
             company_email: false,
         }));
-    }, [profile, isPrefillMode]);
+    }, [profile, isPrefillMode, effectiveBranding]);
 
     useEffect(() => {
         if (!bidId) return;
 
         const unsubscribe = onSnapshot(doc(firestore, "bidForms", bidId), (snapshot) => {
-            if (!snapshot.exists()) return;
+            if (!snapshot.exists()) {
+                setIsExistingBidLoaded(true);
+                return;
+            }
 
             const bid = {
                 id: snapshot.id,
@@ -190,6 +215,7 @@ const BidForm: React.FC = () => {
                     projectTimelineStage?: BidProjectTimelineStage;
                     formSnapshot: ExtendedBidFormState;
                     lineItems: LineItem[];
+                    userId?: string;
                 }),
             };
 
@@ -200,6 +226,8 @@ const BidForm: React.FC = () => {
                 formSnapshot: bid.formSnapshot,
                 lineItems: bid.lineItems,
             });
+            setExistingBidUserId(bid.userId);
+            setIsExistingBidLoaded(true);
         });
 
         return unsubscribe;
@@ -270,6 +298,7 @@ const BidForm: React.FC = () => {
 
         const bidData = {
             userId: user.uid,
+            accountId: getAccountId(profile),
             title: buildBidTitle(),
             status,
             projectTimelineStage: nextProjectTimelineStage,
@@ -332,6 +361,7 @@ const BidForm: React.FC = () => {
 
         const proposalData = {
             userId: user.uid,
+            accountId: getAccountId(profile),
             bidFormId,
             title: buildBidTitle(),
             status: "generating" as const,
@@ -340,9 +370,10 @@ const BidForm: React.FC = () => {
             updatedAt: serverTimestamp(),
         };
 
+        const proposalLookupScope = getListScope(profile);
         const existingProposalQuery = query(
             collection(firestore, "bidFormProposals"),
-            where("userId", "==", user.uid),
+            where(getScopeQueryField(proposalLookupScope), "==", getScopeQueryValue(proposalLookupScope)),
             where("bidFormId", "==", bidFormId)
         );
         const existingProposalSnapshot = await getDocs(existingProposalQuery);
@@ -919,7 +950,7 @@ const BidForm: React.FC = () => {
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
-        if (isSubmitting) return;
+        if (isSubmitting || !canEditThisBid) return;
 
         if (!validateForm()) {
             showModal(
@@ -989,7 +1020,7 @@ const BidForm: React.FC = () => {
     };
 
     const handleSaveDraft = async () => {
-        if (isSubmitting) return;
+        if (isSubmitting || !canEditThisBid) return;
 
         setIsSubmitting(true);
 
@@ -1016,37 +1047,9 @@ const BidForm: React.FC = () => {
     };
 
     return (
-        (loading || !profile) ?
-            <div className="suros-gradient">
-                <div
-                    style={{
-                        padding: "40px",
-                        color: "#fff",
-                        textAlign: "center",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: "16px",
-                    }}
-                >
-                    <div>Loading company profile info for your form…</div>
-
-                    <button
-                        onClick={() => window.location.reload()}
-                        style={{
-                            background: "#1e73be",
-                            color: "#fff",
-                            padding: "10px 22px",
-                            borderRadius: "6px",
-                            border: "none",
-                            fontSize: "15px",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                        }}
-                    >
-                        Refresh
-                    </button>
-                </div>
+        (loading || !profile || !isExistingBidLoaded || isBrandingLoading) ?
+            <div className="suros-gradient form-loading-screen">
+                <span className="spinner form-loading-spinner" />
             </div>
             :
             <div className="suros-gradient">
@@ -1089,7 +1092,9 @@ const BidForm: React.FC = () => {
                                     id="company_address"
                                     value={form.company_address}
                                     onChange={handleFormChange}
-                                    className={isInvalid("company_address") ? "input-error" : ""}
+                                    readOnly={brandingReadOnly || !canEditThisBid}
+                                    title={brandingReadOnly ? "Company address is managed by the account owner." : (!canEditThisBid ? "You don't have permission to edit this teammate's bid." : undefined)}
+                                    className={`${isInvalid("company_address") ? "input-error" : ""} ${brandingReadOnly || !canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Phone:</label>
@@ -1098,7 +1103,9 @@ const BidForm: React.FC = () => {
                                     id="company_phone"
                                     value={form.company_phone}
                                     onChange={handleFormChange}
-                                    className={isInvalid("company_phone") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    title={!canEditThisBid ? "You don't have permission to edit this teammate's bid." : undefined}
+                                    className={`${isInvalid("company_phone") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Email:</label>
@@ -1108,7 +1115,9 @@ const BidForm: React.FC = () => {
                                     value={form.company_email}
                                     onChange={handleFormChange}
                                     onBlur={validateEmail}
-                                    className={isInvalid("company_email") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    title={!canEditThisBid ? "You don't have permission to edit this teammate's bid." : undefined}
+                                    className={`${isInvalid("company_email") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <p className="slogan">{form.company_slogan}</p>
@@ -1127,7 +1136,8 @@ const BidForm: React.FC = () => {
                                     id="invoice_date"
                                     value={form.invoice_date}
                                     onChange={handleFormChange}
-                                    className={isInvalid("invoice_date") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("invoice_date") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Invoice #:</label>
@@ -1137,7 +1147,8 @@ const BidForm: React.FC = () => {
                                     placeholder="SLS-2026-1178"
                                     value={form.invoice_number}
                                     onChange={handleFormChange}
-                                    className={isInvalid("invoice_number") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("invoice_number") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <h2>Customer Info</h2>
@@ -1149,7 +1160,8 @@ const BidForm: React.FC = () => {
                                     value={form.customer_name}
                                     onChange={handleFormChange}
                                     placeholder="John Doe"
-                                    className={isInvalid("customer_name") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("customer_name") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Customer Address:</label>
@@ -1159,7 +1171,8 @@ const BidForm: React.FC = () => {
                                     value={form.customer_address}
                                     onChange={handleFormChange}
                                     placeholder="1234 Main St, Tampa FL"
-                                    className={isInvalid("customer_address") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("customer_address") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Customer Phone:</label>
@@ -1177,15 +1190,16 @@ const BidForm: React.FC = () => {
                                         value={form.customer_phone}
                                         onChange={handleFormChange}
                                         placeholder="000-000-0000"
-                                        readOnly={form.customer_phone === "N/A"}
-                                        title={form.customer_phone === "N/A" ? "This field cannot be edited when N/A is selected" : ""}
-                                        className={`${isInvalid("customer_phone") ? "input-error" : ""} ${form.customer_phone === "N/A" ? "input-readonly" : ""}`}
+                                        readOnly={form.customer_phone === "N/A" || !canEditThisBid}
+                                        title={form.customer_phone === "N/A" ? "This field cannot be edited when N/A is selected" : (!canEditThisBid ? "You don't have permission to edit this teammate's bid." : "")}
+                                        className={`${isInvalid("customer_phone") ? "input-error" : ""} ${form.customer_phone === "N/A" || !canEditThisBid ? "input-readonly" : ""}`}
                                         style={{ flex: 1 }}
                                     />
 
                                     <button
                                         type="button"
                                         onClick={() => handleSetNA("customer_phone")}
+                                        disabled={!canEditThisBid}
                                         style={{
                                             whiteSpace: "nowrap",
                                             padding: "10px 14px",
@@ -1193,9 +1207,9 @@ const BidForm: React.FC = () => {
                                             color: form.customer_phone === "N/A" ? "#fff" : "#111",
                                             border: "none",
                                             borderRadius: "6px",
-                                            cursor: "pointer",
+                                            cursor: canEditThisBid ? "pointer" : "not-allowed",
                                             fontWeight: 600,
-                                            opacity: form.customer_phone === "N/A" ? 1 : 0.85,
+                                            opacity: !canEditThisBid ? 0.5 : (form.customer_phone === "N/A" ? 1 : 0.85),
                                             position: "relative",
                                             top: "-4px"
                                         }}
@@ -1220,15 +1234,16 @@ const BidForm: React.FC = () => {
                                         onChange={handleFormChange}
                                         onBlur={validateEmail}
                                         placeholder="example@email.com"
-                                        readOnly={form.customer_email === "N/A"}
-                                        title={form.customer_email === "N/A" ? "This field cannot be edited when N/A is selected" : ""}
-                                        className={`${isInvalid("customer_email") ? "input-error" : ""} ${form.customer_email === "N/A" ? "input-readonly" : ""}`}
+                                        readOnly={form.customer_email === "N/A" || !canEditThisBid}
+                                        title={form.customer_email === "N/A" ? "This field cannot be edited when N/A is selected" : (!canEditThisBid ? "You don't have permission to edit this teammate's bid." : "")}
+                                        className={`${isInvalid("customer_email") ? "input-error" : ""} ${form.customer_email === "N/A" || !canEditThisBid ? "input-readonly" : ""}`}
                                         style={{ flex: 1 }}
                                     />
 
                                     <button
                                         type="button"
                                         onClick={() => handleSetNA("customer_email")}
+                                        disabled={!canEditThisBid}
                                         style={{
                                             whiteSpace: "nowrap",
                                             padding: "10px 14px",
@@ -1236,9 +1251,9 @@ const BidForm: React.FC = () => {
                                             color: form.customer_email === "N/A" ? "#fff" : "#111",
                                             border: "none",
                                             borderRadius: "6px",
-                                            cursor: "pointer",
+                                            cursor: canEditThisBid ? "pointer" : "not-allowed",
                                             fontWeight: 600,
-                                            opacity: form.customer_email === "N/A" ? 1 : 0.85,
+                                            opacity: !canEditThisBid ? 0.5 : (form.customer_email === "N/A" ? 1 : 0.85),
                                             position: "relative",
                                             top: "-4px"
                                         }}
@@ -1256,7 +1271,8 @@ const BidForm: React.FC = () => {
                                     placeholder="John Doe"
                                     value={form.salesperson}
                                     onChange={handleFormChange}
-                                    className={isInvalid("salesperson") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("salesperson") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label>Job Name or Address:</label>
@@ -1266,7 +1282,8 @@ const BidForm: React.FC = () => {
                                     placeholder="Kitchen Remodel, Tampa FL"
                                     value={form.job}
                                     onChange={handleFormChange}
-                                    className={isInvalid("job") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("job") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <label><strong>Payment Terms:</strong></label>
@@ -1276,7 +1293,8 @@ const BidForm: React.FC = () => {
                                     value={form.payment_terms}
                                     onChange={handleFormChange}
                                     placeholder="Deposit of 50% prior to work commencing and weekly progress payments."
-                                    className={isInvalid("payment_terms") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("payment_terms") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 ></textarea>
 
                                 <label>Approximate Working Weeks:</label>
@@ -1286,7 +1304,8 @@ const BidForm: React.FC = () => {
                                     value={form.approx_weeks}
                                     onChange={handleFormChange}
                                     placeholder="4 - 6"
-                                    className={isInvalid("approx_weeks") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("approx_weeks") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 />
 
                                 <h2>Line Items</h2>
@@ -1302,14 +1321,21 @@ const BidForm: React.FC = () => {
                                         setNumLineItems(e.target.value);
                                         setErrors((prev) => ({ ...prev, line_items_missing: false }));
                                     }}
+                                    readOnly={!canEditThisBid}
                                     className={[
                                         "line-item-count-input",
                                         isInvalid("line_items_missing") ? "input-error" : "",
+                                        !canEditThisBid ? "input-readonly" : "",
                                     ].filter(Boolean).join(" ")}
                                 />
 
                                 <div className="line-item-toolbar">
-                                    <button type="button" onClick={handleGenerateLineItems}>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateLineItems}
+                                        disabled={!canEditThisBid}
+                                        title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
+                                    >
                                         Generate Line Item Sections
                                     </button>
 
@@ -1321,6 +1347,8 @@ const BidForm: React.FC = () => {
                                                 handleLineItemDragEnd();
                                                 setIsLineItemReorderMode((prev) => !prev);
                                             }}
+                                            disabled={!canEditThisBid}
+                                            title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
                                         >
                                             {isLineItemReorderMode ? "Done Reordering" : "Reorder"}
                                         </button>
@@ -1353,10 +1381,11 @@ const BidForm: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className="line-item-reorder-drag-button"
-                                                    draggable
-                                                    onDragStart={(event) =>
-                                                        handleLineItemDragStart(index, event)
-                                                    }
+                                                    draggable={canEditThisBid}
+                                                    onDragStart={(event) => {
+                                                        if (!canEditThisBid) return;
+                                                        handleLineItemDragStart(index, event);
+                                                    }}
                                                     onDragEnd={handleLineItemDragEnd}
                                                     aria-label={`Reorder line item ${index + 1}`}
                                                     title="Drag to reorder line item"
@@ -1387,7 +1416,8 @@ const BidForm: React.FC = () => {
                                                     className="line-item-delete-button"
                                                     onClick={() => handleDeleteLineItem(index)}
                                                     aria-label={`Delete line item ${index + 1}`}
-                                                    title="Delete line item"
+                                                    title={canEditThisBid ? "Delete line item" : "You don't have permission to edit this teammate's bid."}
+                                                    disabled={!canEditThisBid}
                                                 >
                                                     <Trash2 size={18} aria-hidden="true" />
                                                 </button>
@@ -1402,18 +1432,20 @@ const BidForm: React.FC = () => {
                                                     onChange={(e) =>
                                                         handleLineItemChange(index, "trade", e.target.value)
                                                     }
-                                                    className={isInvalid(`line_trade_${index}`) ? "input-error" : ""}
+                                                    readOnly={!canEditThisBid}
+                                                    className={`${isInvalid(`line_trade_${index}`) ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                                 />
 
                                                 <label>Scope of Work (one per line):</label>
                                                 <textarea
                                                     className={
-                                                        `scope-input ${isInvalid(`line_scope_${index}`) ? "input-error" : ""}`
+                                                        `scope-input ${isInvalid(`line_scope_${index}`) ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`
                                                     }
                                                     placeholder="- Enter one task per line"
                                                     value={item.scope}
                                                     onChange={(e) => handleScopeChange(index, e)}
                                                     onKeyDown={(e) => handleScopeKeyDown(index, e)}
+                                                    readOnly={!canEditThisBid}
                                                 ></textarea>
 
                                                 <label>Material and Labor Included?</label>
@@ -1426,10 +1458,11 @@ const BidForm: React.FC = () => {
                                                             e.target.value
                                                         )
                                                     }
+                                                    disabled={!canEditThisBid}
                                                     className={
-                                                        isInvalid(`line_material_labor_included_${index}`)
+                                                        `${isInvalid(`line_material_labor_included_${index}`)
                                                             ? "input-error"
-                                                            : ""
+                                                            : ""} ${!canEditThisBid ? "input-readonly" : ""}`
                                                     }
                                                 >
                                                     <option value="Yes">Yes</option>
@@ -1462,13 +1495,15 @@ const BidForm: React.FC = () => {
                                                                 formatDollarInput(e.target.value)
                                                             )
                                                         }
-                                                        className={isInvalid(`line_line_total_${index}`) ? "input-error" : ""}
+                                                        readOnly={!canEditThisBid}
+                                                        className={`${isInvalid(`line_line_total_${index}`) ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                                     />
 
                                                     <LineItemAIHelper
                                                         tradeName={item.trade}
                                                         scope={item.scope}
                                                         zipCode={extractZipCode(form.company_address)}
+                                                        canEdit={canEditThisBid}
                                                         initialEstimate={item.estimate}
                                                         siblingLineItems={lineItems
                                                             .filter((_, i) => i !== index)
@@ -1528,6 +1563,8 @@ const BidForm: React.FC = () => {
                                                                     e.target.value.replace(/[^0-9.]/g, "")
                                                                 )
                                                             }
+                                                            readOnly={!canEditThisBid}
+                                                            className={!canEditThisBid ? "input-readonly" : ""}
                                                         />
                                                         <span className="percent-suffix">%</span>
                                                     </div>
@@ -1556,7 +1593,8 @@ const BidForm: React.FC = () => {
                                             value={form.contingency_percentage}
                                             onChange={handleFormChange}
                                             placeholder="10"
-                                            className={isInvalid("contingency_percentage") ? "input-error" : ""}
+                                            readOnly={!canEditThisBid}
+                                            className={`${isInvalid("contingency_percentage") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                         />
                                         <span className="percent-suffix">%</span>
                                     </div>
@@ -1576,7 +1614,8 @@ const BidForm: React.FC = () => {
                                     value={form.contingency_coverage}
                                     onChange={handleFormChange}
                                     placeholder="Covers miscellaneous materials and unexpected repairs..."
-                                    className={isInvalid("contingency_coverage") ? "input-error" : ""}
+                                    readOnly={!canEditThisBid}
+                                    className={`${isInvalid("contingency_coverage") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                 ></textarea>
 
                                 <p className="contingency-warning">
@@ -1627,6 +1666,7 @@ const BidForm: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={handleSetTaxAmountNA}
+                                        disabled={!canEditThisBid}
                                         style={{
                                             whiteSpace: "nowrap",
                                             padding: "10px 14px",
@@ -1634,9 +1674,9 @@ const BidForm: React.FC = () => {
                                             color: isTaxAmountNA ? "#fff" : "#111",
                                             border: "none",
                                             borderRadius: "6px",
-                                            cursor: "pointer",
+                                            cursor: canEditThisBid ? "pointer" : "not-allowed",
                                             fontWeight: 600,
-                                            opacity: isTaxAmountNA ? 1 : 0.85,
+                                            opacity: !canEditThisBid ? 0.5 : (isTaxAmountNA ? 1 : 0.85),
                                             marginTop: "-8px",
                                         }}
                                     >
@@ -1671,7 +1711,8 @@ const BidForm: React.FC = () => {
                                             onChange={handleFormChange}
                                             value={form.deposit_percentage}
                                             placeholder="50"
-                                            className={isInvalid("deposit_percentage") ? "input-error" : ""}
+                                            readOnly={!canEditThisBid}
+                                            className={`${isInvalid("deposit_percentage") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                         />
                                         <span className="percent-suffix">%</span>
                                     </div>
@@ -1691,7 +1732,8 @@ const BidForm: React.FC = () => {
                                         value={form.weekly_payments}
                                         onChange={handleFormChange}
                                         placeholder="3"
-                                        className={isInvalid("weekly_payments") ? "input-error" : ""}
+                                        readOnly={!canEditThisBid}
+                                        className={`${isInvalid("weekly_payments") ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                     />
 
                                     <div className="tax-amount text-black">
@@ -1706,20 +1748,22 @@ const BidForm: React.FC = () => {
                                         type="button"
                                         className="secondary-submit"
                                         onClick={handleSaveDraft}
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || !canEditThisBid}
+                                        title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
                                         style={{
-                                            opacity: isSubmitting ? 0.7 : 1,
-                                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                                            opacity: isSubmitting || !canEditThisBid ? 0.7 : 1,
+                                            cursor: isSubmitting || !canEditThisBid ? "not-allowed" : "pointer",
                                         }}
                                     >
                                         {isSubmitting ? <span className="spinner" /> : "Save Draft"}
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || !canEditThisBid}
+                                        title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
                                         style={{
-                                            opacity: isSubmitting ? 0.7 : 1,
-                                            cursor: isSubmitting ? "not-allowed" : "pointer",
+                                            opacity: isSubmitting || !canEditThisBid ? 0.7 : 1,
+                                            cursor: isSubmitting || !canEditThisBid ? "not-allowed" : "pointer",
                                         }}
                                     >
                                         {isSubmitting ? (

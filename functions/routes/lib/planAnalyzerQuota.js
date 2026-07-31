@@ -21,6 +21,21 @@ const getCurrentPlanAnalysisPeriodKey = (date = new Date()) => {
 };
 
 const getPlanAnalyzerMonthlyLimit = (profile = {}) => {
+  // Member seats ride the owner's single subscription. Their quota is driven by
+  // the tier purchased for the seat, not by the standalone-owner rules below —
+  // except during the account trial, when every seat is capped at 1/month.
+  if (profile.accountRole === "member") {
+    // Trial cap first: even a 2- or 3-analysis tier only gets 1/month while the
+    // account is trialing. `stripeSubscriptionStatus` is mirrored from the owner
+    // (via webhook propagation, or set at seat-creation time).
+    if (profile.stripeSubscriptionStatus === "trialing") {
+      return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
+    }
+
+    const seatLimit = Number(profile.seatPlanAnalyzerLimit);
+    return Number.isFinite(seatLimit) ? Math.max(seatLimit, 0) : 0;
+  }
+
   if (profile.stripeSubscriptionStatus === "trialing") {
     return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
   }
@@ -105,6 +120,32 @@ const verifyAuthenticatedUser = async (req) => {
   }
 };
 
+/**
+ * Server-side mirror of `canWriteAccountDoc` in firestore.rules: a doc may be
+ * modified by its creator, or by an owner / `full` member of the same account.
+ *
+ * Plan-analyzer writes go through Cloud Functions rather than the client SDK,
+ * so they bypass firestore.rules entirely and need this check explicitly.
+ * Without it a full-access teammate can read and edit a colleague's analysis
+ * but not delete it, which contradicts every other collection.
+ */
+const canManageAccountDoc = async (firestore, uid, data) => {
+  if (!uid) return false;
+  if (data?.userId === uid) return true;
+
+  const accountId = data?.accountId;
+  if (!accountId) return false;
+
+  const meSnap = await firestore.doc(`users/${uid}`).get();
+  const me = meSnap.exists ? meSnap.data() || {} : {};
+  // Matches myAccountId() in the rules: fall back to own uid for users not yet
+  // migrated onto an account.
+  const myAccountId = me.accountId || uid;
+  if (myAccountId !== accountId) return false;
+
+  return me.accountRole === "owner" || me.memberPermission === "full";
+};
+
 const verifyPlanProjectOwner = async (firestore, req, projectId) => {
   const decodedToken = await verifyAuthenticatedUser(req);
   const projectRef = firestore.doc(`planProjects/${projectId}`);
@@ -117,7 +158,7 @@ const verifyPlanProjectOwner = async (firestore, req, projectId) => {
   }
 
   const projectData = projectSnap.data() || {};
-  if (projectData.userId !== decodedToken.uid) {
+  if (!(await canManageAccountDoc(firestore, decodedToken.uid, projectData))) {
     const error = new Error("You do not have access to this plan analysis.");
     error.statusCode = 403;
     throw error;
@@ -253,6 +294,7 @@ const markPlanAnalysisFailed = async (firestore, projectId) => {
 
 module.exports = {
   DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT,
+  canManageAccountDoc,
   TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT,
   assertPlanAnalysisCanProcess,
   getCurrentPlanAnalysisPeriodKey,

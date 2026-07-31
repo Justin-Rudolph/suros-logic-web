@@ -38,6 +38,8 @@ export interface BidFormProposalDocument {
 export interface BidFormProposalRecord {
   id: string;
   userId: string;
+  // Denormalized owner account id (owner's uid). Set at creation time.
+  accountId?: string;
   bidFormId?: string;
   title: string;
   status: BidFormProposalStatus;

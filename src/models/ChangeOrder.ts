@@ -24,6 +24,8 @@ export interface ChangeOrderFormState {
 export interface ChangeOrderRecord {
   id: string;
   userId: string;
+  // Denormalized owner account id (owner's uid). Set at creation time.
+  accountId?: string;
   bidFormId: string;
   title: string;
   formSnapshot: ChangeOrderFormState;

@@ -14,6 +14,9 @@ const API2PDF_API_KEY = defineSecret("API2PDF_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const STRIPE_PRICE_ID_MONTHLY_150 = defineSecret("STRIPE_PRICE_ID_MONTHLY_150");
+const STRIPE_PRICE_ID_CHILD_SEAT_1 = defineSecret("STRIPE_PRICE_ID_CHILD_SEAT_1");
+const STRIPE_PRICE_ID_CHILD_SEAT_2 = defineSecret("STRIPE_PRICE_ID_CHILD_SEAT_2");
+const STRIPE_PRICE_ID_CHILD_SEAT_3 = defineSecret("STRIPE_PRICE_ID_CHILD_SEAT_3");
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 /* --------------------------------------------------
@@ -443,6 +446,9 @@ exports.stripe = onRequest(
       STRIPE_SECRET_KEY,
       STRIPE_WEBHOOK_SECRET,
       STRIPE_PRICE_ID_MONTHLY_150,
+      STRIPE_PRICE_ID_CHILD_SEAT_1,
+      STRIPE_PRICE_ID_CHILD_SEAT_2,
+      STRIPE_PRICE_ID_CHILD_SEAT_3,
       RESEND_API_KEY,
     ],
     timeoutSeconds: 180,
@@ -450,6 +456,27 @@ exports.stripe = onRequest(
   (req, res) => {
     const stripeRoute = require("./routes/stripe");
     return stripeRoute.app(req, res);
+  }
+);
+
+/* --------------------------------------------------
+   MANAGE SEATS (child account seats — owner-only)
+-------------------------------------------------- */
+
+exports.manageSeats = onRequest(
+  {
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_PRICE_ID_CHILD_SEAT_1,
+      STRIPE_PRICE_ID_CHILD_SEAT_2,
+      STRIPE_PRICE_ID_CHILD_SEAT_3,
+      RESEND_API_KEY,
+    ],
+    timeoutSeconds: 120,
+  },
+  (req, res) => {
+    const manageSeatsRoute = require("./routes/manageSeats");
+    return manageSeatsRoute.app(req, res);
   }
 );
 

@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const {
   markPlanAnalysisFailed,
   verifyAuthenticatedUser,
+  canManageAccountDoc,
 } = require("./lib/planAnalyzerQuota");
 
 if (!admin.apps.length) {
@@ -58,7 +59,9 @@ module.exports = async function deletePlanAnalysisProjectHandler(req, res) {
     }
 
     const projectData = projectSnap.data() || {};
-    if (projectData.userId !== decodedToken.uid) {
+    // Mirrors canWriteAccountDoc in firestore.rules — this route bypasses
+    // rules, so owners and full-access teammates must be allowed here too.
+    if (!(await canManageAccountDoc(firestore, decodedToken.uid, projectData))) {
       return res.status(403).json({ error: "You do not have access to this plan analysis." });
     }
 

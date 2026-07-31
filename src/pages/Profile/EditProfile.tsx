@@ -2,16 +2,22 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, Lock } from "lucide-react";
 import { firestore, storage } from "@/lib/firebase";
 import { UserProfile } from "@/models/UserProfile";
+import { isMember } from "@/lib/account";
+import { useEffectiveCompanyProfile } from "@/hooks/useEffectiveCompanyProfile";
 import "./EditProfile.css";
 import "@/styles/gradients.css";
 import { useNavigate } from "react-router-dom";
 
 export default function EditProfile() {
-  const { user, setProfile } = useAuth();
+  const { user, profile, setProfile } = useAuth();
   const navigate = useNavigate();
+
+  // Members inherit the owner's branding; those fields render read-only.
+  const member = isMember(profile);
+  const { branding: effectiveBranding } = useEffectiveCompanyProfile();
 
   const [form, setForm] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,13 +57,11 @@ export default function EditProfile() {
     email: "Email Address",
   };
 
-  const requiredFields: EditableField[] = [
-    "companyName",
-    "companyAddress",
-    "displayName",
-    "email",
-    "phone",
-  ];
+  // Members don't edit company branding (inherited from the owner), so those
+  // fields are not required of them.
+  const requiredFields: EditableField[] = member
+    ? ["displayName", "email", "phone"]
+    : ["companyName", "companyAddress", "displayName", "email", "phone"];
 
   // ---------------------------------------------------------
   // LOAD PROFILE OR CREATE BASE DATA
@@ -225,12 +229,30 @@ export default function EditProfile() {
           profileComplete: true,
           createdAt: Timestamp.now(),
 
-          // defaults
-          isSubscribed: true,
-          stripeCustomerId: "",
+          // Billing fields are deliberately absent rather than defaulted.
+          //
+          // This payload is written with merge, and the existence check above
+          // it is not atomic: if Stripe's checkout webhook lands in between,
+          // writing isSubscribed: false or stripeCustomerId: "" here would
+          // overwrite the real values it just set, turning a paying customer
+          // unsubscribed and cutting off their billing portal. Saying nothing
+          // leaves those fields to the Admin SDK, which owns them.
+          //
+          // firestore.rules accepts the omission — its create rule treats a
+          // missing billing field as unset, and only rejects a doc that claims
+          // a subscription it did not pay for.
+        };
+      } else if (member) {
+        // 👥 MEMBER SEAT → only their own contact fields; branding is inherited
+        // from the owner and never copied onto the member's doc.
+        payload = {
+          displayName: form.displayName,
+          phone: form.phone,
+          email: form.email,
+          profileComplete: true,
         };
       } else {
-        // 🔁 EXISTING USER → UPDATE ONLY EDITABLE FIELDS
+        // 🔁 EXISTING OWNER → UPDATE ONLY EDITABLE FIELDS
         payload = {
           displayName: form.displayName,
           companyName: form.companyName,
@@ -242,16 +264,20 @@ export default function EditProfile() {
         };
       }
 
-      if (logoUpdate) {
-        payload = { ...payload, ...logoUpdate };
-      }
+      // Branding (logo + chip color) is only ever written by owners. Members
+      // inherit it and never persist branding onto their own doc.
+      if (!member) {
+        if (logoUpdate) {
+          payload = { ...payload, ...logoUpdate };
+        }
 
-      // The chip color is a simple preference — always persist the current value.
-      // A "transparent" sentinel means render the logo with no background.
-      payload = {
-        ...payload,
-        companyLogoChipColor: logoChipTransparent ? "transparent" : logoChipColor,
-      };
+        // The chip color is a simple preference — always persist the current
+        // value. A "transparent" sentinel means render the logo with no bg.
+        payload = {
+          ...payload,
+          companyLogoChipColor: logoChipTransparent ? "transparent" : logoChipColor,
+        };
+      }
 
       await setDoc(userRef, payload, { merge: true });
 
@@ -362,11 +388,18 @@ export default function EditProfile() {
 
           <div className="edit-grid">
 
-            <div className="edit-field">
-              <label>Company Name</label>
+            <div className={`edit-field${member ? " edit-field--locked" : ""}`}>
+              <label>
+                Company Name
+                {member && <Lock size={13} className="lock-icon">
+                  <title>Managed by account owner</title>
+                </Lock>}
+              </label>
               <input
                 name="companyName"
-                value={form.companyName}
+                value={member ? effectiveBranding?.companyName ?? "" : form.companyName}
+                disabled={member}
+                readOnly={member}
                 onChange={(e) =>
                   setForm({ ...form, companyName: e.target.value })
                 }
@@ -384,13 +417,20 @@ export default function EditProfile() {
               />
             </div>
 
-            <div className="edit-field">
-              <label>Company Address (include zipcode)</label>
+            <div className={`edit-field${member ? " edit-field--locked" : ""}`}>
+              <label>
+                Company Address (include zipcode)
+                {member && <Lock size={13} className="lock-icon">
+                  <title>Managed by account owner</title>
+                </Lock>}
+              </label>
               <textarea
                 name="companyAddress"
                 rows={2}
                 placeholder="1234 Main St Tampa, FL 33611"
-                value={form.companyAddress}
+                value={member ? effectiveBranding?.companyAddress ?? "" : form.companyAddress}
+                disabled={member}
+                readOnly={member}
                 onChange={(e) =>
                   setForm({ ...form, companyAddress: e.target.value })
                 }
@@ -408,12 +448,19 @@ export default function EditProfile() {
               />
             </div>
 
-            <div className="edit-field">
-              <label>Company Slogan (Optional)</label>
+            <div className={`edit-field${member ? " edit-field--locked" : ""}`}>
+              <label>
+                Company Slogan (Optional)
+                {member && <Lock size={13} className="lock-icon">
+                  <title>Managed by account owner</title>
+                </Lock>}
+              </label>
               <textarea
                 name="slogan"
                 rows={2}
-                value={form.slogan ?? ""}
+                value={member ? effectiveBranding?.slogan ?? "" : form.slogan ?? ""}
+                disabled={member}
+                readOnly={member}
                 onChange={(e) =>
                   setForm({ ...form, slogan: e.target.value })
                 }
@@ -431,6 +478,31 @@ export default function EditProfile() {
               />
             </div>
 
+            {member ? (
+              <div className="edit-field logo-field edit-field--locked">
+                <label>
+                  Company Logo
+                  <Lock size={13} className="lock-icon">
+                  <title>Managed by account owner</title>
+                </Lock>
+                </label>
+                {effectiveBranding?.companyLogoUrl ? (
+                  <div
+                    className="logo-preview"
+                    style={
+                      effectiveBranding.companyLogoChipColor &&
+                      effectiveBranding.companyLogoChipColor.toLowerCase() !== "transparent"
+                        ? { background: effectiveBranding.companyLogoChipColor }
+                        : undefined
+                    }
+                  >
+                    <img src={effectiveBranding.companyLogoUrl} alt="Company logo" />
+                  </div>
+                ) : (
+                  <p className="logo-hint">No company logo set.</p>
+                )}
+              </div>
+            ) : (
             <div className="edit-field logo-field">
               <label>Company Logo (Optional)</label>
 
@@ -515,6 +587,7 @@ export default function EditProfile() {
 
               {logoError && <span className="logo-error">{logoError}</span>}
             </div>
+            )}
           </div>
 
           <button className="save-btn" onClick={save} style={{ marginTop: "20px" }}>

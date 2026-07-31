@@ -60,6 +60,9 @@ module.exports = async function reservePlanAnalysisHandler(req, res) {
 
       transaction.set(projectRef, {
         userId: decodedToken.uid,
+        // Denormalized owner account id — the owner's uid, or the member's own
+        // uid if not yet migrated / standalone.
+        accountId: profile.accountId || decodedToken.uid,
         projectId: projectRef.id,
         status: "reserved_upload",
         createdAt: FieldValue.serverTimestamp(),

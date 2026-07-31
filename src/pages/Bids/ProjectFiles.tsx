@@ -18,9 +18,11 @@ import {
 import { Trash2 } from "lucide-react";
 
 import { firestore, storage, auth } from "@/lib/firebase";
+import { canEditRecord, getAccountId } from "@/lib/account";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { touchBidFormUpdatedAt } from "@/lib/touchBidForm";
+import { useBidWorkspaceContext } from "./bidWorkspaceContext";
 
 import "./ProjectFiles.css";
 import "./MyBids.css";
@@ -57,6 +59,11 @@ export default function ProjectFiles() {
     const { bidId } = useParams();
     const user = auth.currentUser;
     const { profile } = useAuth();
+    const accountId = getAccountId(profile);
+    const { bid } = useBidWorkspaceContext();
+    // A view_all_edit_own/own member can view files in this workspace but not
+    // upload/delete unless they created the parent bid themselves.
+    const canManageFiles = canEditRecord(profile, bid);
 
     const [uploads, setUploads] = useState<ProjectFile[]>([]);
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -79,11 +86,14 @@ export default function ProjectFiles() {
     // LISTEN FOR USER UPLOADS
     // --------------------------------------------------
     useEffect(() => {
-        if (!user || !bidId) return;
+        if (!accountId || !bidId) return;
 
+        // Workspace-level read: every file attached to a bid form the user can
+        // read is visible, regardless of which teammate uploaded it. No `own`
+        // self-filter here — that would fragment the shared workspace.
         const q = query(
             collection(firestore, "projectFiles"),
-            where("userId", "==", user.uid),
+            where("accountId", "==", accountId),
             where("bidFormId", "==", bidId)
         );
 
@@ -106,7 +116,7 @@ export default function ProjectFiles() {
         });
 
         return unsubscribe;
-    }, [user, bidId]);
+    }, [accountId, bidId]);
 
     const fileGroups = useMemo<ProjectFileGroup[]>(() => {
         const groupsById = uploads.reduce<Record<string, ProjectFileGroup>>((acc, upload) => {
@@ -169,6 +179,8 @@ export default function ProjectFiles() {
     };
 
     const handleUploadClick = () => {
+        if (!canManageFiles) return;
+
         if (!profile?.isSubscribed) {
             setShowBillingModal(true);
             return;
@@ -197,6 +209,7 @@ export default function ProjectFiles() {
 
                     await addDoc(collection(firestore, "projectFiles"), {
                         userId: user.uid,
+                        accountId,
                         bidFormId: bidId,
                         uploadGroupId,
                         title,
@@ -279,6 +292,8 @@ export default function ProjectFiles() {
                         <button
                             className="past-bid-open"
                             onClick={handleUploadClick}
+                            disabled={!canManageFiles}
+                            title={canManageFiles ? undefined : "Only the bid's creator or an account owner/full-access teammate can upload files here."}
                         >
                             Upload File(s)
                         </button>
@@ -293,6 +308,8 @@ export default function ProjectFiles() {
                         <button
                             className="past-bid-open"
                             onClick={handleUploadClick}
+                            disabled={!canManageFiles}
+                            title={canManageFiles ? undefined : "Only the bid's creator or an account owner/full-access teammate can upload files here."}
                         >
                             Upload File(s)
                         </button>
@@ -343,6 +360,12 @@ export default function ProjectFiles() {
                                                 className="past-bid-delete-icon"
                                                 onClick={() => setDeleteTarget({ type: "group", group })}
                                                 aria-label="Delete project file group"
+                                                disabled={!group.files.every((file) => canEditRecord(profile, file))}
+                                                title={
+                                                    group.files.every((file) => canEditRecord(profile, file))
+                                                        ? undefined
+                                                        : "Only the uploader or an account owner/full-access teammate can delete these files."
+                                                }
                                             >
                                                 <Trash2 size={18} />
                                             </button>
@@ -371,6 +394,12 @@ export default function ProjectFiles() {
                                                             className="past-bid-delete-icon"
                                                             onClick={() => setDeleteTarget({ type: "file", file: item })}
                                                             aria-label="Delete project file"
+                                                            disabled={!canEditRecord(profile, item)}
+                                                            title={
+                                                                canEditRecord(profile, item)
+                                                                    ? undefined
+                                                                    : "Only the uploader or an account owner/full-access teammate can delete this file."
+                                                            }
                                                         >
                                                             <Trash2 size={18} />
                                                         </button>

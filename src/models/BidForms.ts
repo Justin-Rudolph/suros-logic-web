@@ -17,6 +17,9 @@ export type BidProjectTimelineStage =
 export interface BidFormRecord {
   id: string;
   userId: string;
+  // Denormalized owner account id (owner's uid). Set at creation time from the
+  // creator's own users doc `accountId`. Drives shared team visibility.
+  accountId?: string;
   title: string;
   status?: "draft" | "submitted";
   workspaceOverviewSummary?: string;

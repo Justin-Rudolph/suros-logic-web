@@ -1,0 +1,154 @@
+rules_version = '2';
+
+// Firebase Storage security rules.
+//
+// Storage holds the real customer documents — bid attachments, plan uploads,
+// company logos — while Firestore holds only metadata about them. These rules
+// mirror the child-account seats model in firestore.rules so the two agree:
+//
+//   own                -> only files they uploaded themselves
+//   view_all_edit_own  -> read every file in the account, write only their own
+//   full               -> read and write every file in the account
+//   owner              -> read and write everything in their account
+//
+// Object paths are keyed by the UPLOADER's uid (projectFiles/{uid}/...), which
+// predates seats and cannot express an account. Rather than migrate every
+// existing object to an account-scoped path, the rules resolve the uploader's
+// account from Firestore. Costs one document read per cross-member request,
+// and none at all when someone touches their own file — the uid comparison
+// short-circuits first.
+//
+// Admin SDK access (Cloud Functions, the plan pipeline) bypasses these rules.
+//
+// NOTE ON READS: the app stores getDownloadURL() results in Firestore, and
+// those URLs carry a token that bypasses Storage rules entirely. The read
+// rules below are therefore not what protects existing files in practice.
+// They still matter for SDK reads and for any file whose token is revoked.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ---------------------------------------------------------------
+    // Requester account context
+    // ---------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myAccountId() {
+      // Fall back to own uid so a not-yet-migrated user behaves as a standalone
+      // owner of an account of one, matching myAccountId() in firestore.rules.
+      return myDoc().get('accountId', request.auth.uid);
+    }
+
+    function myRole() {
+      return myDoc().get('accountRole', 'owner');
+    }
+
+    function myPermission() {
+      return myDoc().get('memberPermission', 'own');
+    }
+
+    // The account a given uploader belongs to.
+    function accountOf(uploaderUid) {
+      return firestore.get(/databases/(default)/documents/users/$(uploaderUid))
+        .data.get('accountId', uploaderUid);
+    }
+
+    function sameAccount(uploaderUid) {
+      return accountOf(uploaderUid) == myAccountId();
+    }
+
+    // Mirrors canReadAccountDoc in firestore.rules.
+    function canReadFilesOf(uploaderUid) {
+      return signedIn() && (
+        request.auth.uid == uploaderUid ||
+        (
+          sameAccount(uploaderUid) &&
+          (myRole() == 'owner' || myPermission() == 'view_all_edit_own' || myPermission() == 'full')
+        )
+      );
+    }
+
+    // Mirrors canWriteAccountDoc in firestore.rules. Deleting a teammate's file
+    // runs through here: the bid workspace calls deleteObject() before
+    // deleting the Firestore doc, so a rule that only allowed the uploader made
+    // owners and full-access members unable to delete anything but their own.
+    function canWriteFilesOf(uploaderUid) {
+      return signedIn() && (
+        request.auth.uid == uploaderUid ||
+        (
+          sameAccount(uploaderUid) &&
+          (myRole() == 'owner' || myPermission() == 'full')
+        )
+      );
+    }
+
+    // ---------------------------------------------------------------
+    // companyLogos/{userId}/**
+    // ---------------------------------------------------------------
+    //
+    // Members inherit the owner's branding, so the whole account may read the
+    // logo. Only its owner may replace it — branding is never written by a
+    // member (see EditProfile, which skips branding fields for members).
+
+    match /companyLogos/{userId}/{allPaths=**} {
+      // Account-wide, deliberately NOT permission-scoped: branding is inherited
+      // by every seat regardless of level, and firestore.rules already lets any
+      // member read the owner's user doc (where companyLogoUrl lives). Gating
+      // the image by permission would leave an `own` member rendering a broken
+      // logo against a name they can read.
+      allow read: if signedIn() && (
+        request.auth.uid == userId || sameAccount(userId)
+      );
+
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|webp)');
+
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    // ---------------------------------------------------------------
+    // projectFiles/{userId}/{bidFormId}/**  — bid workspace uploads
+    // ---------------------------------------------------------------
+
+    match /projectFiles/{userId}/{bidFormId}/{allPaths=**} {
+      allow read: if canReadFilesOf(userId);
+
+      // Uploads always land under the uploader's own uid, so create stays
+      // self-scoped; only edits and deletes need the account-wide rule.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.size <= 2 * 1024 * 1024;
+
+      allow update: if canWriteFilesOf(userId)
+        && request.resource.size <= 2 * 1024 * 1024;
+
+      allow delete: if canWriteFilesOf(userId);
+    }
+
+    // ---------------------------------------------------------------
+    // planUploads/{userId}/{projectId}/**  — plan analyzer source files
+    // ---------------------------------------------------------------
+
+    match /planUploads/{userId}/{projectId}/{allPaths=**} {
+      allow read: if canReadFilesOf(userId);
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.size <= 100 * 1024 * 1024; // allow larger plan files
+
+      allow update: if canWriteFilesOf(userId)
+        && request.resource.size <= 100 * 1024 * 1024;
+
+      allow delete: if canWriteFilesOf(userId);
+    }
+  }
+}

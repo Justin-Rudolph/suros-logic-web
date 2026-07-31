@@ -1,0 +1,286 @@
+rules_version = '2';
+
+// Child Account Seats access model.
+//
+// Ownership of every data document is denormalized onto an `accountId` field
+// (the owner's uid). Each requesting user's own users/{uid} doc carries their
+// accountId, accountRole ('owner' | 'member') and, for members, a
+// memberPermission ('own' | 'view_all_edit_own' | 'full'). Reads/writes are
+// authorized by comparing the requester's account context against the target
+// document's accountId / userId.
+//
+//   own                -> read/write only docs where userId == self
+//   view_all_edit_own  -> read all account docs, write only own
+//   full               -> read/write all account docs
+//   owner              -> full read/write across the whole accountId
+//
+// Server-side code (Cloud Functions using the Admin SDK) bypasses these rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------
+    // Requester account context helpers
+    // -----------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myAccountId() {
+      // Fall back to own uid so a not-yet-migrated user still behaves as a
+      // standalone owner of an account of one.
+      return myDoc().get('accountId', request.auth.uid);
+    }
+
+    function myRole() {
+      return myDoc().get('accountRole', 'owner');
+    }
+
+    function myPermission() {
+      return myDoc().get('memberPermission', 'own');
+    }
+
+    function isOwner() {
+      return myRole() == 'owner';
+    }
+
+    // Whether this requester's account currently pays for write access.
+    //
+    // Reads and deletes are deliberately NOT gated on this: an inactive account
+    // keeps full visibility of its own data, and can still delete it. Only
+    // creating and changing records requires an active subscription, which is
+    // what every screen in the app already enforces.
+    //
+    // Members carry a mirrored copy of the owner's flag, written by
+    // subscriptionPropagation on every status change, so no second lookup is
+    // needed here. Missing counts as unsubscribed — only an explicit true
+    // permits a write.
+    function isSubscribedNow() {
+      return myDoc().get('isSubscribed', false) == true;
+    }
+
+    // Read granted for a doc that carries accountId / userId.
+    function canReadAccountDoc(data) {
+      return signedIn() && (
+        data.get('userId', '') == request.auth.uid ||
+        (
+          data.get('accountId', '') == myAccountId() &&
+          (isOwner() || myPermission() == 'view_all_edit_own' || myPermission() == 'full')
+        )
+      );
+    }
+
+    // Write (update/delete) granted for an existing doc.
+    function canWriteAccountDoc(data) {
+      return signedIn() && (
+        data.get('userId', '') == request.auth.uid ||
+        (
+          data.get('accountId', '') == myAccountId() &&
+          (isOwner() || myPermission() == 'full')
+        )
+      );
+    }
+
+    // A newly created doc must be self-attributed, stamped with the creator's
+    // own accountId, and paid for.
+    function isValidCreate(data) {
+      return signedIn() &&
+        data.userId == request.auth.uid &&
+        data.get('accountId', '') == myAccountId() &&
+        isSubscribedNow();
+    }
+
+    // Workspace-level read: a member can read anything attached to a bid form
+    // they can read, regardless of which teammate uploaded it.
+    function canReadBidForm(bidFormId) {
+      return exists(/databases/$(database)/documents/bidForms/$(bidFormId)) &&
+        canReadAccountDoc(
+          get(/databases/$(database)/documents/bidForms/$(bidFormId)).data
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // users
+    // -----------------------------------------------------------------
+    //
+    // A user may read their own doc, and any doc in their own account (owners
+    // read member seats; members read the owner for branding resolution and
+    // teammates for the team view). Self-writes may not escalate account /
+    // billing fields — those are only ever written by the Admin SDK.
+
+    match /users/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId ||
+        resource.data.get('accountId', '') == myAccountId()
+      );
+
+      function accountFieldsUnchanged() {
+        return request.resource.data.get('accountId', '') == resource.data.get('accountId', '') &&
+          request.resource.data.get('accountRole', '') == resource.data.get('accountRole', '') &&
+          request.resource.data.get('memberPermission', '') == resource.data.get('memberPermission', '') &&
+          request.resource.data.get('seatPlanAnalyzerLimit', 0) == resource.data.get('seatPlanAnalyzerLimit', 0) &&
+          // seatStatus decides whether a seat is billed, removable, and swept
+          // up when the owner's subscription lapses: propagation skips removed
+          // seats, so a member who set this themselves would keep working after
+          // a cancellation and could not be removed.
+          request.resource.data.get('seatStatus', '') == resource.data.get('seatStatus', '') &&
+          // stripeSeatPriceId is what the seat is billed at, and it wins over
+          // the tier. Editable, it buys tier-3 quota at the tier-1 price.
+          request.resource.data.get('stripeSeatPriceId', '') == resource.data.get('stripeSeatPriceId', '') &&
+          request.resource.data.get('stripeSubscriptionItemId', '') == resource.data.get('stripeSubscriptionItemId', '') &&
+          request.resource.data.get('stripeSubscriptionId', '') == resource.data.get('stripeSubscriptionId', '') &&
+          request.resource.data.get('stripeCustomerId', '') == resource.data.get('stripeCustomerId', '') &&
+          request.resource.data.get('stripeSubscriptionStatus', '') == resource.data.get('stripeSubscriptionStatus', '') &&
+          request.resource.data.get('isSubscribed', false) == resource.data.get('isSubscribed', false) &&
+          request.resource.data.get('planAnalyzerUsage', null) == resource.data.get('planAnalyzerUsage', null);
+      }
+
+      // Self-create is only ever a standalone owner (accountId == own uid).
+      // Member docs are always created by the Admin SDK.
+      //
+      // Billing and seat fields must be absent or empty. Anyone can obtain a
+      // Firebase Auth account — the web API key is public and the Identity
+      // Toolkit REST endpoint is reachable without the app — so a self-created
+      // doc claiming isSubscribed: true would hand out free permanent access
+      // and walk straight through isSubscribedNow(). Stripe webhooks establish
+      // billing through the Admin SDK, which bypasses these rules.
+      allow create: if signedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.get('accountId', userId) == userId &&
+        request.resource.data.get('accountRole', 'owner') == 'owner' &&
+        request.resource.data.get('isSubscribed', false) == false &&
+        request.resource.data.get('stripeCustomerId', '') == '' &&
+        request.resource.data.get('stripeSubscriptionId', '') == '' &&
+        request.resource.data.get('stripeSubscriptionItemId', '') == '' &&
+        request.resource.data.get('stripeSubscriptionStatus', '') == '' &&
+        request.resource.data.get('stripeSeatPriceId', '') == '' &&
+        request.resource.data.get('memberPermission', '') == '' &&
+        request.resource.data.get('seatStatus', '') == '' &&
+        request.resource.data.get('seatPlanAnalyzerLimit', 0) == 0 &&
+        request.resource.data.get('planAnalyzerUsage', null) == null;
+
+      // Self-update of profile fields only; account/billing fields are frozen.
+      allow update: if signedIn() &&
+        request.auth.uid == userId &&
+        accountFieldsUnchanged();
+
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // bidForms
+    // -----------------------------------------------------------------
+
+    match /bidForms/{bidFormId} {
+      allow read: if canReadAccountDoc(resource.data);
+      allow create: if isValidCreate(request.resource.data);
+
+      // Editing requires a live subscription; deleting never does, so a lapsed
+      // account can always clean up its own data.
+      //
+      // The updatedAt exemption exists because deleting a change order or a
+      // project file bumps the parent bid's timestamp right afterwards
+      // (touchBidFormUpdatedAt). That bump is part of the delete, not an edit,
+      // and blocking it made permitted deletes report failure — files already
+      // gone, dialog stuck open. Bumping a timestamp grants nothing on its own.
+      allow update: if canWriteAccountDoc(resource.data) && (
+        isSubscribedNow() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+      );
+      allow delete: if canWriteAccountDoc(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // bidFormProposals
+    // -----------------------------------------------------------------
+
+    match /bidFormProposals/{proposalId} {
+      allow read: if canReadAccountDoc(resource.data);
+      allow create: if isValidCreate(request.resource.data);
+      // Editing requires a live subscription; deleting never does, so a
+      // lapsed account can always clean up its own data.
+      allow update: if canWriteAccountDoc(resource.data) && isSubscribedNow();
+      allow delete: if canWriteAccountDoc(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // changeOrder (singular collection name)
+    // -----------------------------------------------------------------
+
+    match /changeOrder/{changeOrderId} {
+      allow read: if canReadAccountDoc(resource.data);
+      allow create: if isValidCreate(request.resource.data);
+      // Editing requires a live subscription; deleting never does, so a
+      // lapsed account can always clean up its own data.
+      allow update: if canWriteAccountDoc(resource.data) && isSubscribedNow();
+      allow delete: if canWriteAccountDoc(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // changeOrderProposals
+    // -----------------------------------------------------------------
+
+    match /changeOrderProposals/{proposalId} {
+      allow read: if canReadAccountDoc(resource.data);
+      allow create: if isValidCreate(request.resource.data);
+      // Editing requires a live subscription; deleting never does, so a
+      // lapsed account can always clean up its own data.
+      allow update: if canWriteAccountDoc(resource.data) && isSubscribedNow();
+      allow delete: if canWriteAccountDoc(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // projectFiles (bid workspace file uploads)
+    // -----------------------------------------------------------------
+    //
+    // Read is granted at the WORKSPACE level: any member who can read the
+    // parent bid form can read every file attached to it, regardless of the
+    // uploader. Edit/delete follows the per-document userId == self rule,
+    // except under `full` (and for owners), who may edit/delete anyone's file.
+
+    match /projectFiles/{fileId} {
+      allow read: if signedIn() && (
+        canReadAccountDoc(resource.data) ||
+        canReadBidForm(resource.data.bidFormId)
+      );
+      allow create: if isValidCreate(request.resource.data) &&
+        canReadBidForm(request.resource.data.bidFormId);
+      // Editing requires a live subscription; deleting never does, so a
+      // lapsed account can always clean up its own data.
+      allow update: if canWriteAccountDoc(resource.data) && isSubscribedNow();
+      allow delete: if canWriteAccountDoc(resource.data);
+    }
+
+    // -----------------------------------------------------------------
+    // planProjects (+ subcollections)
+    // -----------------------------------------------------------------
+    //
+    // Subcollection docs (e.g. PlanProjectFileRecord) inherit access from their
+    // parent planProjects doc — no separate accountId is denormalized on them.
+
+    match /planProjects/{projectId} {
+      allow read: if canReadAccountDoc(resource.data);
+      allow create: if isValidCreate(request.resource.data);
+      // Editing requires a live subscription; deleting never does, so a
+      // lapsed account can always clean up its own data.
+      allow update: if canWriteAccountDoc(resource.data) && isSubscribedNow();
+      allow delete: if canWriteAccountDoc(resource.data);
+
+      function parentPlanProject() {
+        return get(/databases/$(database)/documents/planProjects/$(projectId)).data;
+      }
+
+      match /{subCollection}/{docId} {
+        allow read: if signedIn() && canReadAccountDoc(parentPlanProject());
+        allow create, update: if signedIn() &&
+          canWriteAccountDoc(parentPlanProject()) && isSubscribedNow();
+        allow delete: if signedIn() && canWriteAccountDoc(parentPlanProject());
+      }
+    }
+  }
+}

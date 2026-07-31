@@ -19,6 +19,8 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "@/context/AuthContext";
+import { canEditRecord, getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
+import { useEffectiveCompanyProfile } from "@/hooks/useEffectiveCompanyProfile";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { firestore } from "@/lib/firebase";
 import { touchBidFormUpdatedAt } from "@/lib/touchBidForm";
@@ -128,6 +130,7 @@ const EditableField = ({
   onFocus,
   onBlur,
   style,
+  readOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -141,6 +144,7 @@ const EditableField = ({
   onFocus?: () => void;
   onBlur?: () => void;
   style?: CSSProperties;
+  readOnly?: boolean;
 }) => {
   if (multiline) {
     return (
@@ -149,6 +153,7 @@ const EditableField = ({
         value={value}
         rows={rows}
         placeholder={placeholder}
+        readOnly={readOnly}
         onInput={(e) => autoResizeTextarea(e.currentTarget)}
         onChange={(e) => onChange(e.target.value)}
         ref={(node) => {
@@ -166,6 +171,7 @@ const EditableField = ({
       type={type}
       size={size}
       placeholder={placeholder}
+      readOnly={readOnly}
       onChange={(e) => onChange(e.target.value)}
       onFocus={onFocus}
       onBlur={onBlur}
@@ -223,6 +229,14 @@ export default function BidFormProposalEditor() {
   const navigate = useNavigate();
   const { bidId } = useParams();
   const { user, profile } = useAuth();
+  const accountId = getAccountId(profile);
+  // Memoised so it is referentially stable across renders: getListScope builds
+  // a fresh object each call, and these effects open onSnapshot subscriptions —
+  // an unstable dependency would tear them down and re-subscribe every render.
+  const scope = useMemo(() => getListScope(profile), [profile]);
+  // Members inherit the owner's branding (read-only company name/address).
+  const { branding: effectiveBranding, readOnly: brandingReadOnly } =
+    useEffectiveCompanyProfile();
 
   const [record, setRecord] = useState<BidFormProposalRecord | null>(null);
   const [documentData, setDocumentData] = useState<BidFormProposalDocument | null>(null);
@@ -234,7 +248,10 @@ export default function BidFormProposalEditor() {
   const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [lineTotalDrafts, setLineTotalDrafts] = useState<Record<number, string>>({});
   const [scopeDrafts, setScopeDrafts] = useState<Record<number, string>>({});
-  const isReadOnly = profile?.isSubscribed !== true;
+  // A view_all_edit_own/own member can view but not edit/save a proposal in a
+  // workspace they didn't create — fold that into the same read-only flag
+  // used for the unsubscribed case, so every field below is disabled either way.
+  const isReadOnly = profile?.isSubscribed !== true || !canEditRecord(profile, record);
 
   const navigateWithScrollReset = (path: string) => {
     navigate(path);
@@ -244,11 +261,11 @@ export default function BidFormProposalEditor() {
   };
 
   useEffect(() => {
-    if (!bidId || !user) return;
+    if (!bidId || !accountId) return;
 
     const proposalQuery = query(
       collection(firestore, "bidFormProposals"),
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope)),
       where("bidFormId", "==", bidId)
     );
 
@@ -284,7 +301,7 @@ export default function BidFormProposalEditor() {
     });
 
     return unsubscribe;
-  }, [bidId, user, profile?.companyName]);
+  }, [bidId, accountId, profile?.companyName, scope]);
 
   useEffect(() => {
     if (!documentData) return;
@@ -529,7 +546,14 @@ export default function BidFormProposalEditor() {
     setDownloadError("");
 
     try {
-      const saved = await persistProposalChanges();
+      // A read-only viewer (no edit permission, or an inactive subscription)
+      // must still be able to download — just without re-saving first, since
+      // they have no write access to this document.
+      const saved = isReadOnly
+        ? effectiveDocumentData
+          ? { documentData: effectiveDocumentData, html: previewHtml }
+          : null
+        : await persistProposalChanges();
       if (!saved) return;
 
       const invoiceNumber = saved.documentData.invoice_number?.trim();
@@ -689,6 +713,11 @@ export default function BidFormProposalEditor() {
             className={`bid-editor-primary ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}
             onClick={handleSave}
             disabled={isReadOnly || isSaving || !hasUnsavedChanges}
+            title={
+              isReadOnly && !canEditRecord(profile, record)
+                ? "You don't have permission to edit this teammate's proposal."
+                : undefined
+            }
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
@@ -719,36 +748,43 @@ export default function BidFormProposalEditor() {
                   <EditableField
                     value={documentData.company_name}
                     onChange={(value) => updateField("company_name", value)}
+                    readOnly={isReadOnly || brandingReadOnly}
                     className="bid-editor-company-name"
                   />
                   <EditableField
                     value={documentData.company_address}
                     onChange={(value) => updateField("company_address", value)}
+                    readOnly={isReadOnly || brandingReadOnly}
                     className="bid-editor-header-line bid-editor-header-inverse"
                   />
                   <EditableField
                     value={documentData.company_phone}
                     onChange={(value) => updateField("company_phone", value)}
+                    readOnly={isReadOnly}
                     className="bid-editor-header-line bid-editor-header-inverse"
                   />
                   <EditableField
                     value={documentData.company_email}
                     onChange={(value) => updateField("company_email", value)}
+                    readOnly={isReadOnly}
                     className="bid-editor-header-line bid-editor-header-link"
                   />
                 </td>
-                {profile?.companyLogoUrl && (
+                {(effectiveBranding?.companyLogoUrl || profile?.companyLogoUrl) && (
                   <td align="right" style={{ verticalAlign: "middle", paddingRight: 24, lineHeight: 0 }}>
                     <span
                       style={{
                         display: "inline-block",
-                        background: profile.companyLogoChipColor || "#ffffff",
+                        background:
+                          effectiveBranding?.companyLogoChipColor ||
+                          profile?.companyLogoChipColor ||
+                          "#ffffff",
                         borderRadius: 8,
                         padding: "8px 10px",
                       }}
                     >
                       <img
-                        src={profile.companyLogoUrl}
+                        src={effectiveBranding?.companyLogoUrl || profile?.companyLogoUrl}
                         alt="Company logo"
                         style={{
                           maxHeight: 96,
@@ -784,6 +820,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={documentData.invoice_number}
                         onChange={(value) => updateField("invoice_number", value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-meta-input bid-editor-meta-input-right bid-editor-invoice-number-input"
                         align="right"
                         style={{
@@ -795,6 +832,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={documentData.company_slogan}
                         onChange={(value) => updateField("company_slogan", value)}
+                        readOnly={isReadOnly || brandingReadOnly}
                         className="bid-editor-slogan-input"
                         multiline
                         rows={1}
@@ -817,6 +855,7 @@ export default function BidFormProposalEditor() {
                           key={line.key}
                           value={line.value}
                           onChange={(value) => updateField(line.key, value)}
+                          readOnly={isReadOnly}
                           className="bid-editor-client-line"
                         />
                       ))}
@@ -834,6 +873,7 @@ export default function BidFormProposalEditor() {
                     <EditableField
                       value={documentData.salesperson}
                       onChange={(value) => updateField("salesperson", value)}
+                      readOnly={isReadOnly}
                       multiline
                       rows={2}
                     />
@@ -843,6 +883,7 @@ export default function BidFormProposalEditor() {
                     <EditableField
                       value={documentData.job}
                       onChange={(value) => updateField("job", value)}
+                      readOnly={isReadOnly}
                       multiline
                       rows={2}
                     />
@@ -852,6 +893,7 @@ export default function BidFormProposalEditor() {
                     <EditableField
                       value={documentData.payment_terms}
                       onChange={(value) => updateField("payment_terms", value)}
+                      readOnly={isReadOnly}
                       multiline
                       rows={4}
                     />
@@ -861,6 +903,7 @@ export default function BidFormProposalEditor() {
                     <EditableField
                       value={String(documentData.approx_weeks)}
                       onChange={(value) => updateField("approx_weeks", value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                 </tr>
@@ -887,6 +930,7 @@ export default function BidFormProposalEditor() {
                         onChange={(value) =>
                           updateLineItem(index, (current) => ({ ...current, trade: value }))
                         }
+                        readOnly={isReadOnly}
                         className="bid-editor-trade-input"
                       />
 
@@ -928,6 +972,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={lineTotalDrafts[index] ?? formatCurrencyInput(item.line_total)}
                         onChange={(value) => handleLineTotalChange(index, value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-money-input"
                         align="right"
                         type="text"
@@ -954,6 +999,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={getNumberInputValue(documentData.contingency_percentage)}
                         onChange={(value) => handleNumberFieldChange("contingency_percentage", value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-percent-input"
                       />
                       %)
@@ -961,6 +1007,7 @@ export default function BidFormProposalEditor() {
                     <EditableField
                       value={documentData.contingency_coverage}
                       onChange={(value) => updateField("contingency_coverage", value)}
+                      readOnly={isReadOnly}
                       multiline
                       rows={1}
                       className="bid-editor-contingency-text"
@@ -994,6 +1041,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={getNumberInputValue(documentData.tax_percentage)}
                         onChange={(value) => handleNumberFieldChange("tax_percentage", value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-percent-input"
                         align="right"
                       />
@@ -1017,6 +1065,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={getNumberInputValue(documentData.deposit_percentage)}
                         onChange={(value) => handleNumberFieldChange("deposit_percentage", value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-percent-input"
                         align="right"
                       />
@@ -1032,6 +1081,7 @@ export default function BidFormProposalEditor() {
                       <EditableField
                         value={getNumberInputValue(documentData.weekly_payments)}
                         onChange={(value) => handleNumberFieldChange("weekly_payments", value)}
+                        readOnly={isReadOnly}
                         className="bid-editor-percent-input"
                         align="right"
                       />
@@ -1048,6 +1098,7 @@ export default function BidFormProposalEditor() {
                 <EditableField
                   value={documentData.prepared_by ?? ""}
                   onChange={(value) => updateField("prepared_by", value)}
+                  readOnly={isReadOnly}
                   className="bid-editor-signature-input"
                   multiline
                   rows={1}

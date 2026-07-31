@@ -14,7 +14,9 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { firestore, storage } from "@/lib/firebase";
+import { applyOwnFilter, canEditRecord, getListScope, getScopeQueryField, getScopeQueryValue, isMember } from "@/lib/account";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
+import { useAccountCreators } from "@/hooks/useAccountCreators";
 import { UploadedPlanFile } from "@/models/PlanAnalyzerShared";
 import { PlanProjectRecord } from "@/models/PlanProjects";
 import { PlanAnalyzerUsage, UserProfile } from "@/models/UserProfile";
@@ -205,6 +207,19 @@ const getCurrentPlanAnalysisPeriodKey = () => {
 };
 
 const getPlanAnalyzerMonthlyLimit = (profile?: UserProfile | null) => {
+  // Member seats ride the owner's single subscription. Their quota is driven by
+  // the tier purchased for the seat, not by the standalone-owner rules below —
+  // except during the account trial, when every seat is capped at 1/month.
+  // Mirrors functions/routes/lib/planAnalyzerQuota.js — keep both in sync.
+  if (profile?.accountRole === "member") {
+    if (profile?.stripeSubscriptionStatus === "trialing") {
+      return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
+    }
+
+    const seatLimit = Number(profile?.seatPlanAnalyzerLimit);
+    return Number.isFinite(seatLimit) ? Math.max(seatLimit, 0) : 0;
+  }
+
   if (profile?.stripeSubscriptionStatus === "trialing") {
     return TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT;
   }
@@ -249,6 +264,13 @@ export default function PlanAnalyzer() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const hasActiveSubscription = profile?.isSubscribed === true;
+  const { creatorName, showCreators } = useAccountCreators();
+  // A trial caps analyses well below the paid plan, and this banner is where
+  // that ceiling is actually felt. Members inherit the owner's trial status but
+  // cannot act on it — billing is the owner's alone — so the prompt is theirs
+  // only.
+  const isTrialing =
+    profile?.stripeSubscriptionStatus === "trialing" && !isMember(profile);
   const planAnalyzerUsage = useMemo(
     () => normalizePlanAnalyzerUsage(profile),
     [profile]
@@ -280,18 +302,22 @@ export default function PlanAnalyzer() {
   });
 
   useEffect(() => {
-    if (!user) return;
+    const scope = getListScope(profile);
+    if (!scope.accountId) return;
 
     const projectsQuery = query(
       collection(firestore, "planProjects"),
-      where("userId", "==", user.uid)
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope))
     );
 
     const unsubscribe = onSnapshot(projectsQuery, (snapshot) => {
-      const nextProjects = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<PlanProjectRecord, "id">),
-      }));
+      const nextProjects = applyOwnFilter(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<PlanProjectRecord, "id">),
+        })),
+        scope
+      );
 
       nextProjects.sort((left, right) => {
         const leftTime = left.updatedAt?.seconds || left.createdAt?.seconds || 0;
@@ -303,7 +329,8 @@ export default function PlanAnalyzer() {
     });
 
     return unsubscribe;
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.accountId, profile?.uid, profile?.accountRole, profile?.memberPermission]);
 
   const totalUploadSize = useMemo(
     () => selectedFile?.size || 0,
@@ -718,8 +745,17 @@ export default function PlanAnalyzer() {
                 <span className="plan-summary-label">Monthly plan analyses</span>
                 <p className="plan-readonly-copy">
                   {remainingPlanAnalyses} of {planAnalyzerUsage.monthlyLimit} analyses remaining this month.
+                  {isTrialing && " Your trial limit is lower than the full plan."}
                 </p>
               </div>
+
+              {/* Sends them to Manage Subscription rather than charging here:
+                  the confirmation belongs in one place. */}
+              {isTrialing && (
+                <Link to="/billing" className="plan-readonly-link">
+                  End Trial
+                </Link>
+              )}
             </div>
           )}
 
@@ -1027,6 +1063,11 @@ export default function PlanAnalyzer() {
 
                     <div className="plan-project-meta">
                       <span className="plan-project-status-pill">{getProjectStatusLabel(project)}</span>
+                      {showCreators && creatorName(project.userId) && (
+                        <span className="plan-project-owner-pill">
+                          Owner: {creatorName(project.userId)}
+                        </span>
+                      )}
                       <span>{getProjectFileCountLabel(project)}</span>
                       <span>{formatProjectTimestamp(project)}</span>
                     </div>
@@ -1046,6 +1087,12 @@ export default function PlanAnalyzer() {
                       className="plan-project-delete-icon"
                       onClick={() => confirmDeleteProject(project)}
                       aria-label={`Delete ${getProjectTitle(project)}`}
+                      disabled={!canEditRecord(profile, project)}
+                      title={
+                        canEditRecord(profile, project)
+                          ? undefined
+                          : "Only the creator or an account owner/full-access teammate can delete this project."
+                      }
                     >
                       <Trash2 size={18} />
                     </button>

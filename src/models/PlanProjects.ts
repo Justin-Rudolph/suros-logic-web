@@ -17,6 +17,8 @@ export interface PlanProjectModulesSummary {
 
 export interface PlanProjectDocument {
   userId: string;
+  // Denormalized owner account id (owner's uid). Set at creation time.
+  accountId?: string;
   projectId: string;
   title?: string;
   fileCount: number;

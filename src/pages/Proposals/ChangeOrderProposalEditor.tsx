@@ -20,6 +20,8 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "@/context/AuthContext";
+import { canEditRecord, getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
+import { useEffectiveCompanyProfile } from "@/hooks/useEffectiveCompanyProfile";
 import {
   formatReadableDate,
   formatUsd,
@@ -177,15 +179,17 @@ const DateDisplayField = ({
   value,
   onChange,
   align = "left",
+  readOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   align?: "left" | "right";
+  readOnly?: boolean;
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const openPicker = () => {
-    if (!inputRef.current) return;
+    if (readOnly || !inputRef.current) return;
     if (typeof inputRef.current.showPicker === "function") {
       inputRef.current.showPicker();
       return;
@@ -196,7 +200,7 @@ const DateDisplayField = ({
 
   return (
     <div className={`change-order-editor-date-display is-${align}`}>
-      <button type="button" className="change-order-editor-date-button" onClick={openPicker}>
+      <button type="button" className="change-order-editor-date-button" onClick={openPicker} disabled={readOnly}>
         {formatReadableDate(value) || "Select date"}
       </button>
       <input
@@ -205,6 +209,7 @@ const DateDisplayField = ({
         className="change-order-editor-date-input"
         value={toIsoDateString(value)}
         onChange={(event) => onChange(event.target.value)}
+        disabled={readOnly}
       />
     </div>
   );
@@ -214,6 +219,14 @@ export default function ChangeOrderProposalEditor() {
   const navigate = useNavigate();
   const { bidId, changeOrderId } = useParams();
   const { user, profile } = useAuth();
+  const accountId = getAccountId(profile);
+  // Memoised so it is referentially stable across renders: getListScope builds
+  // a fresh object each call, and these effects open onSnapshot subscriptions —
+  // an unstable dependency would tear them down and re-subscribe every render.
+  const scope = useMemo(() => getListScope(profile), [profile]);
+  // Members inherit the owner's branding (read-only company name/address).
+  const { branding: effectiveBranding, readOnly: brandingReadOnly } =
+    useEffectiveCompanyProfile();
 
   const [record, setRecord] = useState<ChangeOrderProposalRecord | null>(null);
   const [documentData, setDocumentData] = useState<ChangeOrderProposalDocument | null>(null);
@@ -229,13 +242,16 @@ export default function ChangeOrderProposalEditor() {
   });
   const [reasonDraft, setReasonDraft] = useState("");
   const [breakdownDraft, setBreakdownDraft] = useState("");
-  const isReadOnly = profile?.isSubscribed !== true;
+  // A view_all_edit_own/own member can view but not edit/save a proposal in a
+  // workspace they didn't create — fold that into the same read-only flag
+  // used for the unsubscribed case, so every field below is disabled either way.
+  const isReadOnly = profile?.isSubscribed !== true || !canEditRecord(profile, record);
 
   useEffect(() => {
-    if (!user) return;
+    if (!accountId) return;
 
     const constraints = [
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope)),
       ...(changeOrderId
         ? [where("changeOrderId", "==", changeOrderId)]
         : bidId
@@ -269,7 +285,7 @@ export default function ChangeOrderProposalEditor() {
     });
 
     return unsubscribe;
-  }, [bidId, changeOrderId, user]);
+  }, [bidId, changeOrderId, accountId, scope]);
 
   useEffect(() => {
     if (!saveNotice) return;
@@ -336,14 +352,18 @@ export default function ChangeOrderProposalEditor() {
     };
   }, [computed, documentData]);
 
+  const logoUrl = effectiveBranding?.companyLogoUrl ?? profile?.companyLogoUrl;
+  const logoChipColor =
+    effectiveBranding?.companyLogoChipColor ?? profile?.companyLogoChipColor;
+
   const previewHtml = useMemo(() => {
     if (!effectiveDocumentData) return "";
     return renderChangeOrderProposalHtml(
       effectiveDocumentData,
-      profile?.companyLogoUrl,
-      profile?.companyLogoChipColor
+      logoUrl,
+      logoChipColor
     );
-  }, [effectiveDocumentData, profile?.companyLogoUrl, profile?.companyLogoChipColor]);
+  }, [effectiveDocumentData, logoUrl, logoChipColor]);
 
   const updateField = <K extends keyof ChangeOrderProposalDocument>(
     field: K,
@@ -404,7 +424,14 @@ export default function ChangeOrderProposalEditor() {
     setDownloadError("");
 
     try {
-      const saved = await persistProposalChanges();
+      // A read-only viewer (no edit permission, or an inactive subscription)
+      // must still be able to download — just without re-saving first, since
+      // they have no write access to this document.
+      const saved = isReadOnly
+        ? effectiveDocumentData
+          ? { documentData: effectiveDocumentData, html: previewHtml }
+          : null
+        : await persistProposalChanges();
       if (!saved) return;
 
       const projectName = String(saved.documentData.job_name || "").trim();
@@ -629,6 +656,11 @@ export default function ChangeOrderProposalEditor() {
             className={`bid-editor-primary ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}
             onClick={handleSave}
             disabled={isReadOnly || isSaving || !hasUnsavedChanges}
+            title={
+              isReadOnly && !canEditRecord(profile, record)
+                ? "You don't have permission to edit this teammate's proposal."
+                : undefined
+            }
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
@@ -659,36 +691,40 @@ export default function ChangeOrderProposalEditor() {
                   <EditableField
                     value={documentData.company_name}
                     onChange={(value) => updateField("company_name", value)}
+                    readOnly={isReadOnly || brandingReadOnly}
                     className="bid-editor-company-name"
                   />
                   <EditableField
                     value={documentData.company_address}
                     onChange={(value) => updateField("company_address", value)}
+                    readOnly={isReadOnly || brandingReadOnly}
                     className="bid-editor-header-line bid-editor-header-inverse"
                   />
                   <EditableField
                     value={documentData.company_phone}
                     onChange={(value) => updateField("company_phone", value)}
+                    readOnly={isReadOnly}
                     className="bid-editor-header-line bid-editor-header-inverse"
                   />
                   <EditableField
                     value={documentData.company_email}
                     onChange={(value) => updateField("company_email", value)}
+                    readOnly={isReadOnly}
                     className="bid-editor-header-line bid-editor-header-link"
                   />
                 </td>
-                {profile?.companyLogoUrl && (
+                {logoUrl && (
                   <td align="right" style={{ verticalAlign: "middle", paddingRight: 24, lineHeight: 0 }}>
                     <span
                       style={{
                         display: "inline-block",
-                        background: profile.companyLogoChipColor || "#ffffff",
+                        background: logoChipColor || "#ffffff",
                         borderRadius: 8,
                         padding: "8px 10px",
                       }}
                     >
                       <img
-                        src={profile.companyLogoUrl}
+                        src={logoUrl}
                         alt="Company logo"
                         style={{
                           maxHeight: 96,
@@ -712,6 +748,7 @@ export default function ChangeOrderProposalEditor() {
                 value={documentData.date_of_issue}
                 onChange={(value) => updateField("date_of_issue", value)}
                 align="left"
+                readOnly={isReadOnly}
               />
             </div>
 
@@ -723,6 +760,7 @@ export default function ChangeOrderProposalEditor() {
                     <EditableField
                       value={documentData.job_name}
                       onChange={(value) => updateField("job_name", value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                   <td width="50%">
@@ -730,6 +768,7 @@ export default function ChangeOrderProposalEditor() {
                     <EditableField
                       value={documentData.customer_name}
                       onChange={(value) => updateField("customer_name", value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                 </tr>
@@ -748,6 +787,7 @@ export default function ChangeOrderProposalEditor() {
                         setReasonDraft(value);
                         updateField("reason_for_change_description", value);
                       }}
+                      readOnly={isReadOnly}
                       multiline
                       rows={4}
                       onInput={(event) => autoResizeTextarea(event.currentTarget)}
@@ -772,6 +812,7 @@ export default function ChangeOrderProposalEditor() {
                         setHasUnsavedChanges(true);
                         setBreakdownDraft(value);
                       }}
+                      readOnly={isReadOnly}
                       multiline
                       rows={5}
                       placeholder="- Demo and remove affected materials and haul debris off site."
@@ -799,6 +840,7 @@ export default function ChangeOrderProposalEditor() {
                         onChange={(value) =>
                           handleCurrencyDraftChange("original_contract_price", value)
                         }
+                        readOnly={isReadOnly}
                         onFocus={() => handleCurrencyFocus("original_contract_price")}
                         onBlur={() => handleCurrencyBlur("original_contract_price")}
                         align="right"
@@ -813,6 +855,7 @@ export default function ChangeOrderProposalEditor() {
                       <EditableField
                         value={currencyDrafts.price_of_change}
                         onChange={(value) => handleCurrencyDraftChange("price_of_change", value)}
+                        readOnly={isReadOnly}
                         onFocus={() => handleCurrencyFocus("price_of_change")}
                         onBlur={() => handleCurrencyBlur("price_of_change")}
                         align="right"
@@ -835,6 +878,7 @@ export default function ChangeOrderProposalEditor() {
                           updateField("tax_percentage", parsedValue);
                           updateField("tax_not_applicable", parsedValue === 0);
                         }}
+                        readOnly={isReadOnly}
                         className="change-order-editor-tax-input"
                         align="right"
                       />
@@ -870,6 +914,7 @@ export default function ChangeOrderProposalEditor() {
                     <DateDisplayField
                       value={documentData.original_completion_date}
                       onChange={(value) => updateField("original_completion_date", value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                   <td width="33%">
@@ -882,6 +927,7 @@ export default function ChangeOrderProposalEditor() {
                           String(Number(value.replace(/[^0-9]/g, "")) || 0)
                         )
                       }
+                      readOnly={isReadOnly}
                     />
                   </td>
                   <td width="33%">
@@ -902,6 +948,7 @@ export default function ChangeOrderProposalEditor() {
                     <EditableField
                       value={documentData.immediate_or_later_payment}
                       onChange={(value) => updateField("immediate_or_later_payment", value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                 </tr>
@@ -916,6 +963,7 @@ export default function ChangeOrderProposalEditor() {
                 <EditableField
                   value={documentData.full_name}
                   onChange={(value) => updateField("full_name", value)}
+                  readOnly={isReadOnly}
                   className="change-order-editor-signature-input"
                 />
                 <div className="change-order-editor-line" />

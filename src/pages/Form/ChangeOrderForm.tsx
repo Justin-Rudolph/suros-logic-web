@@ -21,6 +21,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import surosLogo from "@/assets/suros-logo-new.png";
 import { useAuth } from "@/context/AuthContext";
+import { canEditRecord, getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
+import { useEffectiveCompanyProfile } from "@/hooks/useEffectiveCompanyProfile";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { firestore } from "@/lib/firebase";
 import { renderChangeOrderProposalHtml } from "@/lib/changeOrderProposal/template";
@@ -144,13 +146,43 @@ const ChangeOrderForm: React.FC = () => {
   const location = useLocation();
   const { bidId, changeOrderId } = useParams();
   const { profile, loading, user } = useAuth();
+  // Members inherit the owner's branding (read-only); owners use their own.
+  // `loading` here covers the async owner-branding lookup for members, so we
+  // can hold the loading screen instead of flashing blank company fields.
+  const { branding: effectiveBranding, readOnly: brandingReadOnly, loading: isBrandingLoading } =
+    useEffectiveCompanyProfile();
 
   const state = location.state as LocationState;
   const [linkedBid, setLinkedBid] = useState<BidFormRecord | null>(state?.bid ?? null);
   const [existingChangeOrder, setExistingChangeOrder] = useState<ChangeOrderRecord | null>(
     state?.existingChangeOrder ?? null
   );
+  // These start true when the router already handed us the data (e.g.
+  // navigating from within the bid workspace) — only a direct URL load needs
+  // to wait on the async fetch below.
+  const [isLinkedBidLoaded, setIsLinkedBidLoaded] = useState(!bidId || !!state?.bid);
+  const [isExistingChangeOrderLoaded, setIsExistingChangeOrderLoaded] = useState(
+    !changeOrderId || !!state?.existingChangeOrder
+  );
+  // Whichever record the permission check below depends on has to be loaded
+  // first — otherwise fields would flash as read-only before canEditThisChangeOrder
+  // can be computed correctly.
+  const isPermissionDataLoaded = changeOrderId
+    ? isExistingChangeOrderLoaded
+    : bidId
+      ? isLinkedBidLoaded
+      : true;
   const viewOnly = !!state?.viewOnly;
+  // A view_all_edit_own/own member can view but not edit/save a change order
+  // in a workspace that isn't theirs: existing change orders gate on their own
+  // creator; a brand-new one (no changeOrderId yet) gates on the parent bid's
+  // creator, matching the "New Change Order" button's own permission check.
+  const canEditThisChangeOrder = changeOrderId
+    ? canEditRecord(profile, existingChangeOrder)
+    : canEditRecord(profile, linkedBid);
+  // Fields lock for either reason; the submit button is only fully hidden for
+  // genuine view-only mode — permission denial just disables it (see below).
+  const fieldsReadOnly = viewOnly || !canEditThisChangeOrder;
 
   const [form, setForm] = useState<ChangeOrderFormState>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -216,12 +248,16 @@ const ChangeOrderForm: React.FC = () => {
     if (!bidId) return;
 
     const unsubscribe = onSnapshot(doc(firestore, "bidForms", bidId), (snapshot) => {
-      if (!snapshot.exists()) return;
+      if (!snapshot.exists()) {
+        setIsLinkedBidLoaded(true);
+        return;
+      }
 
       setLinkedBid({
         id: snapshot.id,
         ...(snapshot.data() as Omit<BidFormRecord, "id">),
       });
+      setIsLinkedBidLoaded(true);
     });
 
     return unsubscribe;
@@ -231,12 +267,16 @@ const ChangeOrderForm: React.FC = () => {
     if (!changeOrderId) return;
 
     const unsubscribe = onSnapshot(doc(firestore, "changeOrder", changeOrderId), (snapshot) => {
-      if (!snapshot.exists()) return;
+      if (!snapshot.exists()) {
+        setIsExistingChangeOrderLoaded(true);
+        return;
+      }
 
       setExistingChangeOrder({
         id: snapshot.id,
         ...(snapshot.data() as Omit<ChangeOrderRecord, "id">),
       });
+      setIsExistingChangeOrderLoaded(true);
     });
 
     return unsubscribe;
@@ -260,12 +300,12 @@ const ChangeOrderForm: React.FC = () => {
 
     setForm((prev) => ({
       ...prev,
-      company_name: profile?.companyName ?? prev.company_name,
+      company_name: effectiveBranding?.companyName ?? profile?.companyName ?? prev.company_name,
       company_email: profile?.email ?? prev.company_email,
       company_phone: profile?.phone
         ? formatPhone(profile.phone)
         : prev.company_phone,
-      company_address: profile?.companyAddress ?? prev.company_address,
+      company_address: effectiveBranding?.companyAddress ?? profile?.companyAddress ?? prev.company_address,
       full_name: profile?.displayName ?? prev.full_name,
       job_name: linkedBid?.formSnapshot.job ?? prev.job_name,
       customer_name: linkedBid?.formSnapshot.customer_name ?? prev.customer_name,
@@ -273,7 +313,7 @@ const ChangeOrderForm: React.FC = () => {
         linkedBid?.formSnapshot.total_costs?.toString() ?? prev.original_contract_price,
       date_of_issue: prev.date_of_issue || new Date().toISOString().split("T")[0],
     }));
-  }, [existingChangeOrder, linkedBid, profile]);
+  }, [existingChangeOrder, linkedBid, profile, effectiveBranding]);
 
   useEffect(() => {
     if (isTaxAmountNA) {
@@ -479,6 +519,7 @@ const ChangeOrderForm: React.FC = () => {
 
     const proposalData = {
       userId: user.uid,
+      accountId: getAccountId(profile),
       bidFormId: linkedBid.id,
       changeOrderId: nextChangeOrderId,
       title: buildChangeOrderTitle(),
@@ -490,9 +531,10 @@ const ChangeOrderForm: React.FC = () => {
       updatedAt: serverTimestamp(),
     };
 
+    const proposalLookupScope = getListScope(profile);
     const existingProposalQuery = query(
       collection(firestore, "changeOrderProposals"),
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(proposalLookupScope), "==", getScopeQueryValue(proposalLookupScope)),
       where("changeOrderId", "==", nextChangeOrderId)
     );
     const existingProposalSnapshot = await getDocs(existingProposalQuery);
@@ -559,7 +601,7 @@ const ChangeOrderForm: React.FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (viewOnly || isSubmitting) return;
+    if (viewOnly || isSubmitting || !canEditThisChangeOrder) return;
 
     if (!linkedBid || !user) {
       showModal(
@@ -595,6 +637,7 @@ const ChangeOrderForm: React.FC = () => {
     try {
       const recordPayload = {
         userId: user.uid,
+        accountId: getAccountId(profile),
         bidFormId: linkedBid.id,
         title: buildChangeOrderTitle(),
         formSnapshot: form,
@@ -645,37 +688,9 @@ const ChangeOrderForm: React.FC = () => {
     }
   };
 
-  return loading || !profile ? (
-    <div className="suros-gradient">
-      <div
-        style={{
-          padding: "40px",
-          color: "#fff",
-          textAlign: "center",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "16px",
-        }}
-      >
-        <div>Loading company profile info for your form…</div>
-
-        <button
-          onClick={() => window.location.reload()}
-          style={{
-            background: "#1e73be",
-            color: "#fff",
-            padding: "10px 22px",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "15px",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Refresh
-        </button>
-      </div>
+  return loading || !profile || !isPermissionDataLoaded || isBrandingLoading ? (
+    <div className="suros-gradient form-loading-screen">
+      <span className="spinner form-loading-spinner" />
     </div>
   ) : (
     <div className="suros-gradient">
@@ -719,8 +734,9 @@ const ChangeOrderForm: React.FC = () => {
                 id="company_name"
                 value={form.company_name}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("company_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly || brandingReadOnly}
+                title={brandingReadOnly ? "Company name is managed by the account owner." : undefined}
+                className={`${isInvalid("company_name") ? "input-error" : ""} ${fieldsReadOnly || brandingReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Company Email:</label>
@@ -729,8 +745,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="company_email"
                 value={form.company_email}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("company_email") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("company_email") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Company Phone:</label>
@@ -739,8 +755,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="company_phone"
                 value={form.company_phone}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("company_phone") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("company_phone") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Company Address:</label>
@@ -749,8 +765,9 @@ const ChangeOrderForm: React.FC = () => {
                 id="company_address"
                 value={form.company_address}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("company_address") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly || brandingReadOnly}
+                title={brandingReadOnly ? "Company address is managed by the account owner." : undefined}
+                className={`${isInvalid("company_address") ? "input-error" : ""} ${fieldsReadOnly || brandingReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Quotation Prepared By:</label>
@@ -759,8 +776,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="full_name"
                 value={form.full_name}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("full_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("full_name") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <h2>Change Order Overview</h2>
@@ -771,8 +788,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="job_name"
                 value={form.job_name}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("job_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("job_name") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Customer Name:</label>
@@ -781,8 +798,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="customer_name"
                 value={form.customer_name}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("customer_name") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("customer_name") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Date of Issue:</label>
@@ -791,8 +808,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="date_of_issue"
                 value={form.date_of_issue}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={`${isInvalid("date_of_issue") ? "input-error" : ""} ${viewOnly ? "input-readonly" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("date_of_issue") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Reason for Change Description:</label>
@@ -802,8 +819,8 @@ const ChangeOrderForm: React.FC = () => {
                 value={form.reason_for_change_description}
                 onChange={handleFormChange}
                 placeholder="Describe why this change order is needed."
-                readOnly={viewOnly}
-                className={isInvalid("reason_for_change_description") ? "input-error" : ""}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("reason_for_change_description") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Breakdown Material/Labor Description:</label>
@@ -814,8 +831,8 @@ const ChangeOrderForm: React.FC = () => {
                 onChange={handleBreakdownChange}
                 onKeyDown={handleBreakdownKeyDown}
                 placeholder="- Enter one item per line"
-                readOnly={viewOnly}
-                className={`scope-input ${isInvalid("breakdown_material_labor_description") ? "input-error" : ""}`}
+                readOnly={fieldsReadOnly}
+                className={`scope-input ${isInvalid("breakdown_material_labor_description") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <h2>Pricing</h2>
@@ -827,8 +844,8 @@ const ChangeOrderForm: React.FC = () => {
                 value={form.original_contract_price}
                 onChange={handleFormChange}
                 placeholder="$"
-                readOnly={viewOnly}
-                className={isInvalid("original_contract_price") ? "input-error" : ""}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("original_contract_price") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Price of Change:</label>
@@ -838,8 +855,8 @@ const ChangeOrderForm: React.FC = () => {
                 value={form.price_of_change}
                 onChange={handleFormChange}
                 placeholder="$"
-                readOnly={viewOnly}
-                className={isInvalid("price_of_change") ? "input-error" : ""}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("price_of_change") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Tax on Price Change:</label>
@@ -852,7 +869,7 @@ const ChangeOrderForm: React.FC = () => {
                   className={`${isInvalid("tax_on_price_change") ? "input-error" : ""} input-readonly`}
                 />
 
-                {!viewOnly && (
+                {!fieldsReadOnly && (
                   <button
                     type="button"
                     onClick={handleSetTaxNA}
@@ -895,8 +912,8 @@ const ChangeOrderForm: React.FC = () => {
                 id="original_completion_date"
                 value={form.original_completion_date}
                 onChange={handleFormChange}
-                readOnly={viewOnly}
-                className={isInvalid("original_completion_date") ? "input-error" : ""}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("original_completion_date") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>Additional Time for Change (days):</label>
@@ -906,8 +923,8 @@ const ChangeOrderForm: React.FC = () => {
                 value={form.additional_time_for_change}
                 onChange={handleFormChange}
                 placeholder="0"
-                readOnly={viewOnly}
-                className={isInvalid("additional_time_for_change") ? "input-error" : ""}
+                readOnly={fieldsReadOnly}
+                className={`${isInvalid("additional_time_for_change") ? "input-error" : ""} ${fieldsReadOnly ? "input-readonly" : ""}`}
               />
 
               <label>New Completion Date:</label>
@@ -946,7 +963,7 @@ const ChangeOrderForm: React.FC = () => {
                         borderRadius: "10px",
                         border: `1px solid ${checked ? "#1e73be" : "#cbd5e1"}`,
                         background: checked ? "#eff6ff" : "#f9fafb",
-                        cursor: viewOnly ? "default" : "pointer",
+                        cursor: fieldsReadOnly ? "default" : "pointer",
                       }}
                     >
                       <input
@@ -954,7 +971,7 @@ const ChangeOrderForm: React.FC = () => {
                         name="immediate_or_later_payment"
                         value={option.value}
                         checked={checked}
-                        disabled={viewOnly}
+                        disabled={fieldsReadOnly}
                         onChange={(e) => {
                           setErrors((prev) => ({
                             ...prev,
@@ -985,10 +1002,11 @@ const ChangeOrderForm: React.FC = () => {
                 <div className="submit-area">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !canEditThisChangeOrder}
+                    title={canEditThisChangeOrder ? undefined : "You don't have permission to edit this teammate's change order."}
                     style={{
-                      opacity: isSubmitting ? 0.7 : 1,
-                      cursor: isSubmitting ? "not-allowed" : "pointer",
+                      opacity: isSubmitting || !canEditThisChangeOrder ? 0.7 : 1,
+                      cursor: isSubmitting || !canEditThisChangeOrder ? "not-allowed" : "pointer",
                     }}
                   >
                     {isSubmitting ? <span className="spinner" /> : "Submit Change Order"}

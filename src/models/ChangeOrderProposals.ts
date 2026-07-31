@@ -29,6 +29,8 @@ export interface ChangeOrderProposalDocument {
 export interface ChangeOrderProposalRecord {
   id: string;
   userId: string;
+  // Denormalized owner account id (owner's uid). Set at creation time.
+  accountId?: string;
   bidFormId: string;
   changeOrderId: string;
   title: string;

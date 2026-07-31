@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useAuth } from "@/context/AuthContext";
+import { canEditRecord } from "@/lib/account";
 import { useBidWorkspaceContext } from "./bidWorkspaceContext";
 import {
   formatChangeOrderTimestamp,
@@ -13,7 +15,9 @@ import "./MyBids.css";
 export default function BidWorkspaceChangeOrderProposals() {
   const navigate = useNavigate();
   const { bidId } = useParams();
-  const { changeOrders, changeOrderProposals } = useBidWorkspaceContext();
+  const { profile } = useAuth();
+  const { bid, changeOrders, changeOrderProposals } = useBidWorkspaceContext();
+  const canManageChangeOrders = canEditRecord(profile, bid);
 
   const proposalsByChangeOrder = useMemo(
     () => mapProposalsByChangeOrder(changeOrderProposals),
@@ -37,6 +41,8 @@ export default function BidWorkspaceChangeOrderProposals() {
             <button
               className="past-bid-open"
               onClick={() => navigate(`/bids/${bidId}/change-orders/new`)}
+              disabled={!canManageChangeOrders}
+              title={canManageChangeOrders ? undefined : "Only the bid's creator or an account owner/full-access teammate can add change orders here."}
             >
               New Change Order
             </button>

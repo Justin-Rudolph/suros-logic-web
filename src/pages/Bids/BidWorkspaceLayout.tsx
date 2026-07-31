@@ -17,6 +17,7 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
+import { getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
 import { BidFormProposalRecord } from "@/models/BidFormProposals";
 import { BidFormRecord } from "@/models/BidForms";
 import { ChangeOrderRecord } from "@/models/ChangeOrder";
@@ -35,6 +36,11 @@ export default function BidWorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const accountId = getAccountId(profile);
+  // Memoised so it is referentially stable across renders: getListScope builds
+  // a fresh object each call, and these effects open onSnapshot subscriptions —
+  // an unstable dependency would tear them down and re-subscribe every render.
+  const scope = useMemo(() => getListScope(profile), [profile]);
 
   const [bid, setBid] = useState<BidFormRecord | null>(null);
   const [proposal, setProposal] = useState<BidFormProposalRecord | null>(null);
@@ -63,11 +69,11 @@ export default function BidWorkspaceLayout() {
   }, [bidId]);
 
   useEffect(() => {
-    if (!bidId || !user) return;
+    if (!bidId || !accountId) return;
 
     const proposalQuery = query(
       collection(firestore, "bidFormProposals"),
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope)),
       where("bidFormId", "==", bidId)
     );
 
@@ -87,14 +93,14 @@ export default function BidWorkspaceLayout() {
     });
 
     return unsubscribe;
-  }, [bidId, user]);
+  }, [bidId, accountId, scope]);
 
   useEffect(() => {
-    if (!bidId || !user) return;
+    if (!bidId || !accountId) return;
 
     const changeOrdersQuery = query(
       collection(firestore, "changeOrder"),
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope)),
       where("bidFormId", "==", bidId)
     );
 
@@ -114,14 +120,14 @@ export default function BidWorkspaceLayout() {
     });
 
     return unsubscribe;
-  }, [bidId, user]);
+  }, [bidId, accountId, scope]);
 
   useEffect(() => {
-    if (!bidId || !user) return;
+    if (!bidId || !accountId) return;
 
     const proposalQuery = query(
       collection(firestore, "changeOrderProposals"),
-      where("userId", "==", user.uid),
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope)),
       where("bidFormId", "==", bidId)
     );
 
@@ -141,7 +147,7 @@ export default function BidWorkspaceLayout() {
     });
 
     return unsubscribe;
-  }, [bidId, user]);
+  }, [bidId, accountId, scope]);
 
   const showWorkspaceChrome = useMemo(() => {
     if (!bidId) return false;

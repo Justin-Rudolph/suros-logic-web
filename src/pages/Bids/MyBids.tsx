@@ -14,6 +14,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/context/AuthContext";
 import { firestore, storage } from "@/lib/firebase";
+import { applyOwnFilter, canEditRecord, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
+import { useAccountCreators } from "@/hooks/useAccountCreators";
 import { BidFormProposalRecord } from "@/models/BidFormProposals";
 import { BidFormRecord, BidProjectTimelineStage } from "@/models/BidForms";
 import { ChangeOrderRecord } from "@/models/ChangeOrder";
@@ -60,7 +62,10 @@ const deleteProjectFileStorageObject = async (storagePath?: string) => {
 
 export default function MyBids() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const scope = getListScope(profile);
+  const { creatorName, showCreators } = useAccountCreators();
+  const { accountId, uid: scopeUid, restrictToOwn } = scope;
 
   const [bids, setBids] = useState<BidFormRecord[]>([]);
   const [proposals, setProposals] = useState<BidFormProposalRecord[]>([]);
@@ -71,18 +76,21 @@ export default function MyBids() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!accountId) return;
 
     const bidsQuery = query(
       collection(firestore, "bidForms"),
-      where("userId", "==", user.uid)
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope))
     );
 
     const unsubscribe = onSnapshot(bidsQuery, (snapshot) => {
-      const records: BidFormRecord[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<BidFormRecord, "id">),
-      }));
+      const records: BidFormRecord[] = applyOwnFilter(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<BidFormRecord, "id">),
+        })),
+        scope
+      );
 
       records.sort((a, b) => {
         const aTime = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
@@ -95,21 +103,25 @@ export default function MyBids() {
     });
 
     return unsubscribe;
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, restrictToOwn, scopeUid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!accountId) return;
 
     const changeOrderProposalsQuery = query(
       collection(firestore, "changeOrderProposals"),
-      where("userId", "==", user.uid)
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope))
     );
 
     const unsubscribe = onSnapshot(changeOrderProposalsQuery, (snapshot) => {
-      const records: ChangeOrderProposalRecord[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<ChangeOrderProposalRecord, "id">),
-      }));
+      const records: ChangeOrderProposalRecord[] = applyOwnFilter(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<ChangeOrderProposalRecord, "id">),
+        })),
+        scope
+      );
 
       records.sort((a, b) => {
         const aTime = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
@@ -122,21 +134,25 @@ export default function MyBids() {
     });
 
     return unsubscribe;
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, restrictToOwn, scopeUid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!accountId) return;
 
     const proposalsQuery = query(
       collection(firestore, "bidFormProposals"),
-      where("userId", "==", user.uid)
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope))
     );
 
     const unsubscribe = onSnapshot(proposalsQuery, (snapshot) => {
-      const records: BidFormProposalRecord[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<BidFormProposalRecord, "id">),
-      }));
+      const records: BidFormProposalRecord[] = applyOwnFilter(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<BidFormProposalRecord, "id">),
+        })),
+        scope
+      );
 
       records.sort((a, b) => {
         const aTime = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
@@ -149,21 +165,25 @@ export default function MyBids() {
     });
 
     return unsubscribe;
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, restrictToOwn, scopeUid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!accountId) return;
 
     const changeOrdersQuery = query(
       collection(firestore, "changeOrder"),
-      where("userId", "==", user.uid)
+      where(getScopeQueryField(scope), "==", getScopeQueryValue(scope))
     );
 
     const unsubscribe = onSnapshot(changeOrdersQuery, (snapshot) => {
-      const records: ChangeOrderRecord[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<ChangeOrderRecord, "id">),
-      }));
+      const records: ChangeOrderRecord[] = applyOwnFilter(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<ChangeOrderRecord, "id">),
+        })),
+        scope
+      );
 
       records.sort((a, b) => {
         const aTime = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
@@ -176,7 +196,8 @@ export default function MyBids() {
     });
 
     return unsubscribe;
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, restrictToOwn, scopeUid]);
 
   const changeOrdersByBid = useMemo<ChangeOrdersByBid>(() => {
     return changeOrders.reduce<ChangeOrdersByBid>((acc, record) => {
@@ -229,7 +250,12 @@ export default function MyBids() {
       const projectFilesSnapshot = await getDocs(
         query(
           collection(firestore, "projectFiles"),
-          where("userId", "==", user.uid),
+          // projectFiles reads are granted at the workspace level (via the
+          // parent bid form), not by userId — see firestore.rules
+          // canReadBidForm. Query by accountId, not the own-member userId
+          // swap, so files uploaded by any teammate on this bid are still
+          // found and cleaned up from storage.
+          where("accountId", "==", accountId),
           where("bidFormId", "==", bidPendingDelete.id)
         )
       );
@@ -293,12 +319,22 @@ export default function MyBids() {
                           <div className="past-bid-draft-badge">Draft</div>
                         )}
                       </div>
-                      {timelineStatus && (
-                        <div
-                          className={`past-bid-status-pill past-bid-status-pill-${timelineStatus.stage}`}
-                        >
-                          <span>Timeline</span>
-                          {timelineStatus.label}
+                      {(timelineStatus || (showCreators && creatorName(bid.userId))) && (
+                        <div className="past-bid-badge-row">
+                          {timelineStatus && (
+                            <div
+                              className={`past-bid-status-pill past-bid-status-pill-${timelineStatus.stage}`}
+                            >
+                              <span>Timeline</span>
+                              {timelineStatus.label}
+                            </div>
+                          )}
+                          {showCreators && creatorName(bid.userId) && (
+                            <div className="past-bid-owner-pill">
+                              <span>Owner</span>
+                              {creatorName(bid.userId)}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -312,6 +348,12 @@ export default function MyBids() {
                         className="past-bid-delete-icon"
                         onClick={() => confirmDeleteBid(bid)}
                         aria-label="Delete bid"
+                        disabled={!canEditRecord(profile, bid)}
+                        title={
+                          canEditRecord(profile, bid)
+                            ? undefined
+                            : "Only the creator or an account owner/full-access teammate can delete this bid."
+                        }
                       >
                         <Trash2 size={18} />
                       </button>

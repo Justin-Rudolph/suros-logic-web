@@ -208,6 +208,12 @@
   transform: none;
 }
 
+/* Disabled because the viewer lacks permission (not because a save is in
+   flight) — show a not-allowed cursor, not the "wait" spinner. */
+.bid-overview-next-button:disabled.is-permission-disabled {
+  cursor: not-allowed;
+}
+
 .bid-overview-feedback {
   color: rgba(255, 255, 255, 0.8);
 }

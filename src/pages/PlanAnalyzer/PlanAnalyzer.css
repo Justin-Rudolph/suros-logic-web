@@ -903,6 +903,18 @@
   color: #fecaca;
 }
 
+.plan-project-delete-icon:disabled {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.25);
+  cursor: not-allowed;
+}
+
+.plan-project-delete-icon:disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.25);
+}
+
 .billing-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1095,6 +1107,10 @@
   box-shadow: none;
 }
 
+.plan-add-to-bid-button:disabled.is-permission-disabled {
+  cursor: not-allowed;
+}
+
 .plan-secondary-action-button {
   flex-shrink: 0;
   border: 1px solid rgba(145, 203, 255, 0.28);
@@ -1257,9 +1273,20 @@
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 
-.plan-detail-select-toggle:hover {
+.plan-detail-select-toggle:hover:not(:disabled) {
   transform: scale(1.04);
   border-color: #8fc8ff;
+}
+
+.plan-detail-select-toggle:disabled {
+  opacity: 0.45;
+  border-color: rgba(148, 163, 184, 0.5);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.plan-detail-select-toggle:disabled:hover {
+  transform: none;
 }
 
 .plan-detail-select-toggle-selected {
@@ -1457,4 +1484,18 @@
   .plan-uploaded-link {
     text-align: left;
   }
+}
+
+/* Creator attribution. Quieter than the status pill beside it, so it reads as
+   metadata rather than state. */
+.plan-project-owner-pill {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #dbe4ec;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }

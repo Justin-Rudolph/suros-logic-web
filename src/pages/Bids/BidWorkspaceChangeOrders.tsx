@@ -3,8 +3,10 @@ import { Trash2 } from "lucide-react";
 import { deleteDoc, doc } from "firebase/firestore";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useAuth } from "@/context/AuthContext";
 import { firestore } from "@/lib/firebase";
 import { touchBidFormUpdatedAt } from "@/lib/touchBidForm";
+import { canEditRecord } from "@/lib/account";
 import { ChangeOrderRecord } from "@/models/ChangeOrder";
 import { useBidWorkspaceContext } from "./bidWorkspaceContext";
 import {
@@ -17,7 +19,11 @@ import "./MyBids.css";
 export default function BidWorkspaceChangeOrders() {
   const navigate = useNavigate();
   const { bidId } = useParams();
-  const { changeOrders, changeOrderProposals, hasActiveSubscription } = useBidWorkspaceContext();
+  const { profile } = useAuth();
+  const { bid, changeOrders, changeOrderProposals, hasActiveSubscription } = useBidWorkspaceContext();
+  // A view_all_edit_own/own member can view this workspace but not create or
+  // delete change orders in it unless they created the parent bid themselves.
+  const canManageChangeOrders = canEditRecord(profile, bid);
   const [changeOrderPendingDelete, setChangeOrderPendingDelete] = useState<ChangeOrderRecord | null>(
     null
   );
@@ -81,6 +87,8 @@ export default function BidWorkspaceChangeOrders() {
             <button
               className="past-bid-open"
               onClick={() => openChangeOrderForm(`/bids/${bidId}/change-orders/new`)}
+              disabled={!canManageChangeOrders}
+              title={canManageChangeOrders ? undefined : "Only the bid's creator or an account owner/full-access teammate can add change orders here."}
             >
               New Change Order
             </button>
@@ -92,6 +100,8 @@ export default function BidWorkspaceChangeOrders() {
             <button
               className="past-bid-open"
               onClick={() => openChangeOrderForm(`/bids/${bidId}/change-orders/new`)}
+              disabled={!canManageChangeOrders}
+              title={canManageChangeOrders ? undefined : "Only the bid's creator or an account owner/full-access teammate can add change orders here."}
             >
               New Change Order
             </button>
@@ -123,6 +133,12 @@ export default function BidWorkspaceChangeOrders() {
                     className="past-bid-delete-icon"
                     onClick={() => confirmDeleteChangeOrder(changeOrder)}
                     aria-label="Delete change order"
+                    disabled={!canEditRecord(profile, changeOrder)}
+                    title={
+                      canEditRecord(profile, changeOrder)
+                        ? undefined
+                        : "Only the creator or an account owner/full-access teammate can delete this change order."
+                    }
                   >
                     <Trash2 size={18} />
                   </button>

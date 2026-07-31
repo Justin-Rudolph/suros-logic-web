@@ -16,6 +16,7 @@ const routes = [
   { path: "/terms", title: "Terms and Conditions" },
   { path: "/dashboard", title: "Dashboard" },
   { path: "/billing", title: "Billing" },
+  { path: "/team", title: "Team Seats" },
   { path: "/plan-analyzer", title: "Plan Analyzer" },
   { path: "/plan-analyzer/:projectId", title: "Plan Analysis" },
   { path: "/edit-profile", title: "Edit Profile" },
