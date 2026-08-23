@@ -419,3 +419,39 @@
     transform: rotate(360deg);
   }
 }
+
+.autosave-banner {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #16a34a;
+  padding: 14px 22px;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  pointer-events: none;
+  animation: autosaveBannerFadeIn 0.25s ease-out;
+}
+
+.autosave-banner-spinner {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+
+@keyframes autosaveBannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

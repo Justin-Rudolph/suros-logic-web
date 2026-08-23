@@ -7,7 +7,8 @@ import React, {
     FormEvent,
     FocusEvent,
     DragEvent,
-    useEffect
+    useEffect,
+    useRef
 } from "react";
 
 import "./BidForm.css";
@@ -124,6 +125,14 @@ const BidForm: React.FC = () => {
     const [currentProjectTimelineStage, setCurrentProjectTimelineStage] = useState<BidProjectTimelineStage | undefined>(undefined);
     const [isTaxAmountNA, setIsTaxAmountNA] = useState(false);
 
+    // Tracks whether the form has changes that haven't been persisted yet, by
+    // either the Save Draft button or autosave. Only user edits set this —
+    // never the data-loading effects that hydrate the form on mount.
+    const [isDirty, setIsDirty] = useState(false);
+    const markDirty = () => setIsDirty(true);
+    const [isAutoSaving, setIsAutoSaving] = useState(false);
+    const [showAutosaveBanner, setShowAutosaveBanner] = useState(false);
+
     const [prefillBid, setPrefillBid] = useState<PrefillBidState | null>(
         (location.state as {
             prefillBid?: PrefillBidState;
@@ -142,6 +151,10 @@ const BidForm: React.FC = () => {
         title: string;
         message: string;
         successDestination?: string;
+        // When set on a success modal, Finish just closes the modal instead
+        // of navigating away (used by Save Draft, which keeps the user on
+        // the bid form).
+        closeOnly?: boolean;
     }>({
         open: false,
         type: "info",
@@ -153,9 +166,10 @@ const BidForm: React.FC = () => {
         type: ModalType,
         title: string,
         message: string,
-        successDestination?: string
+        successDestination?: string,
+        closeOnly?: boolean
     ) => {
-        setModal({ open: true, type, title, message, successDestination });
+        setModal({ open: true, type, title, message, successDestination, closeOnly });
     };
 
     const navigateWithScrollReset = (path: string) => {
@@ -168,6 +182,27 @@ const BidForm: React.FC = () => {
     const navigateBack = () => {
         navigateWithScrollReset(currentBidId || bidId ? `/bids/${currentBidId || bidId}` : "/dashboard");
     };
+
+    // If the form has unsaved changes, clicking Back asks the user to save
+    // first instead of navigating away immediately.
+    const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+
+    const handleBackClick = () => {
+        if (isDirty) {
+            setShowUnsavedChangesModal(true);
+            return;
+        }
+
+        navigateBack();
+    };
+
+    // If autosave saves the form out from under the open unsaved-changes
+    // modal, there's nothing left to warn about — close it.
+    useEffect(() => {
+        if (showUnsavedChangesModal && !isDirty) {
+            setShowUnsavedChangesModal(false);
+        }
+    }, [isDirty, showUnsavedChangesModal]);
 
     /** --------------------------------------------------
      * AUTO-LOAD USER PROFILE INTO COMPANY FIELDS
@@ -551,6 +586,8 @@ const BidForm: React.FC = () => {
      * SET FIELD TO N/A
      --------------------------------*/
     const handleSetNA = (field: "customer_phone" | "customer_email") => {
+        markDirty();
+
         setForm((prev) => {
             const isNA = prev[field] === "N/A";
 
@@ -567,6 +604,8 @@ const BidForm: React.FC = () => {
     };
 
     const handleSetTaxAmountNA = () => {
+        markDirty();
+
         setIsTaxAmountNA((prev) => {
             const nextIsNA = !prev;
 
@@ -590,6 +629,8 @@ const BidForm: React.FC = () => {
         e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
         const { id, value } = e.target;
+
+        markDirty();
 
         // clear error as soon as user edits the field
         setErrors((prev) => ({ ...prev, [id]: false }));
@@ -646,6 +687,8 @@ const BidForm: React.FC = () => {
             return;
         }
 
+        markDirty();
+
         setLineItems((prev) => {
             if (count === prev.length) return prev;
 
@@ -682,6 +725,8 @@ const BidForm: React.FC = () => {
         field: keyof LineItem,
         value: string
     ) => {
+        markDirty();
+
         setLineItems((prev) =>
             prev.map((item, i) =>
                 i === index ? { ...item, [field]: value } : item
@@ -694,6 +739,8 @@ const BidForm: React.FC = () => {
     };
 
     const handleDeleteLineItem = (indexToDelete: number) => {
+        markDirty();
+
         setLineItems((prev) => {
             const nextLineItems = prev.filter((_, index) => index !== indexToDelete);
             setNumLineItems(nextLineItems.length ? String(nextLineItems.length) : "");
@@ -753,6 +800,8 @@ const BidForm: React.FC = () => {
 
     const moveLineItem = (fromIndex: number, toIndex: number) => {
         if (fromIndex === toIndex) return;
+
+        markDirty();
 
         setLineItems((prev) => {
             if (
@@ -950,7 +999,7 @@ const BidForm: React.FC = () => {
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
-        if (isSubmitting || !canEditThisBid) return;
+        if (isSubmitting || isAutoSaving || !canEditThisBid) return;
 
         if (!validateForm()) {
             showModal(
@@ -998,6 +1047,7 @@ const BidForm: React.FC = () => {
             await refreshBidWorkspaceOverviewRecord(bidFormId);
             const bidFormProposalId = await persistBidFormProposalRecord(bidFormId, payload);
 
+            setIsDirty(false);
             setIsSubmitting(false);
 
             void generateBidFormProposalRecord(bidFormId, bidFormProposalId, payload);
@@ -1020,20 +1070,22 @@ const BidForm: React.FC = () => {
     };
 
     const handleSaveDraft = async () => {
-        if (isSubmitting || !canEditThisBid) return;
+        if (isSubmitting || isAutoSaving || !canEditThisBid) return;
 
         setIsSubmitting(true);
 
         try {
             const bidFormId = await persistBidRecord("draft");
             await refreshBidWorkspaceOverviewRecord(bidFormId);
+            setIsDirty(false);
             setIsSubmitting(false);
 
             showModal(
                 "success",
                 "Draft Saved",
-                "Your bid draft has been saved. You can come back and finish it later from Bid History.",
-                `/bids/${bidFormId}`
+                "Your bid draft has been saved. You can keep working, or come back and finish it later from My Bids.",
+                undefined,
+                true
             );
         } catch (err) {
             setIsSubmitting(false);
@@ -1046,6 +1098,88 @@ const BidForm: React.FC = () => {
         }
     };
 
+    // Save & Leave from the unsaved-changes modal shown by handleBackClick —
+    // same write path as Save Draft, but navigates back once it's done
+    // instead of showing the "Draft Saved" modal.
+    const handleSaveAndLeave = async () => {
+        if (isSubmitting || isAutoSaving || !canEditThisBid) return;
+
+        setIsSubmitting(true);
+
+        try {
+            const bidFormId = await persistBidRecord("draft");
+            await refreshBidWorkspaceOverviewRecord(bidFormId);
+            setIsDirty(false);
+            setIsSubmitting(false);
+            setShowUnsavedChangesModal(false);
+            navigateBack();
+        } catch (err) {
+            setIsSubmitting(false);
+            setShowUnsavedChangesModal(false);
+
+            showModal(
+                "error",
+                "Draft Save Failed",
+                "We ran into an issue while saving your draft. Please try again in a moment."
+            );
+        }
+    };
+
+    /** -------------------------------
+     * AUTOSAVE
+     * Runs on a fixed 3-minute interval while the bid form screen is
+     * mounted (see the effect below). Writes through the exact same path
+     * as Save Draft — creating the workspace if none exists yet, updating
+     * it otherwise — but only when something has actually changed since
+     * the last save, and silently: no modal, no navigation, just a
+     * bottom-right banner.
+     --------------------------------*/
+    const runAutosave = async () => {
+        if (!isDirty || isSubmitting || isAutoSaving || !canEditThisBid) return;
+
+        setIsAutoSaving(true);
+
+        try {
+            const bidFormId = await persistBidRecord("draft");
+            await refreshBidWorkspaceOverviewRecord(bidFormId);
+            setIsDirty(false);
+            setShowAutosaveBanner(true);
+        } catch (err) {
+            // Stay dirty so the next tick retries; autosave fails silently,
+            // no modal or error banner per spec.
+            console.error("Autosave failed:", err);
+        } finally {
+            setIsAutoSaving(false);
+        }
+    };
+
+    // Always call the latest runAutosave (fresh isDirty/form/lineItems
+    // closures) without resetting the interval below on every render.
+    const runAutosaveRef = useRef(runAutosave);
+    useEffect(() => {
+        runAutosaveRef.current = runAutosave;
+    });
+
+    // Fixed 3-minute cadence from when the bid form screen mounts. Cleared
+    // on unmount, i.e. as soon as the user navigates away from this screen.
+    useEffect(() => {
+        const AUTOSAVE_INTERVAL_MS = 3 * 60 * 1000;
+
+        const intervalId = window.setInterval(() => {
+            void runAutosaveRef.current();
+        }, AUTOSAVE_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, []);
+
+    // Autosave banner self-dismisses after 2 seconds.
+    useEffect(() => {
+        if (!showAutosaveBanner) return;
+
+        const timeoutId = window.setTimeout(() => setShowAutosaveBanner(false), 2000);
+        return () => window.clearTimeout(timeoutId);
+    }, [showAutosaveBanner]);
+
     return (
         (loading || !profile || !isExistingBidLoaded || isBrandingLoading) ?
             <div className="suros-gradient form-loading-screen">
@@ -1055,7 +1189,7 @@ const BidForm: React.FC = () => {
             <div className="suros-gradient">
                 <div className="bid-form-page">
                     <button
-                        onClick={navigateBack}
+                        onClick={handleBackClick}
                         style={{
                             position: "fixed",
                             top: "20px",
@@ -1515,6 +1649,7 @@ const BidForm: React.FC = () => {
                                                                 average_price: estimate.estimates?.average_price,
                                                                 high_tier_price: estimate.estimates?.high_tier_price,
                                                             };
+                                                            markDirty();
                                                             setLineItems((prev) =>
                                                                 prev.map((li, i) =>
                                                                     i === index ? { ...li, estimate: normalized } : li
@@ -1748,22 +1883,22 @@ const BidForm: React.FC = () => {
                                         type="button"
                                         className="secondary-submit"
                                         onClick={handleSaveDraft}
-                                        disabled={isSubmitting || !canEditThisBid}
+                                        disabled={isSubmitting || isAutoSaving || !canEditThisBid}
                                         title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
                                         style={{
-                                            opacity: isSubmitting || !canEditThisBid ? 0.7 : 1,
-                                            cursor: isSubmitting || !canEditThisBid ? "not-allowed" : "pointer",
+                                            opacity: isSubmitting || isAutoSaving || !canEditThisBid ? 0.7 : 1,
+                                            cursor: isSubmitting || isAutoSaving || !canEditThisBid ? "not-allowed" : "pointer",
                                         }}
                                     >
                                         {isSubmitting ? <span className="spinner" /> : "Save Draft"}
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={isSubmitting || !canEditThisBid}
+                                        disabled={isSubmitting || isAutoSaving || !canEditThisBid}
                                         title={canEditThisBid ? undefined : "You don't have permission to edit this teammate's bid."}
                                         style={{
-                                            opacity: isSubmitting || !canEditThisBid ? 0.7 : 1,
-                                            cursor: isSubmitting || !canEditThisBid ? "not-allowed" : "pointer",
+                                            opacity: isSubmitting || isAutoSaving || !canEditThisBid ? 0.7 : 1,
+                                            cursor: isSubmitting || isAutoSaving || !canEditThisBid ? "not-allowed" : "pointer",
                                         }}
                                     >
                                         {isSubmitting ? (
@@ -1817,7 +1952,7 @@ const BidForm: React.FC = () => {
 
                             <button
                                 onClick={() => {
-                                    if (modal.type === "success") {
+                                    if (modal.type === "success" && !modal.closeOnly) {
                                         const targetBidId = currentBidId || bidId;
                                         navigateWithScrollReset(
                                             modal.successDestination ||
@@ -1845,6 +1980,94 @@ const BidForm: React.FC = () => {
                             >
                                 {modal.type === "success" ? "Finish" : "Got it"}
                             </button>
+                        </div>
+                    </div>
+                )}
+
+                {(isAutoSaving || showAutosaveBanner) && (
+                    <div className="autosave-banner">
+                        {isAutoSaving ? (
+                            <>
+                                <span className="spinner autosave-banner-spinner" />
+                                Saving...
+                            </>
+                        ) : (
+                            "Draft autosaved"
+                        )}
+                    </div>
+                )}
+
+                {showUnsavedChangesModal && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            inset: 0,
+                            backgroundColor: "rgba(0,0,0,0.55)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 9999,
+                        }}
+                    >
+                        <div
+                            style={{
+                                background: "#fff",
+                                borderRadius: "10px",
+                                width: "100%",
+                                maxWidth: "480px",
+                                padding: "28px",
+                                boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+                                textAlign: "center",
+                            }}
+                        >
+                            <h2 style={{ marginBottom: "12px", color: "#000", fontWeight: "bold" }}>
+                                ⚠️ Unsaved Changes
+                            </h2>
+
+                            <p style={{ color: "#000", lineHeight: 1.6, marginBottom: "22px" }}>
+                                You have unsaved changes on this bid form. Save your work before going
+                                back so your latest edits are not lost.
+                            </p>
+
+                            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUnsavedChangesModal(false)}
+                                    disabled={isSubmitting || isAutoSaving}
+                                    style={{
+                                        background: "#e5e7eb",
+                                        color: "#111827",
+                                        padding: "10px 22px",
+                                        borderRadius: "6px",
+                                        border: "none",
+                                        fontSize: "15px",
+                                        fontWeight: 600,
+                                        cursor: isSubmitting || isAutoSaving ? "not-allowed" : "pointer",
+                                        opacity: isSubmitting || isAutoSaving ? 0.7 : 1,
+                                    }}
+                                >
+                                    Keep Editing
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSaveAndLeave}
+                                    disabled={isSubmitting || isAutoSaving}
+                                    style={{
+                                        background: "#1e73be",
+                                        color: "#fff",
+                                        padding: "10px 22px",
+                                        borderRadius: "6px",
+                                        border: "none",
+                                        fontSize: "15px",
+                                        fontWeight: 600,
+                                        cursor: isSubmitting || isAutoSaving ? "not-allowed" : "pointer",
+                                        opacity: isSubmitting || isAutoSaving ? 0.7 : 1,
+                                    }}
+                                >
+                                    {isSubmitting ? <span className="spinner" /> : "Save & Leave"}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
