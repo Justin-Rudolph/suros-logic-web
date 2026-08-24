@@ -19,6 +19,9 @@
   background: rgba(10, 13, 20, 0.82);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  /* Stable compositing layer to avoid the blur-repaint scroll flicker. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .bid-editor-back {
@@ -186,6 +189,9 @@
   backdrop-filter: blur(4px);
   border-radius: 18px;
   z-index: 3;
+  /* Stable compositing layer to avoid the blur-repaint scroll flicker. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .bid-editor-refresh-card {

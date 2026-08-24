@@ -9,6 +9,9 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
   z-index: 2000;
+  /* Stable compositing layer to avoid the blur-repaint scroll flicker. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .navbar-logo {

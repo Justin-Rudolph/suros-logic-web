@@ -28,6 +28,9 @@
   padding: 8px 0;
   display: flex;
   flex-direction: column;
+  /* Stable compositing layer to avoid the blur-repaint scroll flicker. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .dropdown-item {
