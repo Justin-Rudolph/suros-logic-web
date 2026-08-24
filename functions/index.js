@@ -494,3 +494,25 @@ exports.auth = onRequest(
     return authRoute.app(req, res);
   }
 );
+
+/* --------------------------------------------------
+   SUBMIT INQUIRY
+-------------------------------------------------- */
+
+exports.submitInquiry = onRequest(
+  {
+    secrets: [RESEND_API_KEY],
+    // Matches auth's timeout — both write a Firestore doc and call Resend.
+    timeoutSeconds: 90,
+  },
+  (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const submitInquiryHandler = require("./routes/submitInquiry");
+      await submitInquiryHandler(req, res);
+    });
+  }
+);

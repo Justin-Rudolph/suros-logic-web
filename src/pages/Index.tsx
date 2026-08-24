@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Check, Loader2, ChevronLeft, ChevronRight, Star, Phone, Menu, X } from "lucide-react";
+import { Check, Loader2, ChevronLeft, ChevronRight, Star, Phone, Menu, X, Mail, Instagram, Facebook } from "lucide-react";
 import { useEffect, useState } from "react";
 import demoVideoThumbnail from "@/assets/demo_video_thumbnail.png";
 import surosLogo from "@/assets/suros-logo-new.png";
@@ -18,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { isProtectedDevHost } from "@/lib/devAccess";
+import { InquiryDialog } from "@/components/InquiryDialog";
 
 const BID_FORM_VIDEO_URL =
   "https://firebasestorage.googleapis.com/v0/b/suros-logic.firebasestorage.app/o/Suros%20Logic%20Demo%20-%205.30.26.mp4?alt=media&token=a592d11b-0e67-4a0b-9b89-33f910e5ddcf";
@@ -358,15 +359,16 @@ const Index = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-            <a
-              href="tel:+17275033980"
-              className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              <Phone size={15} />
-              <span>(727) 503-3980</span>
-            </a>
+            <InquiryDialog
+              triggerVariant="default"
+              triggerClassName="hidden sm:flex md:h-12 md:px-6 bg-primary hover:bg-primary/90"
+            />
 
-            <Button size="sm" className="hidden sm:flex md:h-12 md:px-6 bg-primary hover:bg-primary/90" asChild>
+            <Button
+              size="sm"
+              className="hidden sm:flex md:h-12 md:px-6 bg-white text-background hover:bg-white/90"
+              asChild
+            >
               <a
                 href="https://calendly.com/astutemarketing-agency/new-meeting"
                 target="_blank"
@@ -421,15 +423,14 @@ const Index = () => {
                 </a>
               ))}
               <div className="pt-3 mt-3 border-t border-border space-y-2">
-                <a
-                  href="tel:+17275033980"
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <Phone size={15} />
-                  (727) 503-3980
-                </a>
-                <div className="flex gap-2 px-2">
-                  <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90" asChild>
+                <div className="px-2">
+                  <InquiryDialog
+                    triggerVariant="default"
+                    triggerClassName="w-full bg-primary hover:bg-primary/90"
+                  />
+                </div>
+                <div className="flex gap-2 px-2 pt-2">
+                  <Button size="sm" className="flex-1 bg-white text-background hover:bg-white/90" asChild>
                     <a href="https://calendly.com/astutemarketing-agency/new-meeting" target="_blank" rel="noopener noreferrer">
                       Book a Demo
                     </a>
@@ -461,15 +462,11 @@ const Index = () => {
               AI-extracted scopes, safety analysis, and more. Start to finish in a fraction of the time it takes today.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg" asChild>
-                <a
-                  href="https://calendly.com/astutemarketing-agency/new-meeting"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Book a Demo <ArrowRight className="ml-2" />
-                </a>
-              </Button>
+              <InquiryDialog
+                triggerVariant="default"
+                triggerSize="lg"
+                triggerClassName="bg-primary hover:bg-primary/90 text-lg"
+              />
               <Button
                 onClick={() => window.open("/sample_bid.pdf", "_blank")}
                 size="lg"
@@ -477,6 +474,15 @@ const Index = () => {
                 className="text-lg"
               >
                 See Sample Bid
+              </Button>
+              <Button size="lg" className="bg-white text-background hover:bg-white/90 text-lg" asChild>
+                <a
+                  href="https://calendly.com/astutemarketing-agency/new-meeting"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Book a Demo
+                </a>
               </Button>
             </div>
           </div>
@@ -547,8 +553,8 @@ const Index = () => {
 
           <style>{`
             @keyframes logoMarquee {
-              from { transform: translateX(-50%); }
-              to { transform: translateX(0); }
+              from { transform: translateX(0); }
+              to { transform: translateX(-50%); }
             }
           `}</style>
           <div
@@ -598,9 +604,6 @@ const Index = () => {
       <section id="plan-analysis" className="scroll-mt-24 py-20 px-6 bg-card/30">
         <div className="container mx-auto max-w-7xl">
           <div className="text-center mb-12 space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-secondary/30 bg-secondary/10 px-4 py-1.5 text-sm font-medium text-secondary">
-              Plan Analyzer — Optional Power Feature
-            </div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
               AI Plan Analyses in{" "}
               <span className="text-primary">As Little As 10 Minutes</span>
@@ -1167,13 +1170,18 @@ const Index = () => {
 
           <Card className="bg-card/80 backdrop-blur">
             <CardContent className="p-8">
-              <Button size="lg" className="w-full bg-primary hover:bg-primary/90 text-lg" asChild>
+              <InquiryDialog
+                triggerVariant="default"
+                triggerSize="lg"
+                triggerClassName="w-full bg-primary hover:bg-primary/90 text-lg"
+              />
+              <Button size="lg" className="w-full mt-3 bg-white text-background hover:bg-white/90 text-lg" asChild>
                 <a
                   href="https://calendly.com/astutemarketing-agency/new-meeting"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Book My Demo <ArrowRight className="ml-2" />
+                  Book My Demo
                 </a>
               </Button>
               <p className="mt-6 text-sm text-muted-foreground">
@@ -1313,26 +1321,92 @@ const Index = () => {
       </Dialog>
 
       {/* Footer */}
-      <footer className="py-8 px-6 border-t border-border">
-        <div className="container mx-auto text-center space-y-4">
-          <img src={surosLogo} alt="Suros Logic Systems" className="h-10 mx-auto opacity-70" />
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              to="/terms"
-              state={{ fromLanding: true }}
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary"
-            >
-              Terms and Conditions
-            </Link>
-            <Link
-              to="/privacy"
-              state={{ fromLanding: true }}
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary"
-            >
-              Privacy Policy
-            </Link>
+      <footer className="pt-16 pb-8 px-6 border-t border-border">
+        <div className="container mx-auto max-w-6xl">
+          <div className="flex flex-col lg:flex-row lg:flex-wrap lg:justify-between gap-10 text-center lg:text-left">
+            <div className="space-y-3 flex flex-col items-center lg:items-start">
+              <img src={surosLogo} alt="Suros Logic Systems" className="h-10 opacity-90" />
+              <p className="text-sm text-muted-foreground max-w-56 leading-relaxed">
+                AI-powered estimating and bid management for contractors and service businesses.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                Contact Us
+              </h3>
+              <div className="flex flex-col items-center lg:items-start gap-2">
+                <a
+                  href="tel:+17275033980"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  <Phone size={15} />
+                  (727) 503-3980
+                </a>
+                <a
+                  href="mailto:support@suroslogic.com"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  <Mail size={15} />
+                  support@suroslogic.com
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                Socials
+              </h3>
+              <div className="flex items-center justify-center lg:justify-start gap-2">
+                <a
+                  href="https://www.instagram.com/suroslogic/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Suros Logic Systems on Instagram"
+                  className="rounded-full border border-border p-2 text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+                >
+                  <Instagram size={16} />
+                </a>
+                <a
+                  href="https://www.facebook.com/p/Suros-Logic-Systems-61589390144496/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Suros Logic Systems on Facebook"
+                  className="rounded-full border border-border p-2 text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+                >
+                  <Facebook size={16} />
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                Legal
+              </h3>
+              <div className="flex flex-col items-center lg:items-start gap-2">
+                <Link
+                  to="/terms"
+                  state={{ fromLanding: true }}
+                  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  Terms and Conditions
+                </Link>
+                <Link
+                  to="/privacy"
+                  state={{ fromLanding: true }}
+                  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+              </div>
+            </div>
           </div>
-          <p className="text-muted-foreground">© 2026 Suros Logic Systems. All rights reserved.</p>
+
+          <div className="mt-12 pt-6 border-t border-border text-center">
+            <p className="text-sm text-muted-foreground">
+              © 2026 Suros Logic Systems, LLC. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

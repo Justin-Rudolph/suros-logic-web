@@ -1,14 +1,17 @@
 /**
  * Firestore security rules tests.
  *
- * Rules are the only barrier between a signed-in client and the database — the
- * Firebase web API key is public, so anyone can obtain an auth token and talk
- * to Firestore directly, with no app code in the way. These cover the two
- * things that barrier is load-bearing for:
+ * Rules are the only barrier between a client (signed-in or anonymous) and the
+ * database — the Firebase web API key is public, so anyone can talk to
+ * Firestore directly, with no app code in the way. These cover the things that
+ * barrier is load-bearing for:
  *
  *   1. Seat fields a member must not be able to edit on their own doc.
  *   2. The subscription gate: an inactive account may read and delete, but not
  *      create or update.
+ *   3. The public `inquiries` collection: anyone (including unauthenticated
+ *      visitors) may create a well-formed record, but nobody may read, update,
+ *      or delete one from the client.
  *
  * Run with the Firestore emulator:
  *   npx firebase emulators:exec --only firestore "node --test firestore-rules.test.mjs"
@@ -26,6 +29,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  addDoc,
   updateDoc,
   deleteDoc,
   collection,
@@ -467,4 +471,126 @@ test("someone outside the account cannot list its users", async () => {
   await assertFails(
     getDocs(query(collection(db, "users"), where("accountId", "==", OWNER)))
   );
+});
+
+/* ---------------------------------------------------------
+   INQUIRIES — public landing-page lead form. No login is
+   required to submit, so this is the one collection anonymous
+   clients can write to at all; the rule's job is to allow that
+   single narrow write while blocking everything else (reads,
+   edits, deletes, and creates with the wrong shape).
+--------------------------------------------------------- */
+
+const validInquiry = {
+  firstName: "Jamie",
+  lastName: "Rivera",
+  email: "jamie@example.com",
+  phone: "555-123-4567",
+  companyName: "Rivera Roofing",
+  website: "https://riveraroofing.com",
+  companyDescription: "Residential roofing contractor.",
+};
+
+test("an anonymous visitor can submit a valid inquiry", async () => {
+  const db = testEnv.unauthenticatedContext().firestore();
+
+  await assertSucceeds(
+    addDoc(collection(db, "inquiries"), {
+      ...validInquiry,
+      createdAt: new Date(),
+    })
+  );
+});
+
+test("a signed-in visitor can also submit a valid inquiry", async () => {
+  const db = testEnv.authenticatedContext(OUTSIDER).firestore();
+
+  await assertSucceeds(
+    addDoc(collection(db, "inquiries"), {
+      ...validInquiry,
+      createdAt: new Date(),
+    })
+  );
+});
+
+test("an inquiry missing a required field is rejected", async () => {
+  const db = testEnv.unauthenticatedContext().firestore();
+  const { companyName, ...withoutCompanyName } = validInquiry;
+
+  await assertFails(
+    addDoc(collection(db, "inquiries"), {
+      ...withoutCompanyName,
+      createdAt: new Date(),
+    })
+  );
+});
+
+test("an inquiry with an empty required field is rejected", async () => {
+  const db = testEnv.unauthenticatedContext().firestore();
+
+  await assertFails(
+    addDoc(collection(db, "inquiries"), {
+      ...validInquiry,
+      firstName: "",
+      createdAt: new Date(),
+    })
+  );
+});
+
+test("an inquiry with an unexpected extra field is rejected", async () => {
+  const db = testEnv.unauthenticatedContext().firestore();
+
+  await assertFails(
+    addDoc(collection(db, "inquiries"), {
+      ...validInquiry,
+      createdAt: new Date(),
+      isAdmin: true,
+    })
+  );
+});
+
+test("an inquiry with an oversized field is rejected", async () => {
+  const db = testEnv.unauthenticatedContext().firestore();
+
+  await assertFails(
+    addDoc(collection(db, "inquiries"), {
+      ...validInquiry,
+      companyDescription: "x".repeat(5000),
+      createdAt: new Date(),
+    })
+  );
+});
+
+test("nobody can read inquiries from the client", async () => {
+  let seededId;
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const ref = await addDoc(collection(context.firestore(), "inquiries"), {
+      ...validInquiry,
+      createdAt: new Date(),
+    });
+    seededId = ref.id;
+  });
+
+  const anonDb = testEnv.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(anonDb, "inquiries", seededId)));
+
+  const ownerDb = testEnv.authenticatedContext(OWNER).firestore();
+  await assertFails(getDoc(doc(ownerDb, "inquiries", seededId)));
+});
+
+test("nobody can update or delete an inquiry from the client", async () => {
+  let seededId;
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const ref = await addDoc(collection(context.firestore(), "inquiries"), {
+      ...validInquiry,
+      createdAt: new Date(),
+    });
+    seededId = ref.id;
+  });
+
+  const ownerDb = testEnv.authenticatedContext(OWNER).firestore();
+  await assertFails(
+    updateDoc(doc(ownerDb, "inquiries", seededId), { firstName: "Changed" })
+  );
+  await assertFails(deleteDoc(doc(ownerDb, "inquiries", seededId)));
 });

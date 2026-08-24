@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Child Account Seats access model.
 //
-// Ownership of every data document is denormalized onto an `accountId` field
+// Ownership of most data documents is denormalized onto an `accountId` field
 // (the owner's uid). Each requesting user's own users/{uid} doc carries their
 // accountId, accountRole ('owner' | 'member') and, for members, a
 // memberPermission ('own' | 'view_all_edit_own' | 'full'). Reads/writes are
@@ -13,6 +13,10 @@ rules_version = '2';
 //   view_all_edit_own  -> read all account docs, write only own
 //   full               -> read/write all account docs
 //   owner              -> full read/write across the whole accountId
+//
+// Exception: the public `inquiries` collection (see below) has no
+// accountId/userId at all — it's written by anonymous landing-page visitors,
+// not account holders.
 //
 // Server-side code (Cloud Functions using the Admin SDK) bypasses these rules.
 
@@ -280,6 +284,52 @@ service cloud.firestore {
         allow create, update: if signedIn() &&
           canWriteAccountDoc(parentPlanProject()) && isSubscribedNow();
         allow delete: if signedIn() && canWriteAccountDoc(parentPlanProject());
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // inquiries (public landing-page "Get More Info" lead form)
+    // -----------------------------------------------------------------
+    //
+    // No login is required to submit — this is the one collection an
+    // anonymous visitor can write to at all. In exchange the rule is strict
+    // about shape: required fields must be present and non-empty, optional
+    // fields are capped in length, and no unexpected fields are allowed.
+    // There is no read/update/delete from the client — submissions are only
+    // visible via the Firebase console or Admin SDK, so this can't be
+    // scraped or tampered with once written.
+
+    match /inquiries/{inquiryId} {
+      allow create: if isValidInquiry(request.resource.data);
+      allow read, update, delete: if false;
+
+      function isValidInquiry(data) {
+        return data.keys().hasOnly([
+          'firstName', 'lastName', 'email', 'phone',
+          'companyName', 'website', 'companyDescription', 'createdAt'
+        ]) &&
+        data.keys().hasAll(['firstName', 'lastName', 'email', 'companyName', 'createdAt']) &&
+        isNonEmptyString(data.firstName, 200) &&
+        isNonEmptyString(data.lastName, 200) &&
+        isValidEmail(data.email) &&
+        isNonEmptyString(data.companyName, 200) &&
+        isOptionalString(data, 'phone', 40) &&
+        isOptionalString(data, 'website', 300) &&
+        isOptionalString(data, 'companyDescription', 2000) &&
+        data.createdAt is timestamp;
+      }
+
+      function isNonEmptyString(value, maxLen) {
+        return value is string && value.size() > 0 && value.size() <= maxLen;
+      }
+
+      function isOptionalString(data, field, maxLen) {
+        return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+      }
+
+      function isValidEmail(value) {
+        return value is string && value.size() <= 320 &&
+          value.matches('^[^\\s@]+@[^\\s@]+[.][^\\s@]+$');
       }
     }
   }

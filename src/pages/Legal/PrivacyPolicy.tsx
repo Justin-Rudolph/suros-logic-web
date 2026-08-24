@@ -39,7 +39,7 @@ export default function PrivacyPolicy() {
             zIndex: 10,
           }}
         >
-          Back
+          ← Back
         </button>
       </div>
 
@@ -47,7 +47,7 @@ export default function PrivacyPolicy() {
         <h1 className="text-3xl font-bold mb-2">
           Privacy Policy - Suros Logic Systems, LLC
         </h1>
-        <p className="text-sm text-gray-600 mb-8">Last updated: 07/31/2026</p>
+        <p className="text-sm text-gray-600 mb-8">Last updated: 08/24/2026</p>
 
         <h2 className="text-xl font-semibold mt-6 mb-2">1. Who We Are</h2>
         <p className="mb-4">
@@ -89,7 +89,9 @@ export default function PrivacyPolicy() {
         <p className="mb-4">
           We may collect your name, company name, email address, phone number, business address,
           billing contact details, profile information, authentication information, communication
-          preferences, and support messages.
+          preferences, and support messages. This includes information you submit through account
+          registration, checkout, support requests, and website forms such as our "Get More Info"
+          inquiry form, whether or not you create an account.
         </p>
 
         <h3 className="text-lg font-semibold mt-4 mb-2">3.2 Customer Data and Project Content</h3>
@@ -181,6 +183,7 @@ export default function PrivacyPolicy() {
           <li>Convert HTML or document content into downloadable PDF files when requested;</li>
           <li>Send password resets, transactional emails, account notices, product updates, and support messages;</li>
           <li>Respond to questions, troubleshoot issues, and provide customer support;</li>
+          <li>Respond to inquiries submitted through our website's contact or "Get More Info" forms, and contact you by phone or email — including for marketing and sales purposes — about our products and services if you request more information;</li>
           <li>Monitor, secure, debug, test, and improve the Service;</li>
           <li>Develop new features, templates, prompts, workflows, and quality controls;</li>
           <li>Detect, prevent, and respond to fraud, abuse, security incidents, and legal violations;</li>
@@ -365,6 +368,12 @@ export default function PrivacyPolicy() {
           correction, deletion, portability, restriction, objection, withdrawal of consent, or appeal
           of a privacy decision. You may also unsubscribe from marketing communications, although we
           may still send transactional or service-related messages.
+        </p>
+        <p className="mb-4">
+          If you no longer want to receive marketing calls or emails, including follow-up after
+          submitting an inquiry form, you can tell us at any time by replying to our message, letting
+          us know during a call, or contacting support@suroslogic.com, and we will honor that request
+          going forward.
         </p>
         <p className="mb-4">
           To make a privacy request, contact support@suroslogic.com. We may need to verify your

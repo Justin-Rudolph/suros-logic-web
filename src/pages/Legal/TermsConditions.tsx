@@ -39,7 +39,7 @@ export default function TermsConditions() {
             zIndex: 10,
           }}
         >
-          Back
+          ← Back
         </button>
       </div>
 
