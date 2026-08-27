@@ -102,7 +102,7 @@ export function InquiryDialog({
       const list =
         missingFields.length <= 2
           ? missingFields.join(" and ")
-          : `${missingFields.slice(0, -1).join(", ")}, and ${missingFields.at(-1)}`;
+          : `${missingFields.slice(0, -1).join(", ")}, and ${missingFields[missingFields.length - 1]}`;
       setError(`${list} ${verb} required.`);
       return;
     }

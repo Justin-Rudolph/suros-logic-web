@@ -60,8 +60,12 @@ module.exports = async function generateBidWorkspaceOverviewHandler(
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      reasoning_effort: "low",
+      // Cheapest GPT-5 model; this is a short summary from structured data,
+      // so minimal reasoning is enough. max_completion_tokens caps output cost.
+      model: "gpt-5-nano",
+      reasoning_effort: "minimal",
+      max_completion_tokens: 800,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",

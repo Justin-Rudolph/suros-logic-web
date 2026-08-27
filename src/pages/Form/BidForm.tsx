@@ -129,7 +129,16 @@ const BidForm: React.FC = () => {
     // either the Save Draft button or autosave. Only user edits set this —
     // never the data-loading effects that hydrate the form on mount.
     const [isDirty, setIsDirty] = useState(false);
-    const markDirty = () => setIsDirty(true);
+    // Time of the last edit; autosave waits for a typing pause before writing.
+    const lastTypedAtRef = useRef(0);
+    // Bumped on every edit. A save compares it before/after; if it changed,
+    // the user typed mid-save so those edits didn't land — stay dirty.
+    const editSeqRef = useRef(0);
+    const markDirty = () => {
+        lastTypedAtRef.current = Date.now();
+        editSeqRef.current += 1;
+        setIsDirty(true);
+    };
     const [isAutoSaving, setIsAutoSaving] = useState(false);
     const [showAutosaveBanner, setShowAutosaveBanner] = useState(false);
 
@@ -268,18 +277,31 @@ const BidForm: React.FC = () => {
         return unsubscribe;
     }, [bidId]);
 
+    // Hydrate the form from bid data once per bid. Repeat snapshots for the
+    // same bid (e.g. autosave's own write echoing back through onSnapshot)
+    // only refresh the record id/stage — never the fields the user is editing.
+    // A different bidId changes the key and re-hydrates.
+    const hydratedBidKeyRef = useRef<string | null>(null);
+
     useEffect(() => {
         if (!prefillBid) return;
 
         setCurrentBidId(prefillBid.id ?? null);
         setCurrentProjectTimelineStage(prefillBid.projectTimelineStage);
 
+        const hydrationKey = prefillBid.id ?? "__new_bid__";
+        if (hydratedBidKeyRef.current === hydrationKey) return;
+        hydratedBidKeyRef.current = hydrationKey;
+
         setForm((prev) => ({
             ...prev,
             ...prefillBid.formSnapshot,
+            // Keep "N/A" verbatim — persistBidRecord writes `form` as-is, so
+            // storing the default here would let the next save overwrite a
+            // saved "N/A" with "7" and revert the toggle on reload.
             tax_percentage:
                 prefillBid.formSnapshot.tax_percentage === "N/A"
-                    ? initialFormState.tax_percentage
+                    ? "N/A"
                     : prefillBid.formSnapshot.tax_percentage || initialFormState.tax_percentage,
             company_phone: prefillBid.formSnapshot.company_phone
                 ? formatPhone(prefillBid.formSnapshot.company_phone)
@@ -1073,11 +1095,15 @@ const BidForm: React.FC = () => {
         if (isSubmitting || isAutoSaving || !canEditThisBid) return;
 
         setIsSubmitting(true);
+        const editSeqAtSaveStart = editSeqRef.current;
 
         try {
             const bidFormId = await persistBidRecord("draft");
             await refreshBidWorkspaceOverviewRecord(bidFormId);
-            setIsDirty(false);
+            // Stay dirty if the user edited during the save (see runAutosave).
+            if (editSeqRef.current === editSeqAtSaveStart) {
+                setIsDirty(false);
+            }
             setIsSubmitting(false);
 
             showModal(
@@ -1127,22 +1153,30 @@ const BidForm: React.FC = () => {
 
     /** -------------------------------
      * AUTOSAVE
-     * Runs on a fixed 3-minute interval while the bid form screen is
-     * mounted (see the effect below). Writes through the exact same path
-     * as Save Draft — creating the workspace if none exists yet, updating
-     * it otherwise — but only when something has actually changed since
-     * the last save, and silently: no modal, no navigation, just a
-     * bottom-right banner.
+     * Runs on a ~5-minute cadence while the bid form screen is mounted, but
+     * only once the user has stopped typing (see the effect below). Writes
+     * through the exact same path as Save Draft — creating the workspace if
+     * none exists yet, updating it otherwise — but only when something has
+     * actually changed since the last save, and silently: no modal, no
+     * navigation, just a bottom-right banner.
      --------------------------------*/
     const runAutosave = async () => {
         if (!isDirty || isSubmitting || isAutoSaving || !canEditThisBid) return;
 
         setIsAutoSaving(true);
 
+        // Read before persistBidRecord captures form; compare after.
+        const editSeqAtSaveStart = editSeqRef.current;
+
         try {
             const bidFormId = await persistBidRecord("draft");
             await refreshBidWorkspaceOverviewRecord(bidFormId);
-            setIsDirty(false);
+
+            // Stay dirty if the user edited during the save — those keystrokes
+            // aren't in the written snapshot, so the next cycle must catch them.
+            if (editSeqRef.current === editSeqAtSaveStart) {
+                setIsDirty(false);
+            }
             setShowAutosaveBanner(true);
         } catch (err) {
             // Stay dirty so the next tick retries; autosave fails silently,
@@ -1153,23 +1187,52 @@ const BidForm: React.FC = () => {
         }
     };
 
-    // Always call the latest runAutosave (fresh isDirty/form/lineItems
-    // closures) without resetting the interval below on every render.
+    // Keep a ref to the latest runAutosave so the scheduler below never resets.
     const runAutosaveRef = useRef(runAutosave);
     useEffect(() => {
         runAutosaveRef.current = runAutosave;
     });
 
-    // Fixed 3-minute cadence from when the bid form screen mounts. Cleared
-    // on unmount, i.e. as soon as the user navigates away from this screen.
+    // Wait 5 minutes, then hold off until the user has paused typing for 3
+    // seconds before writing, so a save never fires mid-edit. The next
+    // 5-minute wait starts after the save finishes. Cleared on unmount.
+    // (Text is protected from being cleared by the hydrated-bid guard above,
+    // not by this timing.)
     useEffect(() => {
-        const AUTOSAVE_INTERVAL_MS = 3 * 60 * 1000;
+        const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
+        const TYPING_IDLE_MS = 3 * 1000;
 
-        const intervalId = window.setInterval(() => {
-            void runAutosaveRef.current();
-        }, AUTOSAVE_INTERVAL_MS);
+        let timeoutId = 0;
+        let cancelled = false;
 
-        return () => window.clearInterval(intervalId);
+        const scheduleNextCycle = () => {
+            timeoutId = window.setTimeout(onIntervalElapsed, AUTOSAVE_INTERVAL_MS);
+        };
+
+        const onIntervalElapsed = async () => {
+            if (cancelled) return;
+
+            const sinceLastType = Date.now() - lastTypedAtRef.current;
+            if (sinceLastType < TYPING_IDLE_MS) {
+                // User is still typing — re-check once the idle gap would be met.
+                timeoutId = window.setTimeout(
+                    onIntervalElapsed,
+                    TYPING_IDLE_MS - sinceLastType
+                );
+                return;
+            }
+
+            await runAutosaveRef.current();
+
+            if (!cancelled) scheduleNextCycle();
+        };
+
+        scheduleNextCycle();
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeoutId);
+        };
     }, []);
 
     // Autosave banner self-dismisses after 2 seconds.
