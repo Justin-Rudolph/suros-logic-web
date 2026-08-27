@@ -21,6 +21,12 @@ export const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+// Escape for HTML while preserving the author's line breaks — the editor's
+// multi-line fields are plain textareas, so their newlines must become <br>
+// or the PDF collapses everything onto one line.
+const escapeMultilineHtml = (value: string) =>
+  escapeHtml(String(value ?? "")).replace(/\r?\n/g, "<br>");
+
 const sanitizeChipColor = (color?: string) => {
   const trimmed = String(color || "").trim();
   if (trimmed.toLowerCase() === "transparent") return "transparent";
@@ -90,15 +96,7 @@ const toParagraphLines = (value: string) =>
     .map((line) => `<p style="margin: 0 0 4px;">${escapeHtml(line)}</p>`)
     .join(" ");
 
-const toReasonParagraph = (value: string) => {
-  const normalized = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join(" ");
-
-  return escapeHtml(normalized);
-};
+const toReasonParagraph = (value: string) => escapeMultilineHtml(value);
 
 export const renderChangeOrderProposalHtml = (
   document: ChangeOrderProposalDocument,
@@ -178,7 +176,7 @@ export const renderChangeOrderProposalHtml = (
   <tr>
     <td width="50%">
       <strong style="font-size:26px; color:#2A3439;">PROJECT</strong><br>
-      ${escapeHtml(document.job_name)}
+      ${escapeMultilineHtml(document.job_name)}
     </td>
     <td width="50%">
       <strong style="font-size:26px; color:#2A3439;">CLIENT</strong><br>
@@ -291,7 +289,7 @@ export const renderChangeOrderProposalHtml = (
   <tr>
     <td>
       <strong style="font-size:26px; color:#2A3439;">Payment Terms</strong><br><br>
-      ${escapeHtml(formatPaymentTerms(document.immediate_or_later_payment))}
+      ${escapeMultilineHtml(formatPaymentTerms(document.immediate_or_later_payment))}
     </td>
   </tr>
 </table>

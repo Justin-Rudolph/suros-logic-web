@@ -682,6 +682,14 @@ export default function ChangeOrderProposalEditor() {
         </div>
       )}
 
+      {!isReadOnly && (
+        <div className="bid-editor-editable-disclaimer">
+          <strong>Customize your proposal</strong>
+          Every field in this proposal is editable — click any description, price, number, date, or
+          dropdown to change it, then save or download once it's ready to send to your client.
+        </div>
+      )}
+
       <div className="bid-editor-document-shell">
         <div className={`bid-editor-document ${isReadOnly ? "is-read-only" : ""}`}>
           <table cellPadding={16} cellSpacing={0} style={{ background: "#2A3439", color: "white" }}>
@@ -761,6 +769,12 @@ export default function ChangeOrderProposalEditor() {
                       value={documentData.job_name}
                       onChange={(value) => updateField("job_name", value)}
                       readOnly={isReadOnly}
+                      multiline
+                      rows={1}
+                      onInput={(event) => autoResizeTextarea(event.currentTarget)}
+                      textareaRef={(node) => {
+                        if (node) autoResizeTextarea(node);
+                      }}
                     />
                   </td>
                   <td width="50%">
@@ -1005,10 +1019,10 @@ export default function ChangeOrderProposalEditor() {
       {showBackConfirm && (
         <div className="bid-editor-back-modal-overlay">
           <div className="bid-editor-back-modal">
-            <h2>Save Your Work?</h2>
+            <h2>Unsaved changes</h2>
             <p>
-              You have unsaved changes in this proposal. Save your work before going back so
-              your latest edits are not lost.
+              You have unsaved changes in this proposal. If you leave now, your latest edits
+              will be lost.
             </p>
             <div className="bid-editor-back-modal-actions">
               <button
@@ -1016,14 +1030,14 @@ export default function ChangeOrderProposalEditor() {
                 className="bid-editor-back-modal-back"
                 onClick={() => navigate(backPath)}
               >
-                Back
+                Leave without saving
               </button>
               <button
                 type="button"
                 className="bid-editor-back-modal-return"
                 onClick={() => setShowBackConfirm(false)}
               >
-                Return to Proposal
+                Keep editing
               </button>
             </div>
           </div>

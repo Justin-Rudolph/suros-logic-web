@@ -134,11 +134,11 @@
 }
 
 .bid-editor-back-modal-back {
-  background: #1e73be;
+  background: #ff4a3d;
 }
 
 .bid-editor-back-modal-return {
-  background: #ff4a3d;
+  background: #1f9d63;
 }
 
 .bid-editor-loading-inline {
@@ -163,7 +163,7 @@
 }
 
 .bid-editor-document-shell {
-  padding: 24px;
+  padding: 20px 24px 24px;
   display: flex;
   justify-content: center;
 }
@@ -176,6 +176,9 @@
   border-radius: 22px;
   padding: 20px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.24);
+  /* Pin the translucent panel to its own layer so it doesn't flicker as it
+     scrolls under the blurred sticky top bar. */
+  transform: translateZ(0);
 }
 
 .bid-editor-refresh-overlay {
@@ -222,7 +225,7 @@
   padding: 24px;
   color: #111;
   font-family: Montserrat, Arial, sans-serif;
-  font-size: 24px;
+  font-size: 18px;
   line-height: 1.5;
 }
 
@@ -293,13 +296,13 @@
 
 .bid-editor-label-lg {
   display: block;
-  font-size: 26px;
+  font-size: 20px;
   color: #2a3439;
   margin-bottom: 2px;
 }
 
 .bid-editor-meta-input {
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .bid-editor-meta-input-right {
@@ -326,7 +329,7 @@
 }
 
 .bid-editor-readable-date {
-  font-size: 18px;
+  font-size: 14px;
   color: #5a6268;
 }
 
@@ -373,7 +376,7 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  font-size: 22px;
+  font-size: 17px;
   font-style: italic;
   min-width: 0;
   white-space: pre-wrap;
@@ -401,7 +404,7 @@
 }
 
 .bid-editor-description-heading {
-  font-size: 26px;
+  font-size: 20px;
   color: #2a3439;
   border-bottom: 3px solid #2a3439;
   display: inline-block;
@@ -426,7 +429,7 @@
 
 .bid-editor-trade-input {
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
   text-decoration: underline;
   margin-bottom: 2px;
 }
@@ -437,7 +440,7 @@
   gap: 6px;
   flex-wrap: wrap;
   font-style: italic;
-  font-size: 22px;
+  font-size: 17px;
   margin-bottom: 4px;
 }
 
@@ -484,12 +487,12 @@
   text-align: right;
   border-bottom: 0.25px solid #000;
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .bid-editor-money-input {
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
   min-width: 140px;
 }
 
@@ -508,7 +511,7 @@
 
 .bid-editor-money-strong {
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .bid-editor-totals-table {
@@ -525,7 +528,7 @@
 .bid-editor-totals-label {
   border: 2px solid #2a3439;
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
   padding: 10px;
   white-space: normal;
 }
@@ -584,13 +587,37 @@
 
 .bid-editor-contract-copy {
   margin-bottom: 40px;
-  font-size: 22px;
+  font-size: 17px;
 }
 
 .bid-editor-helper {
   margin-top: 24px;
   font-size: 14px;
   color: #5a6268;
+}
+
+.bid-editor-editable-disclaimer {
+  width: calc(100% - 48px);
+  max-width: 980px;
+  margin: 20px auto 0;
+  padding: 16px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.bid-editor-editable-disclaimer strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.56);
 }
 
 .bid-editor-loading,
@@ -674,7 +701,7 @@
 
   .bid-editor-document-inner {
     padding: 16px;
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .bid-editor-company-name {
@@ -687,13 +714,13 @@
   .bid-editor-money-strong,
   .bid-editor-trade-input,
   .bid-editor-money-input {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .bid-editor-material-line,
   .bid-editor-slogan-input,
   .bid-editor-contract-copy {
-    font-size: 18px;
+    font-size: 16px;
   }
 }
 

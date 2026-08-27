@@ -26,6 +26,12 @@ export const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+// Escape for HTML while preserving the author's line breaks — the editor's
+// multi-line fields (payment terms, contingency coverage) are plain textareas,
+// so their newlines must become <br> or the PDF collapses them onto one line.
+const escapeMultilineHtml = (value: string) =>
+  escapeHtml(String(value ?? "")).replace(/\r?\n/g, "<br>");
+
 const sanitizeChipColor = (color?: string) => {
   const trimmed = String(color || "").trim();
   if (trimmed.toLowerCase() === "transparent") return "transparent";
@@ -94,7 +100,7 @@ const buildClientBlock = (document: BidFormProposalDocument) => {
     document.customer_email !== "N/A" ? document.customer_email : "",
   ].filter(Boolean);
 
-  return lines.map(escapeHtml).join("<br>\n      ");
+  return lines.map(escapeMultilineHtml).join("<br>\n      ");
 };
 
 const buildCompanySloganMarkup = (value: string) => {
@@ -237,9 +243,13 @@ export const renderBidEditorHtml = (
 <!-- CLIENT -->
 <table cellpadding="10" cellspacing="0" style="border:2px solid #2A3439; margin-top:18px; background:#ffffff;">
   <tr>
-    <td>
+    <td width="40%" style="vertical-align:top;">
       <strong style="font-size:26px; color:#2A3439;">CLIENT</strong><br>
       ${buildClientBlock(document)}
+    </td>
+    <td width="60%" style="vertical-align:top;">
+      <strong style="font-size:26px; color:#2A3439;">PAYMENT TERMS</strong><br>
+      ${escapeMultilineHtml(document.payment_terms)}
     </td>
   </tr>
 </table>
@@ -247,17 +257,13 @@ export const renderBidEditorHtml = (
 <!-- SUMMARY -->
 <table cellpadding="10" cellspacing="0" style="border:2px solid #2A3439; margin-top:18px; background:#ffffff;">
   <tr>
-    <td width="25%">
+    <td width="40%">
       <strong style="font-size:26px; color:#2A3439;">SALESPERSON</strong><br>
-      ${escapeHtml(document.salesperson)}
+      ${escapeMultilineHtml(document.salesperson)}
     </td>
-    <td width="25%">
+    <td width="40%">
       <strong style="font-size:26px; color:#2A3439;">JOB</strong><br>
-      ${escapeHtml(document.job)}
-    </td>
-    <td width="30%">
-      <strong style="font-size:26px; color:#2A3439;">PAYMENT TERMS</strong><br>
-      ${escapeHtml(document.payment_terms)}
+      ${escapeMultilineHtml(document.job)}
     </td>
     <td width="20%">
       <strong style="font-size:26px; color:#2A3439;">WORKING WEEKS</strong><br>
@@ -308,7 +314,7 @@ export const renderBidEditorHtml = (
       <strong style="font-size:26px;">
         Contingency Coverage (${escapeHtml(String(document.contingency_percentage))}%)
       </strong><br><br>
-      ${escapeHtml(document.contingency_coverage)}
+      ${escapeMultilineHtml(document.contingency_coverage)}
     </td>
     <td align="right" width="200" style="font-weight:bold; font-size:24px;">
       ${formatUsd(contingencyAmount)}

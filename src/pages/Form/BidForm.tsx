@@ -192,8 +192,8 @@ const BidForm: React.FC = () => {
         navigateWithScrollReset(currentBidId || bidId ? `/bids/${currentBidId || bidId}` : "/dashboard");
     };
 
-    // If the form has unsaved changes, clicking Back asks the user to save
-    // first instead of navigating away immediately.
+    // If the form has unsaved changes, clicking Back opens a confirmation modal
+    // ("Leave without saving" / "Keep editing") instead of navigating away immediately.
     const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
 
     const handleBackClick = () => {
@@ -1115,33 +1115,6 @@ const BidForm: React.FC = () => {
             );
         } catch (err) {
             setIsSubmitting(false);
-
-            showModal(
-                "error",
-                "Draft Save Failed",
-                "We ran into an issue while saving your draft. Please try again in a moment."
-            );
-        }
-    };
-
-    // Save & Leave from the unsaved-changes modal shown by handleBackClick —
-    // same write path as Save Draft, but navigates back once it's done
-    // instead of showing the "Draft Saved" modal.
-    const handleSaveAndLeave = async () => {
-        if (isSubmitting || isAutoSaving || !canEditThisBid) return;
-
-        setIsSubmitting(true);
-
-        try {
-            const bidFormId = await persistBidRecord("draft");
-            await refreshBidWorkspaceOverviewRecord(bidFormId);
-            setIsDirty(false);
-            setIsSubmitting(false);
-            setShowUnsavedChangesModal(false);
-            navigateBack();
-        } catch (err) {
-            setIsSubmitting(false);
-            setShowUnsavedChangesModal(false);
 
             showModal(
                 "error",
@@ -2088,47 +2061,46 @@ const BidForm: React.FC = () => {
                             </h2>
 
                             <p style={{ color: "#000", lineHeight: 1.6, marginBottom: "22px" }}>
-                                You have unsaved changes on this bid form. Save your work before going
-                                back so your latest edits are not lost.
+                                You have unsaved changes on this bid form. If you leave now, your
+                                latest edits will be lost.
                             </p>
 
                             <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
                                 <button
                                     type="button"
-                                    onClick={() => setShowUnsavedChangesModal(false)}
-                                    disabled={isSubmitting || isAutoSaving}
+                                    onClick={() => {
+                                        setShowUnsavedChangesModal(false);
+                                        navigateBack();
+                                    }}
                                     style={{
-                                        background: "#e5e7eb",
-                                        color: "#111827",
-                                        padding: "10px 22px",
-                                        borderRadius: "6px",
+                                        background: "#ff4a3d",
+                                        color: "#fff",
+                                        padding: "10px 16px",
+                                        borderRadius: "8px",
                                         border: "none",
-                                        fontSize: "15px",
-                                        fontWeight: 600,
-                                        cursor: isSubmitting || isAutoSaving ? "not-allowed" : "pointer",
-                                        opacity: isSubmitting || isAutoSaving ? 0.7 : 1,
+                                        fontSize: "14px",
+                                        fontWeight: 700,
+                                        cursor: "pointer",
                                     }}
                                 >
-                                    Keep Editing
+                                    Leave without saving
                                 </button>
 
                                 <button
                                     type="button"
-                                    onClick={handleSaveAndLeave}
-                                    disabled={isSubmitting || isAutoSaving}
+                                    onClick={() => setShowUnsavedChangesModal(false)}
                                     style={{
-                                        background: "#1e73be",
+                                        background: "#1f9d63",
                                         color: "#fff",
-                                        padding: "10px 22px",
-                                        borderRadius: "6px",
+                                        padding: "10px 16px",
+                                        borderRadius: "8px",
                                         border: "none",
-                                        fontSize: "15px",
-                                        fontWeight: 600,
-                                        cursor: isSubmitting || isAutoSaving ? "not-allowed" : "pointer",
-                                        opacity: isSubmitting || isAutoSaving ? 0.7 : 1,
+                                        fontSize: "14px",
+                                        fontWeight: 700,
+                                        cursor: "pointer",
                                     }}
                                 >
-                                    {isSubmitting ? <span className="spinner" /> : "Save & Leave"}
+                                    Keep editing
                                 </button>
                             </div>
                         </div>

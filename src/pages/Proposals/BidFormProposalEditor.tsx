@@ -739,6 +739,14 @@ export default function BidFormProposalEditor() {
         </div>
       )}
 
+      {!isReadOnly && (
+        <div className="bid-editor-editable-disclaimer">
+          <strong>Customize your proposal</strong>
+          Every field in this proposal is editable — click any description, price, number, date, or
+          dropdown to change it, then save or download once it's ready to send to your client.
+        </div>
+      )}
+
       <div className="bid-editor-document-shell">
         <div className={`bid-editor-document ${isReadOnly ? "is-read-only" : ""}`}>
           <table cellPadding={16} cellSpacing={0} style={{ background: "#2A3439", color: "white" }}>
@@ -847,7 +855,7 @@ export default function BidFormProposalEditor() {
             <table cellPadding={10} cellSpacing={0} className="bid-editor-card-table">
               <tbody>
                 <tr>
-                  <td>
+                  <td width="40%">
                     <strong className="bid-editor-label-lg">CLIENT</strong>
                     <div className="bid-editor-client-stack">
                       {clientLines.map((line) => (
@@ -857,9 +865,21 @@ export default function BidFormProposalEditor() {
                           onChange={(value) => updateField(line.key, value)}
                           readOnly={isReadOnly}
                           className="bid-editor-client-line"
+                          multiline
+                          rows={1}
                         />
                       ))}
                     </div>
+                  </td>
+                  <td width="60%" style={{ paddingLeft: 32 }}>
+                    <strong className="bid-editor-label-lg">PAYMENT TERMS</strong>
+                    <EditableField
+                      value={documentData.payment_terms}
+                      onChange={(value) => updateField("payment_terms", value)}
+                      readOnly={isReadOnly}
+                      multiline
+                      rows={4}
+                    />
                   </td>
                 </tr>
               </tbody>
@@ -868,7 +888,7 @@ export default function BidFormProposalEditor() {
             <table cellPadding={10} cellSpacing={0} className="bid-editor-card-table">
               <tbody>
                 <tr>
-                  <td width="25%">
+                  <td width="40%">
                     <strong className="bid-editor-label-lg">SALESPERSON</strong>
                     <EditableField
                       value={documentData.salesperson}
@@ -878,7 +898,7 @@ export default function BidFormProposalEditor() {
                       rows={2}
                     />
                   </td>
-                  <td width="25%">
+                  <td width="40%">
                     <strong className="bid-editor-label-lg">JOB</strong>
                     <EditableField
                       value={documentData.job}
@@ -886,16 +906,6 @@ export default function BidFormProposalEditor() {
                       readOnly={isReadOnly}
                       multiline
                       rows={2}
-                    />
-                  </td>
-                  <td width="30%">
-                    <strong className="bid-editor-label-lg">PAYMENT TERMS</strong>
-                    <EditableField
-                      value={documentData.payment_terms}
-                      onChange={(value) => updateField("payment_terms", value)}
-                      readOnly={isReadOnly}
-                      multiline
-                      rows={4}
                     />
                   </td>
                   <td width="20%">
@@ -1001,6 +1011,7 @@ export default function BidFormProposalEditor() {
                         onChange={(value) => handleNumberFieldChange("contingency_percentage", value)}
                         readOnly={isReadOnly}
                         className="bid-editor-percent-input"
+                        align="right"
                       />
                       %)
                     </strong>
@@ -1142,10 +1153,10 @@ export default function BidFormProposalEditor() {
       {showBackConfirm && (
         <div className="bid-editor-back-modal-overlay">
           <div className="bid-editor-back-modal">
-            <h2>Save Your Work?</h2>
+            <h2>Unsaved changes</h2>
             <p>
-              You have unsaved changes in this proposal. Save your work before going back so
-              your latest edits are not lost.
+              You have unsaved changes in this proposal. If you leave now, your latest edits
+              will be lost.
             </p>
             <div className="bid-editor-back-modal-actions">
               <button
@@ -1153,14 +1164,14 @@ export default function BidFormProposalEditor() {
                 className="bid-editor-back-modal-back"
                 onClick={() => navigateWithScrollReset(`/bids/${bidId}`)}
               >
-                Back
+                Leave without saving
               </button>
               <button
                 type="button"
                 className="bid-editor-back-modal-return"
                 onClick={() => setShowBackConfirm(false)}
               >
-                Return to Proposal
+                Keep editing
               </button>
             </div>
           </div>
