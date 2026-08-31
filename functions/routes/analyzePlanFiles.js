@@ -6,6 +6,7 @@ const { PDFDocument } = require("pdf-lib");
 const path = require("path");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const { AI_MODELS } = require("./lib/aiModels");
 const {
   buildPlanModuleSummaryData,
   createJsonCompletion,
@@ -733,7 +734,7 @@ const analyzeVisualDocument = async ({
 
   const { parsed, usage } = await createResponsesJsonCompletion({
     openai,
-    model: "gpt-5.2",
+    model: AI_MODELS.STANDARD,
     reasoningEffort: "medium",
     responseFormat: {
       type: "json_schema",
@@ -1011,7 +1012,7 @@ const summarizeProjectFromPlans = async (files, openAiApiKey, userNotes = "") =>
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: "gpt-5.2",
+        model: AI_MODELS.STANDARD,
         reasoningEffort: "medium",
         responseFormat: {
           type: "json_schema",
@@ -1083,7 +1084,7 @@ Return exactly:
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: "gpt-5.2",
+    model: AI_MODELS.STANDARD,
     reasoningEffort: "medium",
     responseFormat: {
       type: "json_schema",

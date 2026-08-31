@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const { AI_MODELS } = require("./lib/aiModels");
 const {
   buildPlanModuleSummaryData,
   createJsonCompletion,
@@ -119,7 +120,7 @@ const generateConflictAnalysis = async (files, openAiApiKey, userNotes = "") => 
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: "gpt-5",
+        model: AI_MODELS.STANDARD,
         reasoningEffort: "medium",
         responseFormat: getConflictResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
@@ -171,7 +172,7 @@ Return exactly:
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: "gpt-5",
+    model: AI_MODELS.STANDARD,
     reasoningEffort: "medium",
     responseFormat: getConflictResponseFormat(),
     systemPrompt: buildEstimatorSystemPrompt(`

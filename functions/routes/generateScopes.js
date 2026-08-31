@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const { AI_MODELS } = require("./lib/aiModels");
 const {
   buildPlanModuleSummaryData,
   createJsonCompletion,
@@ -185,7 +186,7 @@ const generateTradeScopesFromPlans = async (files, openAiApiKey, userNotes = "")
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: "gpt-5.2",
+        model: AI_MODELS.STANDARD,
         reasoningEffort: "medium",
         responseFormat: getScopeResponseFormat(),
         systemPrompt: buildEstimatorSystemPrompt(`
@@ -263,7 +264,7 @@ Return exactly this shape:
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: "gpt-5.2",
+    model: AI_MODELS.STANDARD,
     reasoningEffort: "medium",
     responseFormat: getScopeResponseFormat(),
     systemPrompt: buildEstimatorSystemPrompt(`

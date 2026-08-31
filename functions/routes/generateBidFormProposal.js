@@ -1,4 +1,5 @@
 const OpenAI = require("openai");
+const { AI_MODELS } = require("./lib/aiModels");
 
 const asNumber = (value) => {
   const numeric = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
@@ -82,8 +83,8 @@ module.exports = async function generateBidFormProposalHandler(
     };
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      reasoning_effort: "medium",
+      model: AI_MODELS.FAST,
+      reasoning_effort: "low",
       messages: [
         {
           role: "system",

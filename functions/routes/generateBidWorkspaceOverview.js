@@ -1,4 +1,5 @@
 const OpenAI = require("openai");
+const { AI_MODELS } = require("./lib/aiModels");
 
 const asNumber = (value) => {
   const numeric = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
@@ -60,10 +61,8 @@ module.exports = async function generateBidWorkspaceOverviewHandler(
     });
 
     const completion = await openai.chat.completions.create({
-      // Cheapest GPT-5 model; this is a short summary from structured data,
-      // so minimal reasoning is enough. max_completion_tokens caps output cost.
-      model: "gpt-5-nano",
-      reasoning_effort: "minimal",
+      model: AI_MODELS.FAST,
+      reasoning_effort: "none",
       max_completion_tokens: 800,
       response_format: { type: "json_object" },
       messages: [

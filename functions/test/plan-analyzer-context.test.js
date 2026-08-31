@@ -117,8 +117,8 @@ test("createResponsesJsonCompletion maps structured output and responses token u
 
   const result = await createResponsesJsonCompletion({
     openai,
-    model: "gpt-5-mini",
-    reasoningEffort: "medium",
+    model: "gpt-5.6-luna",
+    reasoningEffort: "low",
     systemPrompt: "Return JSON.",
     userContent: [
       {
@@ -145,7 +145,7 @@ test("createResponsesJsonCompletion maps structured output and responses token u
 
   assert.deepEqual(result.parsed, { value: "visual fallback" });
   assert.equal(createPayload.text.format.name, "test_schema");
-  assert.deepEqual(createPayload.reasoning, { effort: "medium" });
+  assert.deepEqual(createPayload.reasoning, { effort: "low" });
   assert.equal(formatUsageMetrics(result.usage), "input 12 | output 4 | total 16");
 });
 

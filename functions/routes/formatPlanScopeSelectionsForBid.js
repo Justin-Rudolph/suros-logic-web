@@ -1,4 +1,5 @@
 const OpenAI = require("openai");
+const { AI_MODELS } = require("./lib/aiModels");
 
 const normalizeBulletLine = (value) => {
   const next = String(value || "")
@@ -87,7 +88,7 @@ module.exports = async function formatPlanScopeSelectionsForBidHandler(
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: AI_MODELS.FAST,
       reasoning_effort: "low",
       messages: [
         {

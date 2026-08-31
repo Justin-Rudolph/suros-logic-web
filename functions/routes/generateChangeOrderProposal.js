@@ -1,4 +1,5 @@
 const OpenAI = require("openai");
+const { AI_MODELS } = require("./lib/aiModels");
 
 const toString = (value) => String(value ?? "").trim();
 
@@ -59,8 +60,8 @@ module.exports = async function generateChangeOrderProposalHandler(
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      reasoning_effort: "medium",
+      model: AI_MODELS.FAST,
+      reasoning_effort: "low",
       messages: [
         {
           role: "system",

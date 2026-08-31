@@ -1,4 +1,5 @@
 const OpenAI = require("openai");
+const { AI_MODELS } = require("./lib/aiModels");
 
 module.exports = async function generateEstimateHandler(
   req,
@@ -54,7 +55,7 @@ module.exports = async function generateEstimateHandler(
       }
 
       const mergeCompletion = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: AI_MODELS.FAST,
         reasoning_effort: "low",
         messages: [
           {
@@ -146,7 +147,7 @@ ${answeredResponses
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.2",
+      model: AI_MODELS.STANDARD,
       reasoning_effort: "high",
       messages: [
         {
