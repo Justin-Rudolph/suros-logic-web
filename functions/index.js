@@ -49,9 +49,9 @@ exports.generateEstimate = onRequest(
    GENERATE BID FORM PROPOSAL
 -------------------------------------------------- */
 
+// No AI call, so no OpenAI secret.
 exports.generateBidFormProposal = onRequest(
   {
-    secrets: [OPENAI_API_KEY],
     timeoutSeconds: 300,
   },
   async (req, res) => {
@@ -62,7 +62,29 @@ exports.generateBidFormProposal = onRequest(
 
       const generateBidFormProposalHandler = require("./routes/generateBidFormProposal");
 
-      await generateBidFormProposalHandler(
+      await generateBidFormProposalHandler(req, res);
+    });
+  }
+);
+
+/* --------------------------------------------------
+   REFORMAT LINE ITEM SCOPE
+-------------------------------------------------- */
+
+exports.reformatLineItemScope = onRequest(
+  {
+    secrets: [OPENAI_API_KEY],
+    timeoutSeconds: 120,
+  },
+  async (req, res) => {
+    cors({ origin: true })(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const reformatLineItemScopeHandler = require("./routes/reformatLineItemScope");
+
+      await reformatLineItemScopeHandler(
         req,
         res,
         OPENAI_API_KEY.value()

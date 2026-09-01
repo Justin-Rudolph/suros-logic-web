@@ -7,6 +7,7 @@ const ROUTE_MODULES = {
   bidForm: "../routes/generateBidFormProposal",
   estimate: "../routes/generateEstimate",
   planScopeSelections: "../routes/formatPlanScopeSelectionsForBid",
+  reformatScope: "../routes/reformatLineItemScope",
   downloadProposalPdf: "../routes/downloadBidFormProposalPdf",
 };
 
@@ -176,35 +177,58 @@ test("generateChangeOrderProposal normalizes multiline breakdown lines", async (
   );
 });
 
-test("generateBidFormProposal falls back to normalized raw scope lines when AI omits expansions", async () => {
+test("generateBidFormProposal uses the entered scope verbatim without an AI call", async () => {
+  const handler = loadHandler("bidForm");
+  const req = {
+    body: {
+      payload: {
+        company_name: "Suros Logic",
+        customer_name: "Taylor",
+        job: "Bathroom Remodel",
+        tax_amount: "N/A",
+        tax_percentage: "N/A",
+        line_items: [
+          {
+            trade: "Demo",
+            material_labor_included: "Yes",
+            line_total: "$250.00",
+            scope: "remove vanity\n- haul off debris",
+          },
+        ],
+      },
+    },
+  };
+  const res = createMockResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.documentData.tax_percentage, 0);
+  assert.deepEqual(res.body.documentData.line_items[0].expanded_scope_lines, [
+    "- remove vanity",
+    "- haul off debris",
+  ]);
+});
+
+test("reformatLineItemScope returns the expanded lines for a single trade", async () => {
+  let createPayload;
+
   await withMockedOpenAI(
     JSON.stringify({
-      line_items: [
-        {
-          index: 1,
-          expanded_scope_lines: [],
-        },
+      scope_lines: [
+        "Demo the existing vanity and haul off all debris.",
+        "- Furnish and install the new vanity, scribed to the walls.",
       ],
     }),
     async () => {
-      const handler = loadHandler("bidForm");
+      const handler = loadHandler("reformatScope");
       const req = {
         body: {
-          payload: {
-            company_name: "Suros Logic",
-            customer_name: "Taylor",
-            job: "Bathroom Remodel",
-            tax_amount: "N/A",
-            tax_percentage: "N/A",
-            line_items: [
-              {
-                trade: "Demo",
-                material_labor_included: "Yes",
-                line_total: "$250.00",
-                scope: "remove vanity\n- haul off debris",
-              },
-            ],
-          },
+          trade: "Demo",
+          scope: "- remove vanity\n- new vanity",
+          material_labor_included: "Yes",
+          company_name: "Suros Logic",
+          job: "Bathroom Remodel",
         },
       };
       const res = createMockResponse();
@@ -212,13 +236,56 @@ test("generateBidFormProposal falls back to normalized raw scope lines when AI o
       await handler(req, res, "fake-key");
 
       assert.equal(res.statusCode, 200);
-      assert.equal(res.body.documentData.tax_percentage, 0);
-      assert.deepEqual(res.body.documentData.line_items[0].expanded_scope_lines, [
-        "- remove vanity",
-        "- haul off debris",
+      assert.deepEqual(res.body.scope_lines, [
+        "- Demo the existing vanity and haul off all debris.",
+        "- Furnish and install the new vanity, scribed to the walls.",
       ]);
+      assert.match(createPayload.messages[1].content, /"trade":"Demo"/);
+      assert.match(createPayload.messages[1].content, /remove vanity/);
+    },
+    {
+      onCreate: (payload) => {
+        createPayload = payload;
+      },
     }
   );
+});
+
+test("reformatLineItemScope falls back to the raw lines when the AI returns nothing usable", async () => {
+  await withMockedOpenAI("not json at all", async () => {
+    const handler = loadHandler("reformatScope");
+    const req = {
+      body: {
+        trade: "Demo",
+        scope: "remove vanity\n- haul off debris",
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res, "fake-key");
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.scope_lines, [
+      "- remove vanity",
+      "- haul off debris",
+    ]);
+  });
+});
+
+test("reformatLineItemScope rejects a blank scope", async () => {
+  const handler = loadHandler("reformatScope");
+  const req = {
+    body: {
+      trade: "Demo",
+      scope: "   \n  ",
+    },
+  };
+  const res = createMockResponse();
+
+  await handler(req, res, "fake-key");
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: "A scope of work is required." });
 });
 
 test("generateBidFormProposal rejects missing line items", async () => {

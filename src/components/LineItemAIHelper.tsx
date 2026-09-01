@@ -49,6 +49,7 @@ export default function LineItemAIHelper({
   const [loadingMessage, setLoadingMessage] = useState("Generating Estimate...");
   const [hasAskedInitialQuestions, setHasAskedInitialQuestions] = useState(false);
   const [estimateError, setEstimateError] = useState(false);
+  const [hoveredTrigger, setHoveredTrigger] = useState<"generate" | "view" | null>(null);
   const preserveAnswersRef = useRef(false);
   const descriptionScrollRef = useRef<HTMLDivElement>(null);
 
@@ -228,11 +229,18 @@ export default function LineItemAIHelper({
           onClick={handleGenerateEstimateClick}
           disabled={loading || !canEdit}
           title={canEdit ? undefined : "You don't have permission to edit this teammate's bid."}
+          onMouseEnter={() => setHoveredTrigger("generate")}
+          onMouseLeave={() => setHoveredTrigger(null)}
           style={{
             flexShrink: 0,
             height: "40px",
             padding: "0 12px",
-            background: loading || !canEdit ? "#7aa8cf" : "#1e73be",
+            background:
+              loading || !canEdit
+                ? "#7aa8cf"
+                : hoveredTrigger === "generate"
+                ? "#155b91"
+                : "#1e73be",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
@@ -275,9 +283,11 @@ export default function LineItemAIHelper({
               setOpen(true);
             }}
             disabled={loading}
+            onMouseEnter={() => setHoveredTrigger("view")}
+            onMouseLeave={() => setHoveredTrigger(null)}
             style={{
               height: "40px", padding: "0 12px",
-              background: loading ? "#8c8c8c" : "#444",
+              background: loading ? "#8c8c8c" : hoveredTrigger === "view" ? "#333" : "#444",
               color: "#fff", border: "none", borderRadius: "4px",
               cursor: loading ? "not-allowed" : "pointer",
               fontSize: "12px", whiteSpace: "nowrap",

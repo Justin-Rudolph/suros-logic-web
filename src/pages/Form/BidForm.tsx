@@ -12,7 +12,7 @@ import React, {
 } from "react";
 
 import "./BidForm.css";
-import { GripVertical, Info, Trash2 } from "lucide-react";
+import { GripVertical, Info, Sparkles, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import surosLogo from "@/assets/suros-logo-new.png";
 import { LineItem, BidFormState } from "./types";
@@ -362,7 +362,14 @@ const BidForm: React.FC = () => {
             workspaceOverviewStatus: "generating" as const,
             workspaceOverviewSummary: "",
             formSnapshot: form,
-            lineItems,
+            // Keep `scope_original` so Undo survives a reload, but never as an
+            // explicit `undefined` (Firestore rejects those). Submitting builds
+            // the proposal from the scope as it stands, so it drops the buffer.
+            lineItems: lineItems.map(({ scope_original, ...item }) =>
+                scope_original === undefined || status === "submitted"
+                    ? item
+                    : { ...item, scope_original }
+            ),
             updatedAt: serverTimestamp(),
         };
 
@@ -928,6 +935,89 @@ const BidForm: React.FC = () => {
     };
 
     /** -------------------------------
+     * SCOPE REFORMAT (AI)
+     *
+     * Tracked by object identity, not index, so a reorder or delete mid-request
+     * can't land the result on the wrong line item. Editing a field rebuilds
+     * that object, so the row is locked while the request is in flight.
+     --------------------------------*/
+    const [reformattingItem, setReformattingItem] = useState<LineItem | null>(null);
+
+    const handleReformatScope = async (index: number) => {
+        const target = lineItems[index];
+
+        if (!target || !target.scope.trim() || reformattingItem) return;
+
+        setReformattingItem(target);
+
+        try {
+            const res = await fetch(`${getFunctionsBaseUrl()}/reformatLineItemScope`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    trade: target.trade,
+                    scope: target.scope,
+                    material_labor_included: target.material_labor_included,
+                    company_name: form.company_name,
+                    job: form.job,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !Array.isArray(data?.scope_lines) || !data.scope_lines.length) {
+                throw new Error(
+                    data?.error || "We ran into an issue reformatting this scope of work."
+                );
+            }
+
+            markDirty();
+            setLineItems((prev) =>
+                prev.map((item) =>
+                    item === target
+                        ? {
+                              ...item,
+                              scope: data.scope_lines.join("\n"),
+                              scope_original: item.scope,
+                          }
+                        : item
+                )
+            );
+        } catch (error) {
+            showModal(
+                "error",
+                "Reformat Failed",
+                error instanceof Error
+                    ? error.message
+                    : "We ran into an issue reformatting this scope of work."
+            );
+        } finally {
+            setReformattingItem(null);
+        }
+    };
+
+    const handleUndoScopeReformat = (index: number) => {
+        markDirty();
+        setLineItems((prev) =>
+            prev.map((item, i) =>
+                i === index && item.scope_original !== undefined
+                    ? { ...item, scope: item.scope_original, scope_original: undefined }
+                    : item
+            )
+        );
+    };
+
+    // The new text is already in the textarea, so Apply just drops the original.
+    const handleApplyScopeReformat = (index: number) => {
+        markDirty();
+        setLineItems((prev) =>
+            prev.map((item, i) =>
+                i === index ? { ...item, scope_original: undefined } : item
+            )
+        );
+    };
+
+    /** -------------------------------
      * EMAIL VALIDATION (format check only)
      --------------------------------*/
     const validateEmail = (e: FocusEvent<HTMLInputElement>) => {
@@ -1071,6 +1161,14 @@ const BidForm: React.FC = () => {
 
             setIsDirty(false);
             setIsSubmitting(false);
+            // Match the submitted record, which drops the undo buffer.
+            setLineItems((prev) =>
+                prev.map((item) =>
+                    item.scope_original === undefined
+                        ? item
+                        : { ...item, scope_original: undefined }
+                )
+            );
 
             void generateBidFormProposalRecord(bidFormId, bidFormProposalId, payload);
 
@@ -1575,6 +1673,8 @@ const BidForm: React.FC = () => {
                                     {lineItems.map((item, index) => {
                                         const placeholderTrade =
                                             placeholderTrades[index % placeholderTrades.length];
+                                        // Locks the row: editing a field would strand the result.
+                                        const isReformatting = reformattingItem === item;
 
                                         return (
                                             <div
@@ -1602,7 +1702,7 @@ const BidForm: React.FC = () => {
                                                     onChange={(e) =>
                                                         handleLineItemChange(index, "trade", e.target.value)
                                                     }
-                                                    readOnly={!canEditThisBid}
+                                                    readOnly={!canEditThisBid || isReformatting}
                                                     className={`${isInvalid(`line_trade_${index}`) ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                                 />
 
@@ -1615,8 +1715,54 @@ const BidForm: React.FC = () => {
                                                     value={item.scope}
                                                     onChange={(e) => handleScopeChange(index, e)}
                                                     onKeyDown={(e) => handleScopeKeyDown(index, e)}
-                                                    readOnly={!canEditThisBid}
+                                                    readOnly={!canEditThisBid || isReformatting}
                                                 ></textarea>
+
+                                                <div className="scope-reformat-actions">
+                                                    {item.scope_original === undefined ? (
+                                                        <button
+                                                            type="button"
+                                                            className="scope-reformat-button"
+                                                            onClick={() => handleReformatScope(index)}
+                                                            disabled={
+                                                                !canEditThisBid ||
+                                                                !item.scope.trim() ||
+                                                                reformattingItem !== null
+                                                            }
+                                                            title={
+                                                                canEditThisBid
+                                                                    ? "Clean up and reword this scope into professional lines"
+                                                                    : "You don't have permission to edit this teammate's bid."
+                                                            }
+                                                        >
+                                                            <Sparkles size={14} aria-hidden="true" />
+                                                            {reformattingItem === item
+                                                                ? "Reformatting..."
+                                                                : "Reformat Scope"}
+                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="scope-reformat-button scope-reformat-undo"
+                                                                onClick={() => handleUndoScopeReformat(index)}
+                                                                disabled={!canEditThisBid}
+                                                                title="Restore the scope you had before reformatting"
+                                                            >
+                                                                Undo
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="scope-reformat-button scope-reformat-apply"
+                                                                onClick={() => handleApplyScopeReformat(index)}
+                                                                disabled={!canEditThisBid}
+                                                                title="Keep the reformatted scope"
+                                                            >
+                                                                Apply
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
 
                                                 <label>Material and Labor Included?</label>
                                                 <select
@@ -1628,7 +1774,7 @@ const BidForm: React.FC = () => {
                                                             e.target.value
                                                         )
                                                     }
-                                                    disabled={!canEditThisBid}
+                                                    disabled={!canEditThisBid || isReformatting}
                                                     className={
                                                         `${isInvalid(`line_material_labor_included_${index}`)
                                                             ? "input-error"
@@ -1665,7 +1811,7 @@ const BidForm: React.FC = () => {
                                                                 formatDollarInput(e.target.value)
                                                             )
                                                         }
-                                                        readOnly={!canEditThisBid}
+                                                        readOnly={!canEditThisBid || isReformatting}
                                                         className={`${isInvalid(`line_line_total_${index}`) ? "input-error" : ""} ${!canEditThisBid ? "input-readonly" : ""}`}
                                                     />
 
@@ -1673,7 +1819,7 @@ const BidForm: React.FC = () => {
                                                         tradeName={item.trade}
                                                         scope={item.scope}
                                                         zipCode={extractZipCode(form.company_address)}
-                                                        canEdit={canEditThisBid}
+                                                        canEdit={canEditThisBid && !isReformatting}
                                                         initialEstimate={item.estimate}
                                                         siblingLineItems={lineItems
                                                             .filter((_, i) => i !== index)
@@ -1734,7 +1880,7 @@ const BidForm: React.FC = () => {
                                                                     e.target.value.replace(/[^0-9.]/g, "")
                                                                 )
                                                             }
-                                                            readOnly={!canEditThisBid}
+                                                            readOnly={!canEditThisBid || isReformatting}
                                                             className={!canEditThisBid ? "input-readonly" : ""}
                                                         />
                                                         <span className="percent-suffix">%</span>

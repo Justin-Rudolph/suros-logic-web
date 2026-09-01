@@ -2,6 +2,19 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.6.0",
+    date: "August 31, 2026",
+    highlights: [
+      "Added a Reformat Scope button to each bid line item so you can rewrite a scope of work into clean, professional lines whenever you want — one line item at a time, with Undo and Apply so you can compare the result against what you had and keep whichever you prefer.",
+      "Bids no longer rewrite your scope of work automatically when you submit. What you type is what appears on the proposal, so the wording is yours unless you ask for a rewrite.",
+      "Added bid form autosave, which saves your work in the background every five minutes and shows a status banner so you can see when it last saved.",
+      "Added an unsaved changes warning when leaving a bid form, so in-progress work is no longer lost by navigating away.",
+      "Fixed a tax field issue where setting tax to N/A could revert on its own.",
+      "Improved bid and change order proposals with a tighter layout that pairs Client with Payment Terms, cleaner font sizing, and manual line breaks that now carry through to the downloaded PDF.",
+      "Moved the AI features onto a newer model generation for faster, more consistent results.",
+    ],
+  },
+  {
     version: "v3.5.0",
     date: "July 31, 2026",
     highlights: [

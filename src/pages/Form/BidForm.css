@@ -241,6 +241,66 @@
   line-height: 1.5;
 }
 
+/* SCOPE REFORMAT ACTIONS
+   Same color roles as the form's buttons — secondary gray (see
+   .secondary-submit / .line-item-reorder-toggle) for Reformat Scope and Undo,
+   primary blue for Apply — but a compact size, right-aligned under the scope
+   textarea since it's a per-line-item helper, not a form-level action. */
+.bid-form-page .scope-reformat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: -8px;
+  margin-bottom: 2px;
+}
+
+.bid-form-page .scope-reformat-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 40px; /* match the Generate Estimate / View Estimate buttons */
+  padding: 0 14px;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+}
+
+.bid-form-page .scope-reformat-button,
+.bid-form-page .scope-reformat-undo {
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+}
+
+/* Reformat Scope / Undo keep the gray hover even while disabled (e.g. the
+   "Reformatting..." state) so the global blue button:hover never shows here. */
+.bid-form-page .scope-reformat-button:hover,
+.bid-form-page .scope-reformat-undo:hover {
+  background: #e5e7eb;
+}
+
+.bid-form-page .scope-reformat-apply {
+  background: #1e73be;
+  color: #ffffff;
+  border: 1px solid #1e73be;
+}
+
+.bid-form-page .scope-reformat-apply:hover:not(:disabled) {
+  background: #155b91;
+}
+
+.bid-form-page .scope-reformat-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bid-form-page .scope-reformat-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 115, 190, 0.22);
+}
+
 .bid-form-page .line-item-count-input {
   appearance: textfield;
   -moz-appearance: textfield;

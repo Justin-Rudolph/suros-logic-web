@@ -30,6 +30,8 @@ export interface LineItem {
   line_total: string | number;
   margin_percentage?: string;
   estimate?: SavedEstimate;
+  /** Scope as it read before an AI reformat, while Apply/Undo is pending. */
+  scope_original?: string;
 }
 
 export interface BidFormState {
