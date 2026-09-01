@@ -45,18 +45,6 @@ const getNumberInputValue = (value: number | "N/A") => {
   return String(value);
 };
 
-const splitEditableLines = (value: string) =>
-  value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-const formatSentenceLine = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  return trimmed.startsWith("- ") ? trimmed : `- ${trimmed.replace(/^-+\s*/, "")}`;
-};
-
 const autoResizeTextarea = (element: HTMLTextAreaElement) => {
   element.style.height = "auto";
   element.style.height = `${element.scrollHeight}px`;
@@ -107,15 +95,15 @@ const toEditableCurrency = (value: string | number) => {
     : String(amount);
 };
 
-const normalizeScopeDraft = (value: string) =>
-  value
-    .split(/\r?\n/)
-    .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return "";
-      return formatSentenceLine(trimmed);
-    })
-    .filter(Boolean);
+// Scope is stored exactly as typed: blank lines are kept, whitespace is left
+// alone, and a bullet the author deleted is never put back. Any scope with real
+// text in it round-trips through `join("\n")` back into the textarea unchanged.
+// The lone exception is a scope holding only whitespace, which collapses to no
+// lines so an empty box doesn't print blank paragraphs into the PDF.
+const splitScopeDraft = (value: string) => {
+  const lines = value.split(/\r?\n/);
+  return lines.some((line) => line.trim()) ? lines : [];
+};
 
 const EditableField = ({
   value,
@@ -432,7 +420,7 @@ export default function BidFormProposalEditor() {
 
     updateLineItem(index, (current) => ({
       ...current,
-      expanded_scope_lines: normalizeScopeDraft(nextValue),
+      expanded_scope_lines: splitScopeDraft(nextValue),
     }));
 
     requestAnimationFrame(() => {
@@ -470,7 +458,7 @@ export default function BidFormProposalEditor() {
 
     updateLineItem(index, (current) => ({
       ...current,
-      expanded_scope_lines: normalizeScopeDraft(nextValue),
+      expanded_scope_lines: splitScopeDraft(nextValue),
     }), false);
   };
 

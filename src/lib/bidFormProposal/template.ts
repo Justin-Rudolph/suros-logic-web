@@ -110,16 +110,34 @@ const buildCompanySloganMarkup = (value: string) => {
   return `<em style="font-size:22px;">&ldquo;${escapeHtml(trimmed)}&rdquo;</em>`;
 };
 
+// Scope lines print exactly as the author typed them: no trimming, no dropped
+// blank lines, and `pre-wrap` so leading spaces survive (kept on the <p> itself,
+// not the cell, so the whitespace between paragraphs still collapses). A blank
+// line needs a non-breaking space or the paragraph renders at zero height, and
+// the margin stays 0 so the PDF's line spacing matches the editor's textarea.
 const buildScopeLineHtml = (line: string) =>
-  `      <p style="margin: 0 0 4px; page-break-inside: avoid; break-inside: avoid;">${escapeHtml(line.trim())}</p>`;
+  `      <p style="margin: 0; white-space: pre-wrap; page-break-inside: avoid; break-inside: avoid;">${
+    line.trim() ? escapeHtml(line) : "&nbsp;"
+  }</p>`;
 
 const buildLineItemsRows = (lineItems: BidFormProposalLineItem[]) =>
   lineItems
     .map((lineItem, index) => {
-      const scopeLines = lineItem.expanded_scope_lines.filter((line) => line.trim());
-      const [firstScopeLine, ...remainingScopeLines] = scopeLines;
-      const firstScopeHtml = firstScopeLine ? `\n${buildScopeLineHtml(firstScopeLine)}` : "";
-      const remainingScopeHtml = remainingScopeLines.map(buildScopeLineHtml).join("\n");
+      const scopeLines = lineItem.expanded_scope_lines ?? [];
+      // The keep-together block below has to hold a line with real text on it or
+      // it guards nothing — a scope starting with a blank line would pin the
+      // title to an empty paragraph and let every actual scope line flow away.
+      // So the pinned run is any leading blanks plus the first line with content.
+      const firstContentIndex = scopeLines.findIndex((line) => line.trim());
+      const pinnedCount =
+        firstContentIndex === -1 ? scopeLines.length : firstContentIndex + 1;
+      const firstScopeHtml = pinnedCount
+        ? `\n${scopeLines.slice(0, pinnedCount).map(buildScopeLineHtml).join("\n")}`
+        : "";
+      const remainingScopeHtml = scopeLines
+        .slice(pinnedCount)
+        .map(buildScopeLineHtml)
+        .join("\n");
 
       return `<tr style="page-break-inside: auto; break-inside: auto;">
   <td style="vertical-align: top; padding: 8px; border-right: 0.25px solid #000; border-bottom: 0.25px solid #000; page-break-inside: auto; break-inside: auto;">${index + 1}</td>

@@ -3,22 +3,16 @@ const asNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+// Scope lines carry through exactly as the author typed them in the bid form:
+// blank lines between bullets are content, and a line the author stripped the
+// dash off of stays dashless. Only a scope with nothing but whitespace in it
+// collapses to no lines at all.
 const toScopeLines = (scope) => {
-  if (Array.isArray(scope)) {
-    return scope
-      .map((entry) => String(entry || "").trim())
-      .filter(Boolean);
-  }
+  const lines = Array.isArray(scope)
+    ? scope.map((entry) => String(entry ?? ""))
+    : String(scope || "").split(/\r?\n/);
 
-  return String(scope || "")
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-};
-
-const normalizeBulletLine = (value) => {
-  const line = String(value || "").trim();
-  return line.startsWith("- ") ? line : `- ${line.replace(/^-+\s*/, "")}`;
+  return lines.some((line) => line.trim()) ? lines : [];
 };
 
 module.exports = async function generateBidFormProposalHandler(req, res) {
@@ -71,7 +65,7 @@ module.exports = async function generateBidFormProposalHandler(req, res) {
             String(item?.material_labor_included || "").trim() === "No" ? "No" : "Yes",
           line_total: asNumber(item?.line_total),
           raw_scope_lines: rawScopeLines,
-          expanded_scope_lines: rawScopeLines.map(normalizeBulletLine),
+          expanded_scope_lines: rawScopeLines,
         };
       }),
     };

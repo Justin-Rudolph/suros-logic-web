@@ -1132,7 +1132,9 @@ const BidForm: React.FC = () => {
             const marginPct = Number((item.margin_percentage ?? "").replace(/[^0-9.]/g, "")) || 0;
             return {
                 trade: item.trade,
-                scope: item.scope.split(/\r?\n/).filter(Boolean),
+                // Blank lines the author typed are spacing they meant to keep,
+                // so the proposal gets every line — not just the non-empty ones.
+                scope: item.scope.split(/\r?\n/),
                 material_labor_included: item.material_labor_included,
                 line_total: Math.round(base * (1 + marginPct / 100) * 100) / 100,
             };

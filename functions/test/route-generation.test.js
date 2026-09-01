@@ -204,10 +204,52 @@ test("generateBidFormProposal uses the entered scope verbatim without an AI call
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.documentData.tax_percentage, 0);
+  // A dash the author never typed is never added back.
   assert.deepEqual(res.body.documentData.line_items[0].expanded_scope_lines, [
-    "- remove vanity",
+    "remove vanity",
     "- haul off debris",
   ]);
+});
+
+test("generateBidFormProposal keeps blank lines typed between scope lines", async () => {
+  const handler = loadHandler("bidForm");
+  const req = {
+    body: {
+      payload: {
+        company_name: "Suros Logic",
+        customer_name: "Taylor",
+        job: "Bathroom Remodel",
+        line_items: [
+          {
+            trade: "Plumbing",
+            material_labor_included: "Yes",
+            line_total: "$250.00",
+            scope: ["- Demo and remove", "", "Here is text", "", "- and we wil see"],
+          },
+          {
+            trade: "Empty",
+            material_labor_included: "Yes",
+            line_total: "$0.00",
+            scope: "   \n\n  ",
+          },
+        ],
+      },
+    },
+  };
+  const res = createMockResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body.documentData.line_items[0].expanded_scope_lines, [
+    "- Demo and remove",
+    "",
+    "Here is text",
+    "",
+    "- and we wil see",
+  ]);
+  // A scope with nothing but whitespace collapses instead of printing blanks.
+  assert.deepEqual(res.body.documentData.line_items[1].expanded_scope_lines, []);
 });
 
 test("reformatLineItemScope returns the expanded lines for a single trade", async () => {
