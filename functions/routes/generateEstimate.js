@@ -215,6 +215,28 @@ Other rules:
 - Use regional material and labor cost averages based on the provided zip code.
 - If exact material specifications are unclear, determine a reasonable price range (low-end to high-end), calculate the median between those values, and use that median unless the range difference is extreme.
 
+MATERIAL PRICING METHOD (how you must arrive at material_cost):
+- First determine whether the scope of work actually involves purchasing materials.
+  - If the scope names, implies, or requires materials (lumber, drywall, tile, paint, fixtures, wire, pipe, fasteners, concrete, roofing, cabinets, flooring, etc.), you must price them using the method below.
+  - If the scope is labor-only with no materials to purchase (pure demolition, haul-off, cleanup, tear-out, disconnect-only, inspection, protection, etc.), do NOT price materials from a retail source. Set material_cost to $0 or to a small, clearly-explained consumables/disposal-supply figure, and state in the description that the scope includes no purchased materials.
+- When the scope DOES include materials, price them as if you are shopping the Home Depot store nearest to the provided zip code:
+  - Anchor to the Home Depot store closest to that zip code and, when you can identify it, name the store's city/area in the description so the pricing basis is clear.
+  - For each distinct material, consider the range of comparable products Home Depot actually stocks for that material at the tier you are pricing, and use the MEDIAN price across those comparable products as the unit price. Do not use the single cheapest or single most expensive SKU.
+  - Show your work per material: the median unit price, the unit it is priced in (each, per sheet, per box, per sq ft, per linear ft, per gallon, per bag), the quantity required, the waste/overage factor applied, and the resulting extended cost.
+  - Apply the tier: "average_price" uses the median of Home Depot's standard/builder-grade offerings for that material; "high_tier_price" uses the median of Home Depot's premium/upper-end offerings for that material.
+- FALLBACK: if you cannot arrive at reliable Home Depot pricing for a given material — Home Depot does not stock it, it is a specialty/wholesale-only item, or the product line is too variable to pin down — fall back to regional supply-house and market averages for the provided zip code. When you fall back, say so explicitly in that material's bullet (for example: "not stocked at Home Depot — priced from regional supply-house averages for the area"). Always attempt Home Depot pricing first.
+- Never invent a specific Home Depot SKU number, item number, or exact advertised price you are not confident in. Give the realistic median price level for that product category instead, and describe the product by type and grade rather than by a fabricated part number.
+
+LABOR PRICING METHOD (how you must arrive at labor_cost):
+- Never state a labor dollar amount without showing how it was derived. labor_cost must always be the product of estimated hours and an hourly rate.
+- Identify the quantity driver that actually controls the labor for this scope — square footage, linear footage, unit/fixture count, cubic yards, number of openings, sheet count, material weight, demolition volume, or whatever factor genuinely governs the work — and state it.
+- Convert that driver into hours using a realistic production rate for the trade (for example: "installs at roughly 35 sq ft per hour", "roughly 1.5 hours per fixture"), then show the multiplication.
+- State the crew size and composition if it affects the calculation, and show hours as crew-hours or man-hours consistently.
+- State the hourly labor rate you are using for that trade in that region, and note that it is a loaded contractor rate (wage plus burden and overhead), not a raw wage.
+- Add and separately identify any labor beyond the core production time — mobilization, setup, protection/masking, cleanup, haul-off, access difficulty, or minimum trip charges — with the hours attributed to each.
+- The final labor bullet must reconcile: total hours x hourly rate = labor_cost, and that number must match the labor_cost field exactly.
+- Apply the tier: "average_price" uses typical regional loaded labor rates and standard production rates; "high_tier_price" uses higher-end crew rates, stronger margin, and more conservative (slower) production rates.
+
 If sufficient information is available (or bypass mode is TRUE):
 - Generate two complete estimate tiers:
   1. "average_price": a realistic median market price using standard quality materials, standard contractor overhead, and typical labor rates for the region.
@@ -223,14 +245,24 @@ If sufficient information is available (or bypass mode is TRUE):
   - material_cost as a dollar amount
   - labor_cost as a dollar amount
   - total_cost as a dollar amount
-  - description: a breakdown of how you determined the costs for that specific tier, formatted as bullet points. 
-  Each bullet must start with "- " and cover one distinct point (e.g. a specific material cost, a labor rate, 
-  a quantity assumption, a regional factor). Base your calculations strictly on the information given in the request. 
-  Use as many bullets as needed to clearly explain the estimate, but keep each bullet concise.
+  - description: the full show-your-work breakdown for that specific tier, formatted as bullet points. Each bullet must start with "- " and cover one distinct point. Do not write vague bullets like "materials priced at market rate" — every cost in the estimate must be traceable to a bullet that shows the numbers behind it.
+- The description for each tier must be ordered and must include, at minimum:
+  1. A pricing-basis bullet naming the zip code and the Home Depot location the material pricing is anchored to (or stating that the scope is labor-only and no materials were priced).
+  2. One bullet per distinct material, each showing: the material and grade, the median Home Depot unit price and its unit, the quantity required, the waste factor, and the extended cost. Note any fallback to regional supplier averages inside that material's bullet.
+  3. A material subtotal bullet that sums to material_cost exactly.
+  4. A labor-driver bullet stating the quantity driver (square footage, unit count, linear footage, etc.) and where that number came from.
+  5. One or more labor-hours bullets showing the production rate and the math that converts the driver into hours, including any mobilization, setup, cleanup, or access-difficulty hours.
+  6. A labor-rate bullet stating the loaded hourly rate for that trade in that region.
+  7. A labor total bullet reconciling total hours x rate = labor_cost exactly.
+  8. A total bullet showing material_cost + labor_cost = total_cost.
+  9. Any assumption bullets for details not provided in the scope, each clearly labeled as an assumption.
+- Every number that appears in the description must be internally consistent with the material_cost, labor_cost, and total_cost fields for that tier. Do the arithmetic and make it add up.
+- Base all calculations strictly on the information given in the request plus the pricing methods above. Keep each bullet concise — one calculation or one fact per bullet.
 - Also set the top-level "estimate" equal to the "average_price" tier and set the top-level "explanation" equal to the "average_price.description" for backward compatibility.
 
 Formatting Requirements:
 - All dollar amounts must be formatted with proper commas and no decimal places (Ex: $1,000).
+- Exception: unit prices and hourly rates inside the description bullets may include cents when precision matters (Ex: $18.47 per sheet, $1.85 per sq ft, $85/hr). The material_cost, labor_cost, and total_cost fields themselves must still be whole dollars with commas.
 
 Do not include any additional commentary outside of the required JSON response.
           `,
