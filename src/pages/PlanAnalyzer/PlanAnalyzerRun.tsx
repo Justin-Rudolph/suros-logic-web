@@ -1,15 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
@@ -25,6 +18,7 @@ import { PlanModuleStatus, PlanModuleType } from "@/models/PlanAnalyzerShared";
 import { PlanVerificationModuleRecord, VerificationItem } from "@/models/PlanAnalyzerVerification";
 import { PlanProjectRecord } from "@/models/PlanProjects";
 
+import PlanLedger, { LedgerColumn, LedgerGroup, LedgerTone } from "./PlanLedger";
 import "./PlanAnalyzer.css";
 
 type FirestoreTimestampLike = {
@@ -38,53 +32,19 @@ type PlanProjectDoc = PlanProjectRecord;
 const NO_EDIT_TITLE =
   "Only the creator or an account owner/full-access teammate can change this analysis.";
 
-type ModalState =
-  | {
-      type: "scope";
-      tradeKey: string;
-      tradeLabel: string;
-      title: string;
-      description: string;
-      items: ScopeItem[];
-    }
-  | {
-      type: "scopeFavorites";
-      title: string;
-      description: string;
-      items: Array<{
-        id: string;
-        tradeKey: string;
-        tradeLabel: string;
-        item: ScopeItem;
-      }>;
-    }
-    | {
-      type: "verification";
-      title: string;
-      description: string;
-      items: Array<{ id: string; item: VerificationItem }>;
-    }
-  | {
-      type: "safety";
-      title: string;
-      description: string;
-      items: Array<{ id: string; item: SafetyItem }>;
-    }
-  | {
-      type: "conflict";
-      title: string;
-      description: string;
-      items: Array<{ id: string; item: ConflictItem }>;
-    }
-  | {
-      type: "rfi";
-      title: string;
-      description: string;
-      items: Array<{ id: string; item: string }>;
-      badgeLabel: string;
-      badgeClassName: string;
-    }
-  | null;
+/**
+ * Every results tab writes its favorites into one module document. The field
+ * name doubles as the Firestore doc id under planProjects/{id}/modules.
+ */
+type FavoriteField = "scopes" | "verification" | "safety" | "conflicts" | "rfi";
+
+const FAVORITE_SAVE_ERROR_TITLES: Record<FavoriteField, string> = {
+  scopes: "Unable to save scope favorites",
+  verification: "Unable to save verification favorites",
+  safety: "Unable to save safety favorites",
+  conflicts: "Unable to save conflict favorites",
+  rfi: "Unable to save RFI favorites",
+};
 
 type PlanAnalyzerTabId =
   | "overview"
@@ -156,12 +116,41 @@ const VERIFICATION_CATEGORY_ORDER: VerificationItem["category"][] = [
   "existing_conditions",
 ];
 
+const VERIFICATION_CATEGORY_LABELS: Record<VerificationItem["category"], string> = {
+  dimensions: "Dimensions",
+  structure: "Structure",
+  MEP_conflict: "MEP conflicts",
+  access: "Access",
+  existing_conditions: "Existing conditions",
+};
+
 const SEVERITY_ORDER: Array<SafetyItem["severity"]> = [
   "critical",
   "high",
   "medium",
   "low",
 ];
+
+const SEVERITY_LABELS: Record<SafetyItem["severity"], string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+const RFI_SECTIONS: Array<{ key: keyof RfiPackage; label: string }> = [
+  { key: "rfis", label: "RFIs" },
+  { key: "assumptions", label: "Assumptions" },
+  { key: "estimatorQuestions", label: "Estimator questions" },
+  { key: "contingencyNotes", label: "Contingency notes" },
+];
+
+const RFI_SECTION_TONES: Record<keyof RfiPackage, LedgerTone> = {
+  rfis: "clarify",
+  assumptions: "inferred",
+  estimatorQuestions: "clarify",
+  contingencyNotes: "risk",
+};
 
 const buildScopeSelectionId = (tradeKey: string, index: number) => `${tradeKey}::${index}`;
 const buildVerificationSelectionId = (index: number) => `verification::${index}`;
@@ -242,34 +231,12 @@ const compareConflictItems = (left: ConflictItem, right: ConflictItem) => {
 const sortConflictItems = (items: ConflictItem[]) =>
   [...items].sort(compareConflictItems);
 
-const getRfiBadgeConfig = (key: keyof RfiPackage) => {
-  switch (key) {
-    case "rfis":
-      return {
-        label: "Needs Clarification",
-        className: "plan-detail-pill-needs-clarification",
-      };
-    case "assumptions":
-      return {
-        label: "Inferred",
-        className: "plan-detail-pill-inferred",
-      };
-    case "estimatorQuestions":
-      return {
-        label: "Needs Clarification",
-        className: "plan-detail-pill-needs-clarification",
-      };
-    case "contingencyNotes":
-      return {
-        label: "Risk/Assumption",
-        className: "plan-detail-pill-risk",
-      };
-    default:
-      return {
-        label: "Item",
-        className: "plan-detail-pill-unknown",
-      };
-  }
+/** What each RFI section is, said in the vocabulary the scope tags already use. */
+const RFI_SECTION_TAGS: Record<keyof RfiPackage, string> = {
+  rfis: "Needs clarification",
+  assumptions: "Inferred",
+  estimatorQuestions: "Needs clarification",
+  contingencyNotes: "Risk / assumption",
 };
 
 const getOverviewStatus = (project: PlanProjectDoc | null) =>
@@ -445,14 +412,16 @@ export default function PlanAnalyzerRun() {
   const [rfiModule, setRfiModule] = useState<PlanRfiModuleRecord | null>(null);
   const [projectMissing, setProjectMissing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeModal, setActiveModal] = useState<ModalState>(null);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const [showProgressPanel, setShowProgressPanel] = useState(true);
   const [progressPanelFading, setProgressPanelFading] = useState(false);
   const [activeTab, setActiveTab] = useState<PlanAnalyzerTabId>("overview");
   const [isPreparingBidPrefill, setIsPreparingBidPrefill] = useState(false);
-  const [draftFavoriteItemIds, setDraftFavoriteItemIds] = useState<string[]>([]);
-  const [isSavingFavorites, setIsSavingFavorites] = useState(false);
+  // Unsaved marks, kept per module so switching tabs never silently discards
+  // work in another one. A missing entry means "identical to what's saved".
+  const [favoriteDrafts, setFavoriteDrafts] = useState<Partial<Record<FavoriteField, string[]>>>({});
+  const [savingFavoriteField, setSavingFavoriteField] = useState<FavoriteField | null>(null);
+  const [favoritesOnlyFields, setFavoritesOnlyFields] = useState<FavoriteField[]>([]);
   const hasSeenIncompleteProgressRef = useRef(false);
 
   useEffect(() => {
@@ -741,10 +710,89 @@ export default function PlanAnalyzerRun() {
     () => allSelectableRfiItems.filter(({ id }) => selectedRfiItemIdSet.has(id)),
     [allSelectableRfiItems, selectedRfiItemIdSet]
   );
-  const draftFavoriteItemIdSet = useMemo(
-    () => new Set(draftFavoriteItemIds),
-    [draftFavoriteItemIds]
-  );
+
+  const savedFavoriteIdsByField: Record<FavoriteField, string[]> = {
+    scopes: selectedScopeItemIds,
+    verification: selectedVerificationItemIds,
+    safety: selectedSafetyItemIds,
+    conflicts: selectedConflictItemIds,
+    rfi: selectedRfiItemIds,
+  };
+
+  // Marks a tab is showing right now: the unsaved draft when there is one,
+  // otherwise whatever Firestore last handed back.
+  const getMarkedFavoriteIds = (field: FavoriteField) =>
+    favoriteDrafts[field] ?? savedFavoriteIdsByField[field];
+
+  const isFavoriteDraftDirty = (field: FavoriteField) =>
+    !haveSameIds(getMarkedFavoriteIds(field), savedFavoriteIdsByField[field]);
+
+  const clearFavoriteDraft = (
+    drafts: Partial<Record<FavoriteField, string[]>>,
+    field: FavoriteField
+  ) => {
+    const next = { ...drafts };
+    delete next[field];
+    return next;
+  };
+
+  const toggleFavoriteMark = (field: FavoriteField, itemId: string) => {
+    if (!canModifyAnalysis) return;
+    setFavoriteDrafts((current) => {
+      const base = current[field] ?? savedFavoriteIdsByField[field];
+      const next = base.includes(itemId)
+        ? base.filter((id) => id !== itemId)
+        : [...base, itemId];
+
+      // Toggling back to what is already saved leaves nothing to save. Drop the
+      // draft rather than keeping an identical copy, or it would go on shadowing
+      // favorites another session saves after this point.
+      return haveSameIds(next, savedFavoriteIdsByField[field])
+        ? clearFavoriteDraft(current, field)
+        : { ...current, [field]: next };
+    });
+  };
+
+  const discardFavoriteDraft = (field: FavoriteField) => {
+    setFavoriteDrafts((current) => clearFavoriteDraft(current, field));
+  };
+
+  const toggleFavoritesOnly = (field: FavoriteField) => {
+    setFavoritesOnlyFields((current) =>
+      current.includes(field) ? current.filter((entry) => entry !== field) : [...current, field]
+    );
+  };
+
+  const saveFavoriteMarks = async (field: FavoriteField) => {
+    if (!canModifyAnalysis || !projectId) return;
+
+    const nextIds = getMarkedFavoriteIds(field);
+    setSavingFavoriteField(field);
+
+    try {
+      await updateDoc(doc(firestore, "planProjects", projectId, "modules", field), {
+        favoriteItemIds: nextIds,
+      });
+
+      // Rows stay markable during the write, so only retire the draft when it
+      // still matches what was sent. Anything marked meanwhile stays unsaved
+      // instead of being reverted underneath the user.
+      setFavoriteDrafts((current) =>
+        current[field] && !haveSameIds(current[field], nextIds)
+          ? current
+          : clearFavoriteDraft(current, field)
+      );
+    } catch (error) {
+      console.error(`Failed to save ${field} favorites:`, error);
+      toast({
+        title: FAVORITE_SAVE_ERROR_TITLES[field],
+        description: "Your favorites could not be saved right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingFavoriteField(null);
+    }
+  };
 
   const hasFailed = isProjectFailed(project);
   const progressMetrics = useMemo(() => {
@@ -917,304 +965,6 @@ export default function PlanAnalyzerRun() {
       setActiveTab("overview");
     }
   }, [activeTab, visibleTabs]);
-
-  useEffect(() => {
-    if (!activeModal) {
-      setDraftFavoriteItemIds([]);
-      setIsSavingFavorites(false);
-      return;
-    }
-
-    if (activeModal.type === "scope") {
-      const modalIds = activeModal.items.map((_, index) =>
-        buildScopeSelectionId(activeModal.tradeKey, index)
-      );
-      setDraftFavoriteItemIds(selectedScopeItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-
-    if (activeModal.type === "scopeFavorites") {
-      const modalIds = activeModal.items.map(({ id }) => id);
-      setDraftFavoriteItemIds(selectedScopeItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-
-    if (activeModal.type === "verification") {
-      const modalIds = activeModal.items.map(({ id }) => id);
-      setDraftFavoriteItemIds(selectedVerificationItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-
-    if (activeModal.type === "safety") {
-      const modalIds = activeModal.items.map(({ id }) => id);
-      setDraftFavoriteItemIds(selectedSafetyItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-
-    if (activeModal.type === "conflict") {
-      const modalIds = activeModal.items.map(({ id }) => id);
-      setDraftFavoriteItemIds(selectedConflictItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-
-    if (activeModal.type === "rfi") {
-      const modalIds = activeModal.items.map(({ id }) => id);
-      setDraftFavoriteItemIds(selectedRfiItemIds.filter((id) => modalIds.includes(id)));
-      return;
-    }
-  }, [
-    activeModal,
-    selectedConflictItemIds,
-    selectedRfiItemIds,
-    selectedSafetyItemIds,
-    selectedScopeItemIds,
-    selectedVerificationItemIds,
-  ]);
-
-  const openScopeModal = (tradeKey: string, label: string) => {
-    const items = Array.isArray(scopeResult?.[tradeKey]) ? scopeResult[tradeKey] : [];
-    setActiveModal({
-      type: "scope",
-      tradeKey,
-      tradeLabel: label,
-      title: `${label} Scope`,
-      description: items.length
-        ? `${items.length} bid item${items.length === 1 ? "" : "s"} generated for this trade.`
-        : "No scope items were generated for this trade.",
-      items,
-    });
-  };
-
-  const openFavoriteScopeModal = () => {
-    setActiveModal({
-      type: "scopeFavorites",
-      title: "Favorite Scope Items",
-      description: `${selectedScopeItems.length} saved scope favorite${selectedScopeItems.length === 1 ? "" : "s"}.`,
-      items: selectedScopeItems,
-    });
-  };
-
-  const openVerificationModal = (title: string, category?: VerificationItem["category"]) => {
-    const items = [...allSelectableVerificationItems]
-      .filter(({ item }) => (category ? item.category === category : true))
-      .sort((left, right) => compareVerificationItems(left.item, right.item));
-    setActiveModal({
-      type: "verification",
-      title,
-      description: items.length
-        ? `${items.length} field verification item${items.length === 1 ? "" : "s"} in this group.`
-        : "No verification items were generated for this group.",
-      items,
-    });
-  };
-
-  const openSafetyModal = (title: string, severity?: SafetyItem["severity"]) => {
-    const items = [...allSelectableSafetyItems]
-      .filter(({ item }) => (severity ? item.severity === severity : true))
-      .sort((left, right) => compareSafetyItems(left.item, right.item));
-    setActiveModal({
-      type: "safety",
-      title,
-      description: items.length
-        ? `${items.length} safety review item${items.length === 1 ? "" : "s"} in this group.`
-        : "No safety review items were generated for this group.",
-      items,
-    });
-  };
-
-  const openConflictModal = (title: string, severity?: ConflictItem["severity"]) => {
-    const items = [...allSelectableConflictItems]
-      .filter(({ item }) => (severity ? item.severity === severity : true))
-      .sort((left, right) => compareConflictItems(left.item, right.item));
-    setActiveModal({
-      type: "conflict",
-      title,
-      description: items.length
-        ? `${items.length} coordination conflict${items.length === 1 ? "" : "s"} in this group.`
-        : "No conflicts were generated for this group.",
-      items,
-    });
-  };
-
-  const openRfiModal = (title: string, key: keyof RfiPackage) => {
-    const items = allSelectableRfiItems.filter(({ sectionKey }) => sectionKey === key);
-    const badgeConfig = getRfiBadgeConfig(key);
-    setActiveModal({
-      type: "rfi",
-      title,
-      description: items.length
-        ? `${items.length} item${items.length === 1 ? "" : "s"} in this section.`
-        : "No items were generated for this section.",
-      items,
-      badgeLabel: badgeConfig.label,
-      badgeClassName: badgeConfig.className,
-    });
-  };
-
-  const toggleDraftFavoriteSelection = (selectionId: string) => {
-    if (!canModifyAnalysis) return;
-    setDraftFavoriteItemIds((current) =>
-      current.includes(selectionId)
-        ? current.filter((id) => id !== selectionId)
-        : [...current, selectionId]
-    );
-  };
-
-  const getActiveModalFavoriteConfig = () => {
-    if (!activeModal) return null;
-
-    if (activeModal.type === "scope") {
-      return {
-        field: "scopes" as const,
-        currentIds: selectedScopeItemIds,
-        itemIds: activeModal.items.map((_, index) => buildScopeSelectionId(activeModal.tradeKey, index)),
-        errorTitle: "Unable to save scope favorites",
-      };
-    }
-
-    if (activeModal.type === "scopeFavorites") {
-      return {
-        field: "scopes" as const,
-        currentIds: selectedScopeItemIds,
-        itemIds: activeModal.items.map(({ id }) => id),
-        errorTitle: "Unable to save scope favorites",
-      };
-    }
-
-    if (activeModal.type === "verification") {
-      return {
-        field: "verification" as const,
-        currentIds: selectedVerificationItemIds,
-        itemIds: activeModal.items.map(({ id }) => id),
-        errorTitle: "Unable to save verification favorites",
-      };
-    }
-
-    if (activeModal.type === "safety") {
-      return {
-        field: "safety" as const,
-        currentIds: selectedSafetyItemIds,
-        itemIds: activeModal.items.map(({ id }) => id),
-        errorTitle: "Unable to save safety favorites",
-      };
-    }
-
-    if (activeModal.type === "conflict") {
-      return {
-        field: "conflicts" as const,
-        currentIds: selectedConflictItemIds,
-        itemIds: activeModal.items.map(({ id }) => id),
-        errorTitle: "Unable to save conflict favorites",
-      };
-    }
-
-    if (activeModal.type === "rfi") {
-      return {
-        field: "rfi" as const,
-        currentIds: selectedRfiItemIds,
-        itemIds: activeModal.items.map(({ id }) => id),
-        errorTitle: "Unable to save RFI favorites",
-      };
-    }
-
-    return null;
-  };
-
-  const handleSaveFavoriteSelections = async () => {
-    if (!canModifyAnalysis) return;
-    const config = getActiveModalFavoriteConfig();
-
-    if (!config || !projectId) {
-      return;
-    }
-
-    const modalItemIdSet = new Set(config.itemIds);
-    const preservedIds = config.currentIds.filter((id) => !modalItemIdSet.has(id));
-    const nextIds = [...preservedIds, ...draftFavoriteItemIds.filter((id) => modalItemIdSet.has(id))];
-
-    setIsSavingFavorites(true);
-
-    try {
-      await new Promise<void>((resolve) => {
-        window.requestAnimationFrame(() => resolve());
-      });
-
-      await updateDoc(doc(firestore, "planProjects", projectId, "modules", config.field), {
-        favoriteItemIds: nextIds,
-      });
-      setActiveModal(null);
-    } catch (error) {
-      console.error(`Failed to save ${config.field} favorites:`, error);
-      toast({
-        title: config.errorTitle,
-        description: "Your favorites could not be saved right now.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSavingFavorites(false);
-    }
-  };
-
-  const activeModalFavoriteConfig = getActiveModalFavoriteConfig();
-  const shouldShowSaveFavorites = useMemo(() => {
-    if (!activeModalFavoriteConfig) {
-      return false;
-    }
-
-    const savedIdsForModal = activeModalFavoriteConfig.currentIds.filter((id) =>
-      activeModalFavoriteConfig.itemIds.includes(id)
-    );
-
-    return !haveSameIds(savedIdsForModal, draftFavoriteItemIds);
-  }, [activeModalFavoriteConfig, draftFavoriteItemIds]);
-
-  const openFavoriteVerificationModal = () => {
-    const items = [...selectedVerificationItems].sort((left, right) =>
-      compareVerificationItems(left.item, right.item)
-    );
-    setActiveModal({
-      type: "verification",
-      title: "Favorite Verification Items",
-      description: `${items.length} saved verification favorite${items.length === 1 ? "" : "s"}.`,
-      items,
-    });
-  };
-
-  const openFavoriteSafetyModal = () => {
-    const items = [...selectedSafetyItems].sort((left, right) =>
-      compareSafetyItems(left.item, right.item)
-    );
-    setActiveModal({
-      type: "safety",
-      title: "Favorite Safety Items",
-      description: `${items.length} saved safety favorite${items.length === 1 ? "" : "s"}.`,
-      items,
-    });
-  };
-
-  const openFavoriteConflictModal = () => {
-    const items = [...selectedConflictItems].sort((left, right) =>
-      compareConflictItems(left.item, right.item)
-    );
-    setActiveModal({
-      type: "conflict",
-      title: "Favorite Conflicts",
-      description: `${items.length} saved conflict favorite${items.length === 1 ? "" : "s"}.`,
-      items,
-    });
-  };
-
-  const openFavoriteRfiModal = () => {
-    const items = selectedRfiItems.map(({ id, item }) => ({ id, item }));
-    setActiveModal({
-      type: "rfi",
-      title: "Favorite RFI Items",
-      description: `${items.length} saved RFI favorite${items.length === 1 ? "" : "s"}.`,
-      items,
-      badgeLabel: "Favorite",
-      badgeClassName: "plan-detail-pill-inferred",
-    });
-  };
 
   const handleAddSelectedScopesToNewBid = async () => {
     if (!canModifyAnalysis) return;
@@ -1395,68 +1145,179 @@ export default function PlanAnalyzerRun() {
     </>
   );
 
-  const renderTradeScopesTab = () =>
-    scopeResult ? (
-      <div className="plan-scope-summary">
-          <div className="plan-analysis-card">
-            <div className="plan-analysis-card-heading">
-              <div className="plan-analysis-card-heading-copy">
-                <span className="plan-summary-label">Generated trade scopes</span>
-                <p className="plan-section-subtitle">
-                Organized bid-style scope items by trade (Select scopes to add to bid).
-              </p>
-              </div>
+  /**
+   * Shared chrome for the five results tables: the heading, the run of counts,
+   * the favorites filter, whatever tab-specific action belongs up top, the
+   * table itself, and the save bar that appears once marks go out of sync.
+   */
+  const renderLedgerSection = (options: {
+    field: FavoriteField;
+    title: string;
+    subtitle: string;
+    columns: LedgerColumn[];
+    groups: LedgerGroup[];
+    groupNoun: string;
+    filteredEmptyMessage: string;
+    actions?: ReactNode;
+  }) => {
+    const { field, title, subtitle, columns, groups, groupNoun, filteredEmptyMessage, actions } =
+      options;
 
-              <div className="plan-scope-tab-actions">
-                {selectedScopeItems.length ? (
-                  <button type="button" className="plan-secondary-action-button" onClick={openFavoriteScopeModal}>
-                    View Favorites
-                  </button>
-                ) : null}
-                {selectedScopeItems.length ? (
-                  <button
-                    type="button"
-                    className={`plan-add-to-bid-button${
-                      canModifyAnalysis ? "" : " is-permission-disabled"
-                    }`}
-                    onClick={() => {
-                      void handleAddSelectedScopesToNewBid();
-                    }}
-                    disabled={isPreparingBidPrefill || !canModifyAnalysis}
-                    title={modifyBlockedReason}
-                  >
-                    {isPreparingBidPrefill ? "Preparing Bid..." : "Add to New Bid"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="plan-scope-grid">
-              {SCOPE_TRADE_LABELS.map(({ key, label }) => {
-                const itemCount = Array.isArray(scopeResult[key]) ? scopeResult[key].length : 0;
-                const selectedCount = allSelectableScopeItems.filter(
-                  ({ tradeKey, id }) => tradeKey === key && selectedScopeItemIdSet.has(id)
-                ).length;
+    const markedIds = getMarkedFavoriteIds(field);
+    const markedIdSet = new Set(markedIds);
+    const totalRows = groups.reduce((count, group) => count + group.rows.length, 0);
+    const filledGroups = groups.filter((group) => group.rows.length > 0).length;
+    const favoritesOnly = favoritesOnlyFields.includes(field);
+    const isDirty = isFavoriteDraftDirty(field);
+    const isSaving = savingFavoriteField === field;
 
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    className="plan-scope-trade"
-                    onClick={() => openScopeModal(key, label)}
-                  >
-                    {selectedCount > 0 ? (
-                      <span className="plan-scope-trade-selection-count">
-                        {selectedCount}/{itemCount}
-                      </span>
-                    ) : null}
-                    <span className="plan-scope-trade-label">{label}</span>
-                    <strong className="plan-scope-trade-value">{itemCount}</strong>
-                  </button>
-                );
-              })}
+    return (
+      <div className="plan-ledger-section">
+        <div className="plan-ledger-toolbar">
+          <div className="plan-ledger-toolbar-copy">
+            <h2 className="plan-ledger-title">{title}</h2>
+            <p className="plan-ledger-subtitle">{subtitle}</p>
+            <p className="plan-ledger-metrics">
+              <span>{totalRows} items</span>
+              <span>
+                {filledGroups} {groupNoun}
+              </span>
+              <span className={markedIdSet.size ? "is-marked" : undefined}>
+                {markedIdSet.size} {markedIdSet.size === 1 ? "favorite" : "favorites"}
+              </span>
+            </p>
+          </div>
+
+          <div className="plan-ledger-toolbar-actions">
+            <button
+              type="button"
+              className={`plan-ledger-filter${favoritesOnly ? " is-on" : ""}`}
+              onClick={() => toggleFavoritesOnly(field)}
+              aria-pressed={favoritesOnly}
+              disabled={!markedIdSet.size && !favoritesOnly}
+            >
+              <span className="plan-ledger-filter-dot" aria-hidden="true" />
+              Favorites only
+            </button>
+            {actions}
           </div>
         </div>
+
+        {/* Keyed by module so collapsed-group state never carries across tabs —
+            Safety and Conflicts share group keys. */}
+        <PlanLedger
+          key={field}
+          columns={columns}
+          groups={groups}
+          markedIds={markedIdSet}
+          onToggleMark={(itemId) => toggleFavoriteMark(field, itemId)}
+          canMark={canModifyAnalysis}
+          blockedReason={modifyBlockedReason}
+          favoritesOnly={favoritesOnly}
+          filteredEmptyMessage={filteredEmptyMessage}
+        />
+
+        {isDirty ? (
+          <div className="plan-ledger-savebar">
+            <span className="plan-ledger-savebar-copy">
+              {markedIdSet.size} {markedIdSet.size === 1 ? "favorite" : "favorites"}, not saved yet
+            </span>
+            <div className="plan-ledger-savebar-actions">
+              <button
+                type="button"
+                className="plan-ledger-ghost-button"
+                onClick={() => discardFavoriteDraft(field)}
+                disabled={isSaving}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className={`plan-add-to-bid-button${
+                  canModifyAnalysis ? "" : " is-permission-disabled"
+                }`}
+                onClick={() => {
+                  void saveFavoriteMarks(field);
+                }}
+                disabled={isSaving || !canModifyAnalysis}
+                title={modifyBlockedReason}
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
+    );
+  };
+
+  const renderPrimaryCell = (title: string, copy?: string) => (
+    <div className="plan-ledger-primary">
+      <span className="plan-ledger-primary-title">{title}</span>
+      {copy ? <span className="plan-ledger-primary-copy">{copy}</span> : null}
+    </div>
+  );
+
+  const renderListCell = (values: string[]) =>
+    values.length ? (
+      <span className="plan-ledger-list">
+        {values.map((value, index) => (
+          <span key={`${value}-${index}`} className="plan-ledger-chip">
+            {value}
+          </span>
+        ))}
+      </span>
+    ) : (
+      <span className="plan-ledger-blank">Not specified</span>
+    );
+
+  const renderTradeScopesTab = () =>
+    scopeResult ? (
+      renderLedgerSection({
+        field: "scopes",
+        title: "Trade scopes",
+        subtitle:
+          "Bid-ready scope items grouped by trade. Favorite the ones you want, then send them to a new bid.",
+        groupNoun: "trades",
+        filteredEmptyMessage: "No scope items are favorites yet.",
+        columns: [
+          { key: "item", label: "Scope item", width: "minmax(0, 2.2fr)" },
+          { key: "class", label: "Class", width: "minmax(0, 148px)" },
+          { key: "materials", label: "Materials", width: "minmax(0, 1.1fr)" },
+        ],
+        groups: SCOPE_TRADE_LABELS.map(({ key, label }) => ({
+          key,
+          label,
+          rows: (Array.isArray(scopeResult[key]) ? scopeResult[key] : []).map((item, index) => ({
+            id: buildScopeSelectionId(key, index),
+            label: cleanDisplayText(item.title),
+            cells: [
+              renderPrimaryCell(cleanDisplayText(item.title), cleanDisplayText(item.description)),
+              <span className={`plan-ledger-tag plan-ledger-tag-${item.classification}`}>
+                {item.classification.replace("_", " ")}
+              </span>,
+              renderListCell(item.materialCategories),
+            ],
+          })),
+        })),
+        actions: selectedScopeItems.length ? (
+          <button
+            type="button"
+            className={`plan-add-to-bid-button${
+              canModifyAnalysis ? "" : " is-permission-disabled"
+            }`}
+            onClick={() => {
+              void handleAddSelectedScopesToNewBid();
+            }}
+            disabled={isPreparingBidPrefill || !canModifyAnalysis}
+            title={modifyBlockedReason}
+          >
+            {isPreparingBidPrefill
+              ? "Preparing bid..."
+              : `Add ${selectedScopeItems.length} to new bid`}
+          </button>
+        ) : null,
+      })
     ) : (
       <div className="plan-empty-state">
         Trade scopes will appear here after scope generation completes.
@@ -1465,94 +1326,33 @@ export default function PlanAnalyzerRun() {
 
   const renderVerificationTab = () =>
     verificationResult ? (
-      <div className="plan-scope-summary">
-        <div className="plan-analysis-card">
-          <div className="plan-analysis-card-heading">
-            <div className="plan-analysis-card-heading-copy">
-              <span className="plan-summary-label">Verification checklist</span>
-              <p className="plan-section-subtitle">
-                Field checks and plan follow-ups to confirm dimensions, structure, access, and existing conditions.
-              </p>
-            </div>
-            {selectedVerificationItems.length ? (
-              <button type="button" className="plan-secondary-action-button" onClick={openFavoriteVerificationModal}>
-                View Favorites
-              </button>
-            ) : null}
-          </div>
-          <div className="plan-scope-grid plan-scope-grid-six">
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("All Verification Items")}>
-              {selectedVerificationItems.length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {selectedVerificationItems.length}/{verificationResult.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Checklist items</span>
-              <strong className="plan-scope-trade-value">{verificationResult.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("Dimensions Verification", "dimensions")}>
-              {allSelectableVerificationItems.filter(({ id, item }) => item.category === "dimensions" && selectedVerificationItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableVerificationItems.filter(({ id, item }) => item.category === "dimensions" && selectedVerificationItemIdSet.has(id)).length}/
-                  {verificationResult.filter((item) => item.category === "dimensions").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Dimensions</span>
-              <strong className="plan-scope-trade-value">
-                {verificationResult.filter((item) => item.category === "dimensions").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("Structure Verification", "structure")}>
-              {allSelectableVerificationItems.filter(({ id, item }) => item.category === "structure" && selectedVerificationItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableVerificationItems.filter(({ id, item }) => item.category === "structure" && selectedVerificationItemIdSet.has(id)).length}/
-                  {verificationResult.filter((item) => item.category === "structure").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Structure</span>
-              <strong className="plan-scope-trade-value">
-                {verificationResult.filter((item) => item.category === "structure").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("MEP Conflict Verification", "MEP_conflict")}>
-              {allSelectableVerificationItems.filter(({ id, item }) => item.category === "MEP_conflict" && selectedVerificationItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableVerificationItems.filter(({ id, item }) => item.category === "MEP_conflict" && selectedVerificationItemIdSet.has(id)).length}/
-                  {verificationResult.filter((item) => item.category === "MEP_conflict").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">MEP Conflicts</span>
-              <strong className="plan-scope-trade-value">
-                {verificationResult.filter((item) => item.category === "MEP_conflict").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("Access Verification", "access")}>
-              {allSelectableVerificationItems.filter(({ id, item }) => item.category === "access" && selectedVerificationItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableVerificationItems.filter(({ id, item }) => item.category === "access" && selectedVerificationItemIdSet.has(id)).length}/
-                  {verificationResult.filter((item) => item.category === "access").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Access</span>
-              <strong className="plan-scope-trade-value">
-                {verificationResult.filter((item) => item.category === "access").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openVerificationModal("Existing Conditions Verification", "existing_conditions")}>
-              {allSelectableVerificationItems.filter(({ id, item }) => item.category === "existing_conditions" && selectedVerificationItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableVerificationItems.filter(({ id, item }) => item.category === "existing_conditions" && selectedVerificationItemIdSet.has(id)).length}/
-                  {verificationResult.filter((item) => item.category === "existing_conditions").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Existing Conditions</span>
-              <strong className="plan-scope-trade-value">
-                {verificationResult.filter((item) => item.category === "existing_conditions").length}
-              </strong>
-            </button>
-          </div>
-        </div>
-      </div>
+      renderLedgerSection({
+        field: "verification",
+        title: "Verification checklist",
+        subtitle:
+          "Field checks and plan follow-ups that confirm dimensions, structure, access, and existing conditions.",
+        groupNoun: "categories",
+        filteredEmptyMessage: "No checklist items are favorites yet.",
+        columns: [
+          { key: "check", label: "Check", width: "minmax(0, 1.5fr)" },
+          { key: "reason", label: "Why it matters", width: "minmax(0, 1.5fr)" },
+        ],
+        groups: VERIFICATION_CATEGORY_ORDER.map((category) => ({
+          key: category,
+          label: VERIFICATION_CATEGORY_LABELS[category],
+          rows: allSelectableVerificationItems
+            .filter(({ item }) => item.category === category)
+            .sort((left, right) => compareVerificationItems(left.item, right.item))
+            .map(({ id, item }) => ({
+              id,
+              label: cleanDisplayText(item.item),
+              cells: [
+                renderPrimaryCell(cleanDisplayText(item.item)),
+                <span className="plan-ledger-muted">{cleanDisplayText(item.reason)}</span>,
+              ],
+            })),
+        })),
+      })
     ) : (
       <div className="plan-empty-state">
         Verification checklist items will appear here when that review finishes.
@@ -1561,82 +1361,28 @@ export default function PlanAnalyzerRun() {
 
   const renderSafetyTab = () =>
     safetyResult ? (
-      <div className="plan-scope-summary">
-        <div className="plan-analysis-card">
-          <div className="plan-analysis-card-heading">
-            <div className="plan-analysis-card-heading-copy">
-              <span className="plan-summary-label">Safety review</span>
-              <p className="plan-section-subtitle">
-                Potential life-safety, access, egress, clearance, and code-sensitive items that need review.
-              </p>
-            </div>
-            {selectedSafetyItems.length ? (
-              <button type="button" className="plan-secondary-action-button" onClick={openFavoriteSafetyModal}>
-                View Favorites
-              </button>
-            ) : null}
-          </div>
-          <div className="plan-scope-grid plan-scope-grid-five">
-            <button type="button" className="plan-scope-trade" onClick={() => openSafetyModal("All Safety Review Items")}>
-              {selectedSafetyItems.length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {selectedSafetyItems.length}/{safetyResult.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">All issues</span>
-              <strong className="plan-scope-trade-value">{safetyResult.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openSafetyModal("Critical Safety Issues", "critical")}>
-              {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "critical" && selectedSafetyItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "critical" && selectedSafetyItemIdSet.has(id)).length}/
-                  {safetyResult.filter((item) => item.severity === "critical").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Critical</span>
-              <strong className="plan-scope-trade-value">
-                {safetyResult.filter((item) => item.severity === "critical").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openSafetyModal("High Safety Issues", "high")}>
-              {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "high" && selectedSafetyItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "high" && selectedSafetyItemIdSet.has(id)).length}/
-                  {safetyResult.filter((item) => item.severity === "high").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">High</span>
-              <strong className="plan-scope-trade-value">
-                {safetyResult.filter((item) => item.severity === "high").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openSafetyModal("Medium Safety Issues", "medium")}>
-              {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "medium" && selectedSafetyItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "medium" && selectedSafetyItemIdSet.has(id)).length}/
-                  {safetyResult.filter((item) => item.severity === "medium").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Medium</span>
-              <strong className="plan-scope-trade-value">
-                {safetyResult.filter((item) => item.severity === "medium").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openSafetyModal("Low Safety Issues", "low")}>
-              {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "low" && selectedSafetyItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableSafetyItems.filter(({ id, item }) => item.severity === "low" && selectedSafetyItemIdSet.has(id)).length}/
-                  {safetyResult.filter((item) => item.severity === "low").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Low</span>
-              <strong className="plan-scope-trade-value">
-                {safetyResult.filter((item) => item.severity === "low").length}
-              </strong>
-            </button>
-          </div>
-        </div>
-      </div>
+      renderLedgerSection({
+        field: "safety",
+        title: "Safety review",
+        subtitle:
+          "Life-safety, access, egress, clearance, and code-sensitive items, ranked by severity. Every item needs review before you price it.",
+        groupNoun: "severity levels",
+        filteredEmptyMessage: "No safety items are favorites yet.",
+        columns: [{ key: "issue", label: "Issue", width: "minmax(0, 1fr)" }],
+        groups: SEVERITY_ORDER.map((severity) => ({
+          key: severity,
+          label: SEVERITY_LABELS[severity],
+          tone: severity as LedgerTone,
+          rows: allSelectableSafetyItems
+            .filter(({ item }) => item.severity === severity)
+            .sort((left, right) => compareSafetyItems(left.item, right.item))
+            .map(({ id, item }) => ({
+              id,
+              label: cleanDisplayText(item.issue),
+              cells: [renderPrimaryCell(cleanDisplayText(item.issue))],
+            })),
+        })),
+      })
     ) : (
       <div className="plan-empty-state">
         Safety review results will appear here when that step finishes.
@@ -1645,82 +1391,36 @@ export default function PlanAnalyzerRun() {
 
   const renderConflictsTab = () =>
     conflictResult ? (
-      <div className="plan-scope-summary">
-        <div className="plan-analysis-card">
-          <div className="plan-analysis-card-heading">
-            <div className="plan-analysis-card-heading-copy">
-              <span className="plan-summary-label">Conflict detection</span>
-              <p className="plan-section-subtitle">
-                Cross-sheet coordination issues like trade clashes, mismatched dimensions, and cross-discipline coordination concerns.
-              </p>
-            </div>
-            {selectedConflictItems.length ? (
-              <button type="button" className="plan-secondary-action-button" onClick={openFavoriteConflictModal}>
-                View Favorites
-              </button>
-            ) : null}
-          </div>
-          <div className="plan-scope-grid plan-scope-grid-five">
-            <button type="button" className="plan-scope-trade" onClick={() => openConflictModal("All Detected Conflicts")}>
-              {selectedConflictItems.length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {selectedConflictItems.length}/{conflictResult.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">All conflicts</span>
-              <strong className="plan-scope-trade-value">{conflictResult.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openConflictModal("Critical Conflicts", "critical")}>
-              {allSelectableConflictItems.filter(({ id, item }) => item.severity === "critical" && selectedConflictItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableConflictItems.filter(({ id, item }) => item.severity === "critical" && selectedConflictItemIdSet.has(id)).length}/
-                  {conflictResult.filter((item) => item.severity === "critical").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Critical</span>
-              <strong className="plan-scope-trade-value">
-                {conflictResult.filter((item) => item.severity === "critical").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openConflictModal("High Conflicts", "high")}>
-              {allSelectableConflictItems.filter(({ id, item }) => item.severity === "high" && selectedConflictItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableConflictItems.filter(({ id, item }) => item.severity === "high" && selectedConflictItemIdSet.has(id)).length}/
-                  {conflictResult.filter((item) => item.severity === "high").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">High</span>
-              <strong className="plan-scope-trade-value">
-                {conflictResult.filter((item) => item.severity === "high").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openConflictModal("Medium Conflicts", "medium")}>
-              {allSelectableConflictItems.filter(({ id, item }) => item.severity === "medium" && selectedConflictItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableConflictItems.filter(({ id, item }) => item.severity === "medium" && selectedConflictItemIdSet.has(id)).length}/
-                  {conflictResult.filter((item) => item.severity === "medium").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Medium</span>
-              <strong className="plan-scope-trade-value">
-                {conflictResult.filter((item) => item.severity === "medium").length}
-              </strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openConflictModal("Low Conflicts", "low")}>
-              {allSelectableConflictItems.filter(({ id, item }) => item.severity === "low" && selectedConflictItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableConflictItems.filter(({ id, item }) => item.severity === "low" && selectedConflictItemIdSet.has(id)).length}/
-                  {conflictResult.filter((item) => item.severity === "low").length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Low</span>
-              <strong className="plan-scope-trade-value">
-                {conflictResult.filter((item) => item.severity === "low").length}
-              </strong>
-            </button>
-          </div>
-        </div>
-      </div>
+      renderLedgerSection({
+        field: "conflicts",
+        title: "Conflicts",
+        subtitle:
+          "Cross-sheet coordination issues: trade clashes, mismatched dimensions, and discipline-to-discipline gaps.",
+        groupNoun: "severity levels",
+        filteredEmptyMessage: "No conflicts are favorites yet.",
+        columns: [
+          { key: "conflict", label: "Conflict", width: "minmax(0, 2fr)" },
+          { key: "trades", label: "Involved trades", width: "minmax(0, 1fr)" },
+          { key: "sheets", label: "Source sheets", width: "minmax(0, 0.9fr)" },
+        ],
+        groups: SEVERITY_ORDER.map((severity) => ({
+          key: severity,
+          label: SEVERITY_LABELS[severity],
+          tone: severity as LedgerTone,
+          rows: allSelectableConflictItems
+            .filter(({ item }) => item.severity === severity)
+            .sort((left, right) => compareConflictItems(left.item, right.item))
+            .map(({ id, item }) => ({
+              id,
+              label: cleanDisplayText(item.conflict),
+              cells: [
+                renderPrimaryCell(cleanDisplayText(item.conflict)),
+                renderListCell(item.involvedTrades),
+                renderListCell(item.sourceSheets),
+              ],
+            })),
+        })),
+      })
     ) : (
       <div className="plan-empty-state">
         Conflict review results will appear here when that step finishes.
@@ -1729,65 +1429,30 @@ export default function PlanAnalyzerRun() {
 
   const renderRfiTab = () =>
     rfiResult ? (
-      <div className="plan-scope-summary">
-        <div className="plan-analysis-card">
-          <div className="plan-analysis-card-heading">
-            <div className="plan-analysis-card-heading-copy">
-              <span className="plan-summary-label">RFI package</span>
-              <p className="plan-section-subtitle">
-                Questions, assumptions, and contingency notes to help price the job without overcommitting.
-              </p>
-            </div>
-            {selectedRfiItems.length ? (
-              <button type="button" className="plan-secondary-action-button" onClick={openFavoriteRfiModal}>
-                View Favorites
-              </button>
-            ) : null}
-          </div>
-          <div className="plan-scope-grid">
-            <button type="button" className="plan-scope-trade" onClick={() => openRfiModal("RFIs", "rfis")}>
-              {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "rfis" && selectedRfiItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "rfis" && selectedRfiItemIdSet.has(id)).length}/
-                  {rfiResult.rfis.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">RFIs</span>
-              <strong className="plan-scope-trade-value">{rfiResult.rfis.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openRfiModal("Assumptions", "assumptions")}>
-              {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "assumptions" && selectedRfiItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "assumptions" && selectedRfiItemIdSet.has(id)).length}/
-                  {rfiResult.assumptions.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Assumptions</span>
-              <strong className="plan-scope-trade-value">{rfiResult.assumptions.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openRfiModal("Estimator Questions", "estimatorQuestions")}>
-              {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "estimatorQuestions" && selectedRfiItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "estimatorQuestions" && selectedRfiItemIdSet.has(id)).length}/
-                  {rfiResult.estimatorQuestions.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Estimator Questions</span>
-              <strong className="plan-scope-trade-value">{rfiResult.estimatorQuestions.length}</strong>
-            </button>
-            <button type="button" className="plan-scope-trade" onClick={() => openRfiModal("Contingency Notes", "contingencyNotes")}>
-              {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "contingencyNotes" && selectedRfiItemIdSet.has(id)).length ? (
-                <span className="plan-scope-trade-selection-count">
-                  {allSelectableRfiItems.filter(({ id, sectionKey }) => sectionKey === "contingencyNotes" && selectedRfiItemIdSet.has(id)).length}/
-                  {rfiResult.contingencyNotes.length}
-                </span>
-              ) : null}
-              <span className="plan-scope-trade-label">Contingency Notes</span>
-              <strong className="plan-scope-trade-value">{rfiResult.contingencyNotes.length}</strong>
-            </button>
-          </div>
-        </div>
-      </div>
+      renderLedgerSection({
+        field: "rfi",
+        title: "RFI package",
+        subtitle:
+          "Questions, assumptions, and contingency notes that let you price the job without overcommitting.",
+        groupNoun: "sections",
+        filteredEmptyMessage: "No RFI items are favorites yet.",
+        columns: [{ key: "item", label: "Item", width: "minmax(0, 1fr)" }],
+        groups: RFI_SECTIONS.map(({ key, label }) => {
+          return {
+            key,
+            label,
+            tone: RFI_SECTION_TONES[key],
+            tag: RFI_SECTION_TAGS[key],
+            rows: allSelectableRfiItems
+              .filter(({ sectionKey }) => sectionKey === key)
+              .map(({ id, item }) => ({
+                id,
+                label: cleanDisplayText(item),
+                cells: [renderPrimaryCell(cleanDisplayText(item))],
+              })),
+          };
+        }),
+      })
     ) : (
       <div className="plan-empty-state">
         The RFI package will appear here when that step finishes.
@@ -1843,295 +1508,6 @@ export default function PlanAnalyzerRun() {
 
   return (
     <div className="plan-analyzer-page">
-      <Dialog open={Boolean(activeModal)} onOpenChange={(open) => !open && setActiveModal(null)}>
-        <DialogContent className="plan-detail-modal">
-          <DialogHeader>
-            <DialogTitle className="plan-detail-title">{activeModal?.title}</DialogTitle>
-            <DialogDescription className="plan-detail-description">
-              {activeModal?.description}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="plan-detail-list">
-            {activeModal?.type === "scope" ? (
-              activeModal.items.length ? (
-                activeModal.items.map((item, index) => (
-                  (() => {
-                    const selectionId = buildScopeSelectionId(activeModal.tradeKey, index);
-                    return (
-                  <div
-                    key={`${item.title}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(selectionId)
-                        ? " plan-detail-card-selected"
-                        : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(selectionId)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(selectionId)}
-                      aria-label={`Select ${cleanDisplayText(item.title)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(selectionId)}
-                    >
-                      {draftFavoriteItemIdSet.has(selectionId) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item.title)}</h3>
-                      <span className={`plan-detail-pill plan-detail-pill-${item.classification}`}>
-                        {item.classification.replace("_", " ")}
-                      </span>
-                    </div>
-                    <p className="plan-detail-copy">{cleanDisplayText(item.description)}</p>
-                    <div className="plan-detail-meta">
-                      <div>
-                        <span className="plan-detail-label">Materials</span>
-                        <p className="plan-detail-value">
-                          {item.materialCategories.length ? item.materialCategories.join(", ") : "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                    );
-                  })()
-                ))
-              ) : (
-                <div className="plan-detail-empty">No scope items to show.</div>
-              )
-            ) : activeModal?.type === "scopeFavorites" ? (
-              activeModal.items.length ? (
-                activeModal.items.map(({ id, tradeKey, tradeLabel, item }, index) => (
-                  <div
-                    key={`${id}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(id) ? " plan-detail-card-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(id)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(id)}
-                      aria-label={`Select ${cleanDisplayText(item.title)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(id)}
-                    >
-                      {draftFavoriteItemIdSet.has(id) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item.title)}</h3>
-                      <span className={`plan-detail-pill plan-detail-pill-${item.classification}`}>
-                        {item.classification.replace("_", " ")}
-                      </span>
-                    </div>
-                    <p className="plan-detail-copy">{cleanDisplayText(item.description)}</p>
-                    <div className="plan-detail-meta">
-                      <div>
-                        <span className="plan-detail-label">Trade</span>
-                        <p className="plan-detail-value">{tradeLabel}</p>
-                      </div>
-                      <div>
-                        <span className="plan-detail-label">Materials</span>
-                        <p className="plan-detail-value">
-                          {item.materialCategories.length ? item.materialCategories.join(", ") : "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="plan-detail-empty">No scope favorites to show.</div>
-              )
-            ) : activeModal?.type === "verification" ? (
-              activeModal.items.length ? (
-                activeModal.items.map(({ id, item }, index) => (
-                  <div
-                    key={`${id}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(id) ? " plan-detail-card-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(id)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(id)}
-                      aria-label={`Select ${cleanDisplayText(item.item)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(id)}
-                    >
-                      {draftFavoriteItemIdSet.has(id) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item.item)}</h3>
-                      <span className="plan-detail-pill plan-detail-pill-verification">
-                        {item.category.replace("_", " ")}
-                      </span>
-                    </div>
-                    <p className="plan-detail-copy">{cleanDisplayText(item.reason)}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="plan-detail-empty">No verification items to show.</div>
-              )
-            ) : activeModal?.type === "safety" ? (
-              activeModal.items.length ? (
-                activeModal.items.map(({ id, item }, index) => (
-                  <div
-                    key={`${id}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(id) ? " plan-detail-card-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(id)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(id)}
-                      aria-label={`Select ${cleanDisplayText(item.issue)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(id)}
-                    >
-                      {draftFavoriteItemIdSet.has(id) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item.issue)}</h3>
-                      <span className={`plan-detail-pill plan-detail-pill-${item.severity}`}>
-                        {item.severity}
-                      </span>
-                    </div>
-                    <p className="plan-detail-copy">
-                      Requires review before relying on this condition in scope or pricing.
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="plan-detail-empty">No safety items to show.</div>
-              )
-            ) : activeModal?.type === "conflict" ? (
-              activeModal.items.length ? (
-                activeModal.items.map(({ id, item }, index) => (
-                  <div
-                    key={`${id}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(id) ? " plan-detail-card-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(id)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(id)}
-                      aria-label={`Select ${cleanDisplayText(item.conflict)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(id)}
-                    >
-                      {draftFavoriteItemIdSet.has(id) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item.conflict)}</h3>
-                      <span className={`plan-detail-pill plan-detail-pill-${item.severity}`}>
-                        {item.severity}
-                      </span>
-                    </div>
-                    <div className="plan-detail-meta">
-                      <div>
-                        <span className="plan-detail-label">Involved Trades</span>
-                        <p className="plan-detail-value">
-                          {item.involvedTrades.length ? item.involvedTrades.join(", ") : "Not specified"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="plan-detail-label">Source Sheets</span>
-                        <p className="plan-detail-value">
-                          {item.sourceSheets.length ? item.sourceSheets.join(", ") : "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="plan-detail-empty">No conflicts to show.</div>
-              )
-            ) : activeModal?.type === "rfi" ? (
-              activeModal.items.length ? (
-                activeModal.items.map(({ id, item }, index) => (
-                  <div
-                    key={`${id}-${index}`}
-                    className={`plan-detail-card plan-detail-card-selectable${
-                      draftFavoriteItemIdSet.has(id) ? " plan-detail-card-selected" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`plan-detail-select-toggle${
-                        draftFavoriteItemIdSet.has(id)
-                          ? " plan-detail-select-toggle-selected"
-                          : ""
-                      }`}
-                      disabled={!canModifyAnalysis}
-                      title={modifyBlockedReason}
-                      onClick={() => toggleDraftFavoriteSelection(id)}
-                      aria-label={`Select ${cleanDisplayText(item)}`}
-                      aria-pressed={draftFavoriteItemIdSet.has(id)}
-                    >
-                      {draftFavoriteItemIdSet.has(id) ? <Check size={15} /> : null}
-                    </button>
-                    <div className="plan-detail-card-header">
-                      <h3 className="plan-detail-card-title">{cleanDisplayText(item)}</h3>
-                      <span className={`plan-detail-pill ${activeModal.badgeClassName}`}>
-                        {activeModal.badgeLabel}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="plan-detail-empty">No items to show.</div>
-              )
-            ) : null}
-          </div>
-
-          {shouldShowSaveFavorites ? (
-            <div className="plan-detail-actions">
-              <button
-                type="button"
-                className={`plan-add-to-bid-button${
-                  canModifyAnalysis ? "" : " is-permission-disabled"
-                }`}
-                onClick={() => {
-                  void handleSaveFavoriteSelections();
-                }}
-                disabled={isSavingFavorites || !canModifyAnalysis}
-                title={modifyBlockedReason}
-              >
-                {isSavingFavorites ? "Saving..." : "Save Favorites"}
-              </button>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       <button className="plan-analyzer-back" onClick={() => navigate("/plan-analyzer")}>
         ← Back

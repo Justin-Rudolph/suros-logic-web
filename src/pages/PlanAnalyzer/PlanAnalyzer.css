@@ -1,10 +1,38 @@
 .plan-analyzer-page {
+  /* How far the sticky table header stops short of the viewport edge. */
+  --ledger-sticky-top: 32px;
   min-height: 100vh;
-  background:
+  /* Sized and pinned to the viewport rather than the element. Painted against
+     the element, the plum-to-navy ramp stretches over the full document, so a
+     long tab (RFI can run 100+ rows) drags the whole gradient past you as you
+     scroll and the background visibly changes. Fixed attachment resolves it
+     against the viewport instead, so it looks the same at any page length. The
+     solid base only shows on browsers that ignore fixed attachment. */
+  background-color: #13141b;
+  background-image:
     radial-gradient(circle at top left, rgba(255, 74, 61, 0.16), transparent 28%),
     linear-gradient(135deg, rgba(65, 29, 33, 1) 0%, rgba(19, 20, 27, 1) 45%, rgba(20, 46, 79, 1) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: #ffffff;
   font-family: "Montserrat", sans-serif;
+}
+
+.plan-analyzer-page::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--ledger-sticky-top);
+  z-index: 6;
+  pointer-events: none;
+  background-color: #13141b;
+  background-image:
+    radial-gradient(circle at top left, rgba(255, 74, 61, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(65, 29, 33, 1) 0%, rgba(19, 20, 27, 1) 45%, rgba(20, 46, 79, 1) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .plan-analyzer-back {
@@ -128,10 +156,6 @@
 
 .plan-analyzer-tab-panel-plain .plan-analysis-card {
   background: rgba(255, 255, 255, 0.12);
-}
-
-.plan-analyzer-tab-panel-plain .plan-scope-trade {
-  background: rgba(12, 18, 30, 0.42);
 }
 
 .plan-analyzer-tab-panel > :first-child {
@@ -1020,10 +1044,6 @@
   margin-top: 20px;
 }
 
-.plan-scope-summary {
-  margin-top: 16px;
-}
-
 .plan-analysis-card {
   margin-top: 16px;
   padding: 18px 20px;
@@ -1049,14 +1069,6 @@
 
 .plan-analysis-card-heading-copy {
   min-width: 0;
-}
-
-.plan-scope-tab-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .plan-analysis-issues {
@@ -1113,283 +1125,6 @@
   cursor: not-allowed;
 }
 
-.plan-secondary-action-button {
-  flex-shrink: 0;
-  border: 1px solid rgba(145, 203, 255, 0.28);
-  border-radius: 10px;
-  background: rgba(30, 115, 190, 0.16);
-  color: #ffffff;
-  padding: 10px 16px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.plan-secondary-action-button:hover {
-  transform: translateY(-1px);
-  background: rgba(43, 133, 214, 0.28);
-  box-shadow: 0 10px 24px rgba(78, 168, 228, 0.18);
-}
-
-.plan-scope-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.plan-scope-grid-five {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.plan-scope-grid-six {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.plan-scope-grid-six .plan-scope-trade {
-  padding: 12px 10px;
-}
-
-.plan-scope-grid-six .plan-scope-trade-label {
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.plan-scope-trade {
-  position: relative;
-  border: none;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(12, 18, 30, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.plan-scope-trade:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 141, 132, 0.45);
-  background: rgba(22, 30, 46, 0.58);
-}
-
-.plan-scope-trade-label {
-  display: block;
-  margin-bottom: 6px;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 13px;
-}
-
-.plan-scope-trade-value {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.plan-scope-trade-selection-count {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.plan-detail-modal {
-  max-width: 760px;
-  max-height: 85vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(23, 27, 37, 0.98), rgba(13, 16, 24, 0.98));
-  color: #ffffff;
-  overscroll-behavior: contain;
-}
-
-.plan-detail-title {
-  font-size: 24px;
-}
-
-.plan-detail-description {
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.plan-detail-list {
-  flex: 1;
-  min-height: 0;
-  overflow: visible;
-  padding-right: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.plan-detail-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-  padding-top: 8px;
-}
-
-.plan-detail-card {
-  padding: 18px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.plan-detail-card-selectable {
-  position: relative;
-  padding-top: 24px;
-}
-
-.plan-detail-card-selected {
-  border-color: rgba(78, 168, 228, 0.58);
-  box-shadow: 0 0 0 1px rgba(78, 168, 228, 0.18);
-}
-
-.plan-detail-select-toggle {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  z-index: 2;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 2px solid rgba(191, 219, 254, 0.75);
-  background: rgba(18, 24, 38, 0.96);
-  color: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-}
-
-.plan-detail-select-toggle:hover:not(:disabled) {
-  transform: scale(1.04);
-  border-color: #8fc8ff;
-}
-
-.plan-detail-select-toggle:disabled {
-  opacity: 0.45;
-  border-color: rgba(148, 163, 184, 0.5);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.plan-detail-select-toggle:disabled:hover {
-  transform: none;
-}
-
-.plan-detail-select-toggle-selected {
-  background: #eef7ff;
-  border-color: #4ea8e4;
-  color: #1e73be;
-}
-
-.plan-detail-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.plan-detail-card-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.plan-detail-pill {
-  flex-shrink: 0;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: capitalize;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.plan-detail-pill-confirmed {
-  background: rgba(34, 197, 94, 0.18);
-  color: #bbf7d0;
-}
-
-.plan-detail-pill-inferred {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
-}
-
-.plan-detail-pill-needs-clarification {
-  background: rgba(217, 70, 239, 0.18);
-  color: #f5d0fe;
-}
-
-.plan-detail-pill-risk {
-  background: rgba(244, 63, 94, 0.18);
-  color: #fecdd3;
-}
-
-.plan-detail-pill-unknown,
-.plan-detail-pill-verification {
-  background: rgba(96, 165, 250, 0.16);
-  color: #bfdbfe;
-}
-
-.plan-detail-copy {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.78);
-  line-height: 1.7;
-}
-
-.plan-detail-meta {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  margin-top: 14px;
-}
-
-.plan-detail-meta > div {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.plan-detail-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.52);
-}
-
-.plan-detail-value {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.6;
-}
-
-.plan-detail-empty {
-  padding: 24px;
-  border-radius: 16px;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.68);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
 .plan-empty-state-compact {
   margin-top: 0;
 }
@@ -1441,13 +1176,8 @@
 
   .plan-summary-row,
   .plan-results-grid,
-  .plan-analysis-issues,
-  .plan-scope-grid {
+  .plan-analysis-issues {
     grid-template-columns: 1fr;
-  }
-
-  .plan-detail-meta {
-    flex-direction: column;
   }
 
   .plan-analysis-card-heading {
@@ -1500,4 +1230,764 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* ==========================================================================
+   Plan ledger — the results tables for scopes, verification, safety,
+   conflicts and RFIs.
+
+   The reference is a drawing schedule off a construction set: hairline rules,
+   a mark column running down the left margin, a wide-tracked band naming each
+   group, and a dotted leader carrying the eye to the counts. Marking an item
+   as a favorite is drawn as marking up a print — the mark number fills in.
+   ========================================================================== */
+
+.plan-ledger-section {
+  --ledger-mono: ui-monospace, "SFMono-Regular", "SF Mono", "JetBrains Mono", Menlo,
+    Consolas, monospace;
+  --ledger-mark-width: 52px;
+  --ledger-head-height: 41px;
+  --ledger-rule: rgba(255, 255, 255, 0.07);
+  --ledger-rule-strong: rgba(255, 255, 255, 0.14);
+  --ledger-ground: rgba(8, 12, 21, 0.42);
+  --ledger-accent: #7cc4f2;
+  --ledger-accent-soft: rgba(124, 196, 242, 0.09);
+  --ledger-accent-soft-strong: rgba(124, 196, 242, 0.15);
+  --ledger-accent-line: rgba(124, 196, 242, 0.4);
+
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* -- Toolbar --------------------------------------------------------------- */
+
+.plan-ledger-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px 28px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ledger-rule-strong);
+}
+
+.plan-ledger-toolbar-copy {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.plan-ledger-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.plan-ledger-subtitle {
+  margin: 7px 0 0;
+  max-width: 68ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.plan-ledger-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+  font-family: var(--ledger-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.plan-ledger-metrics span + span::before {
+  content: "/";
+  margin: 0 10px;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.plan-ledger-metrics .is-marked {
+  color: var(--ledger-accent);
+}
+
+.plan-ledger-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.plan-ledger-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.plan-ledger-filter:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.plan-ledger-filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.plan-ledger-filter.is-on {
+  background: var(--ledger-accent-soft-strong);
+  border-color: var(--ledger-accent-line);
+  color: #eaf6ff;
+}
+
+.plan-ledger-filter.is-on .plan-ledger-filter-dot {
+  background: var(--ledger-accent);
+  box-shadow: 0 0 0 4px rgba(124, 196, 242, 0.16);
+}
+
+.plan-ledger-filter:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* -- Table shell ----------------------------------------------------------- */
+
+.plan-ledger {
+  border: 1px solid var(--ledger-rule-strong);
+  border-radius: 14px;
+  background: var(--ledger-ground);
+  /* Collapsing a group scrolls its band back under the column header. Scroll
+     anchoring would fight that by re-pinning whatever row was on screen. */
+  overflow-anchor: none;
+}
+
+.plan-ledger-head,
+.plan-ledger-row {
+  display: grid;
+  grid-template-columns: var(--ledger-mark-width) var(--ledger-columns);
+  align-items: start;
+  gap: 0 20px;
+}
+
+.plan-ledger-head {
+  position: sticky;
+  top: var(--ledger-sticky-top);
+  z-index: 3;
+  /* Bands stick directly beneath this, at --ledger-head-height. Pinning the
+     height here keeps that offset honest instead of leaving it a guess that
+     drifts whenever the padding or type size changes. box-sizing is stated
+     rather than inherited from the global reset, so the two stay equal even if
+     this file is rendered without it. */
+  box-sizing: border-box;
+  height: var(--ledger-head-height);
+  padding: 13px 20px 12px 18px;
+  border-bottom: 1px solid var(--ledger-rule-strong);
+  border-radius: 13px 13px 0 0;
+  background: rgba(12, 17, 28, 0.94);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.plan-ledger-head-cell {
+  font-family: var(--ledger-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* -- Group band ------------------------------------------------------------ */
+
+.plan-ledger-group {
+  position: relative;
+}
+
+/* The margin rail. Ties a band to the rows it owns, the way a revision bar
+   runs down the edge of a drawing sheet. */
+.plan-ledger-group::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ledger-accent);
+  opacity: 0.5;
+}
+
+.plan-ledger-group-empty {
+  opacity: 0.38;
+}
+
+.plan-ledger-group-empty::before {
+  opacity: 0.2;
+}
+
+.plan-ledger-band {
+  position: sticky;
+  top: calc(var(--ledger-sticky-top) + var(--ledger-head-height));
+  z-index: 2;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px 11px 18px;
+  border: none;
+  border-top: 1px solid var(--ledger-rule-strong);
+  border-bottom: 1px solid var(--ledger-rule);
+  background: rgba(16, 22, 35, 0.93);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.plan-ledger-band:hover:not(:disabled) {
+  background: rgba(26, 34, 50, 0.95);
+}
+
+.plan-ledger-band:disabled {
+  cursor: default;
+}
+
+.plan-ledger-band-chevron {
+  flex-shrink: 0;
+  color: var(--ledger-accent);
+  transition: transform 0.18s ease;
+}
+
+.plan-ledger-band-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.plan-ledger-band-name {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #f3f8ff;
+}
+
+.plan-ledger-band-tag {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--ledger-accent-line);
+  background: var(--ledger-accent-soft);
+  color: var(--ledger-accent);
+  font-family: var(--ledger-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Dotted leader, borrowed from a sheet index. */
+.plan-ledger-band-leader {
+  flex: 1 1 24px;
+  min-width: 16px;
+  height: 1px;
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.24) 0 2px,
+    transparent 2px 6px
+  );
+  background-size: 6px 1px;
+  background-repeat: repeat-x;
+}
+
+.plan-ledger-band-marked {
+  flex-shrink: 0;
+  font-family: var(--ledger-mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  color: var(--ledger-accent);
+}
+
+.plan-ledger-band-count {
+  flex-shrink: 0;
+  min-width: 76px;
+  text-align: right;
+  font-family: var(--ledger-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+/* How much of this group is marked, read at a glance. */
+.plan-ledger-band-fill {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--ledger-accent);
+  opacity: 0.8;
+  transition: width 0.25s ease;
+}
+
+/* -- Rows ------------------------------------------------------------------ */
+
+.plan-ledger-row {
+  padding: 13px 20px 13px 18px;
+  border-bottom: 1px solid var(--ledger-rule);
+  transition: background 0.16s ease;
+}
+
+.plan-ledger-rows > .plan-ledger-row:last-child {
+  border-bottom: none;
+}
+
+.plan-ledger-group:last-child .plan-ledger-rows > .plan-ledger-row:last-child {
+  border-radius: 0 0 13px 13px;
+}
+
+.plan-ledger-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.plan-ledger-row.is-marked {
+  background: var(--ledger-accent-soft);
+}
+
+.plan-ledger-row.is-marked:hover {
+  background: var(--ledger-accent-soft-strong);
+}
+
+.plan-ledger-mark {
+  position: relative;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  /* A resting border, so the number reads as a control rather than a label.
+     Left transparent until hover, nothing told you the column was clickable
+     until you were already on it. */
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.plan-ledger-mark-number {
+  font-family: var(--ledger-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.42);
+  transition: opacity 0.14s ease, color 0.14s ease;
+}
+
+.plan-ledger-mark-box {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--ledger-accent);
+  color: #0b1120;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.plan-ledger-mark:hover:not(:disabled) {
+  border-color: var(--ledger-accent);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.plan-ledger-mark:hover:not(:disabled) .plan-ledger-mark-number {
+  color: #ffffff;
+}
+
+.plan-ledger-mark.is-marked {
+  border-color: var(--ledger-accent);
+}
+
+.plan-ledger-mark.is-marked .plan-ledger-mark-number {
+  opacity: 0;
+}
+
+.plan-ledger-mark.is-marked .plan-ledger-mark-box {
+  opacity: 1;
+}
+
+.plan-ledger-mark:disabled {
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.07);
+  background: transparent;
+}
+
+.plan-ledger-band:focus-visible,
+.plan-ledger-mark:focus-visible,
+.plan-ledger-filter:focus-visible {
+  outline: 2px solid var(--ledger-accent);
+  outline-offset: 2px;
+}
+
+/* -- Cells ----------------------------------------------------------------- */
+
+.plan-ledger-cell {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.plan-ledger-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-ledger-primary-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #ffffff;
+}
+
+.plan-ledger-primary-copy {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.plan-ledger-muted {
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.plan-ledger-blank {
+  font-family: var(--ledger-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.plan-ledger-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.plan-ledger-chip {
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--ledger-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.plan-ledger-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  font-family: var(--ledger-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.plan-ledger-tag-confirmed {
+  color: #a9f0c6;
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.plan-ledger-tag-inferred {
+  color: #fbd58c;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.plan-ledger-tag-unknown {
+  color: #c3dcfb;
+  background: rgba(96, 165, 250, 0.14);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.plan-ledger-filtered-empty {
+  padding: 30px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+/* -- Save bar -------------------------------------------------------------
+   Unsaved favorites are easy to walk away from, so this is the one element on
+   the page that deliberately breaks the dark palette: a light pill, floated
+   clear of the table, that slides up when there is something to save.
+   Everything around it stays quiet so this reads first.
+   ------------------------------------------------------------------------- */
+
+.plan-ledger-savebar {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 9px 9px 9px 18px;
+  border-radius: 999px;
+  background: #f1f5fa;
+  color: #101a2c;
+  box-shadow:
+    0 0 0 1px rgba(6, 10, 20, 0.55),
+    0 20px 46px rgba(3, 6, 14, 0.62),
+    0 4px 12px rgba(3, 6, 14, 0.4);
+  transform: translateX(-50%);
+  animation: plan-ledger-savebar-in 280ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes plan-ledger-savebar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* The full-width variant below 900px must not carry the centring offset. */
+@keyframes plan-ledger-savebar-in-wide {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.plan-ledger-savebar-copy {
+  font-family: var(--ledger-mono);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: #16233a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-ledger-savebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Shape only. The colour stays whatever .plan-add-to-bid-button uses, so this
+   Save matches every other primary button in the app. */
+.plan-ledger-savebar .plan-add-to-bid-button {
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: 13px;
+}
+
+.plan-ledger-ghost-button {
+  border: 1px solid rgba(16, 26, 44, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: #3a4a66;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.plan-ledger-ghost-button:hover:not(:disabled) {
+  background: rgba(16, 26, 44, 0.08);
+  color: #101a2c;
+}
+
+.plan-ledger-ghost-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.plan-ledger-ghost-button:focus-visible {
+  outline: 2px solid #1e73be;
+  outline-offset: 2px;
+}
+
+/* -- Tones ----------------------------------------------------------------- */
+
+.plan-ledger-tone-neutral {
+  --ledger-accent: #7cc4f2;
+  --ledger-accent-soft: rgba(124, 196, 242, 0.09);
+  --ledger-accent-soft-strong: rgba(124, 196, 242, 0.15);
+  --ledger-accent-line: rgba(124, 196, 242, 0.4);
+}
+
+.plan-ledger-tone-critical {
+  --ledger-accent: #ff7a85;
+  --ledger-accent-soft: rgba(255, 122, 133, 0.1);
+  --ledger-accent-soft-strong: rgba(255, 122, 133, 0.16);
+  --ledger-accent-line: rgba(255, 122, 133, 0.42);
+}
+
+.plan-ledger-tone-high {
+  --ledger-accent: #ffa459;
+  --ledger-accent-soft: rgba(255, 164, 89, 0.1);
+  --ledger-accent-soft-strong: rgba(255, 164, 89, 0.16);
+  --ledger-accent-line: rgba(255, 164, 89, 0.42);
+}
+
+.plan-ledger-tone-medium {
+  --ledger-accent: #f2cf6b;
+  --ledger-accent-soft: rgba(242, 207, 107, 0.1);
+  --ledger-accent-soft-strong: rgba(242, 207, 107, 0.16);
+  --ledger-accent-line: rgba(242, 207, 107, 0.4);
+}
+
+.plan-ledger-tone-low {
+  --ledger-accent: #7fd8ad;
+  --ledger-accent-soft: rgba(127, 216, 173, 0.09);
+  --ledger-accent-soft-strong: rgba(127, 216, 173, 0.15);
+  --ledger-accent-line: rgba(127, 216, 173, 0.4);
+}
+
+.plan-ledger-tone-clarify {
+  --ledger-accent: #e9a2f7;
+  --ledger-accent-soft: rgba(233, 162, 247, 0.1);
+  --ledger-accent-soft-strong: rgba(233, 162, 247, 0.16);
+  --ledger-accent-line: rgba(233, 162, 247, 0.4);
+}
+
+.plan-ledger-tone-inferred {
+  --ledger-accent: #f5c168;
+  --ledger-accent-soft: rgba(245, 193, 104, 0.1);
+  --ledger-accent-soft-strong: rgba(245, 193, 104, 0.16);
+  --ledger-accent-line: rgba(245, 193, 104, 0.4);
+}
+
+.plan-ledger-tone-risk {
+  --ledger-accent: #fb8fa3;
+  --ledger-accent-soft: rgba(251, 143, 163, 0.1);
+  --ledger-accent-soft-strong: rgba(251, 143, 163, 0.16);
+  --ledger-accent-line: rgba(251, 143, 163, 0.42);
+}
+
+/* -- Narrow screens: rows stack, each cell keeps its column name ------------ */
+
+@media (max-width: 900px) {
+  .plan-ledger-head {
+    display: none;
+  }
+
+  .plan-ledger-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 0 12px;
+    padding: 14px 16px 16px 14px;
+  }
+
+  .plan-ledger-cell {
+    grid-column: 2;
+  }
+
+  .plan-ledger-cell + .plan-ledger-cell {
+    margin-top: 12px;
+  }
+
+  .plan-ledger-cell + .plan-ledger-cell::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-family: var(--ledger-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.34);
+  }
+
+  .plan-ledger-band {
+    top: var(--ledger-sticky-top);
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+
+  .plan-ledger-band-count {
+    min-width: 0;
+  }
+
+  .plan-ledger-toolbar-actions {
+    width: 100%;
+  }
+
+  .plan-ledger-savebar {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    max-width: none;
+    gap: 12px;
+    padding: 9px 9px 9px 14px;
+    transform: none;
+    animation-name: plan-ledger-savebar-in-wide;
+  }
+
+  .plan-ledger-savebar .plan-add-to-bid-button {
+    padding: 10px 18px;
+  }
+
+  .plan-ledger-toolbar-actions .plan-add-to-bid-button,
+  .plan-ledger-filter {
+    flex: 1 1 auto;
+    justify-content: center;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-ledger-band-chevron,
+  .plan-ledger-band-fill,
+  .plan-ledger-row,
+  .plan-ledger-mark,
+  .plan-ledger-mark-number,
+  .plan-ledger-mark-box,
+  .plan-ledger-filter,
+  .plan-ledger-filter-dot,
+  .plan-ledger-ghost-button {
+    transition: none;
+  }
+
+  .plan-ledger-savebar {
+    animation: none;
+  }
 }

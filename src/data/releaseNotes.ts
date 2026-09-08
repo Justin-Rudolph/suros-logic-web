@@ -2,6 +2,18 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.7.0",
+    date: "September 8, 2026",
+    highlights: [
+      "Redesigned the Plan Analyzer results — Trade Scopes, Verification Checklist, Safety Review, Conflicts, and RFI Package now lay every finding out in one table instead of tiles you had to open one at a time, so you can read a whole analysis without clicking into anything.",
+      "Each category is now a heading in that table with its items listed underneath, showing how many items it holds and how many you have favorited at a glance.",
+      "Favorites are now chosen right on the row. Click the number beside any item to favorite it, and a bar appears at the bottom to save or discard your changes before they are kept.",
+      "Added a Favorites only filter to every results tab, which narrows the table down to just the items you have saved.",
+      "Category sections can be collapsed to get them out of the way, and collapsing one brings you straight to the top of the next section.",
+      "Conflicts now list their involved trades and source sheet numbers directly in the table, so you can trace an issue back to the drawing without opening it.",
+    ],
+  },
+  {
     version: "v3.6.0",
     date: "August 31, 2026",
     highlights: [
