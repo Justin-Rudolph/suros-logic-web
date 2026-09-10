@@ -102,7 +102,7 @@ const parseChecklistPayload = (parsed) => {
   return items.map(sanitizeChecklistItem).filter(Boolean);
 };
 
-const generateChecklist = async (files, scopes, openAiApiKey, userNotes = "") => {
+const generateChecklist = async (files, scopes, openAiApiKey, userNotes = "", selectedTrades = null) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -156,7 +156,7 @@ Return exactly:
     }
   ]
 }
-      `, { userNotes }),
+      `, { userNotes, selectedTrades }),
       userContent: `
 PLAN TEXT CHUNK:
 ${chunk.text}
@@ -206,7 +206,7 @@ Return exactly:
     }
   ]
 }
-    `, { userNotes }),
+    `, { userNotes, selectedTrades }),
     userContent: `
 SCOPES:
 ${scopeContext || "No generated scopes available."}
@@ -285,7 +285,13 @@ module.exports = async function generateVerificationChecklistHandler(req, res, o
     }
 
     const scopesData = scopesSnap.data() || {};
-    const verification = await generateChecklist(files, scopesData.result || {}, openAiApiKey, projectData?.userNotes);
+    const verification = await generateChecklist(
+      files,
+      scopesData.result || {},
+      openAiApiKey,
+      projectData?.userNotes,
+      projectData?.selectedTrades
+    );
 
     const completedAt = FieldValue.serverTimestamp();
     const latestProjectSnap = await firestore.doc(`planProjects/${projectId}`).get();

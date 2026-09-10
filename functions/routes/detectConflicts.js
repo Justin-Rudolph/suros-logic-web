@@ -103,7 +103,7 @@ const parseConflictPayload = (parsed) => {
   return items.map(sanitizeConflictItem).filter(Boolean);
 };
 
-const generateConflictAnalysis = async (files, openAiApiKey, userNotes = "") => {
+const generateConflictAnalysis = async (files, openAiApiKey, userNotes = "", selectedTrades = null) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -157,7 +157,7 @@ Return exactly:
     }
   ]
 }
-      `, { userNotes }),
+      `, { userNotes, selectedTrades }),
         userContent: chunk.text,
       });
       chunkUsages[index] = usage;
@@ -196,7 +196,7 @@ Return exactly:
     }
   ]
 }
-    `, { userNotes }),
+    `, { userNotes, selectedTrades }),
     userContent: serializeChunkResults(contextChunks, chunkFindings, "CONFLICT CHUNK"),
   });
 
@@ -257,7 +257,12 @@ module.exports = async function detectConflictsHandler(req, res, openAiApiKey, a
       throw missingFilesError;
     }
 
-    const conflicts = await generateConflictAnalysis(files, openAiApiKey, projectData?.userNotes);
+    const conflicts = await generateConflictAnalysis(
+      files,
+      openAiApiKey,
+      projectData?.userNotes,
+      projectData?.selectedTrades
+    );
 
     const completedAt = FieldValue.serverTimestamp();
 

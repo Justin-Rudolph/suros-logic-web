@@ -17,7 +17,12 @@ import { firestore, storage } from "@/lib/firebase";
 import { applyOwnFilter, canEditRecord, getListScope, getScopeQueryField, getScopeQueryValue, isMember } from "@/lib/account";
 import { getFunctionsBaseUrl } from "@/lib/functionsApi";
 import { useAccountCreators } from "@/hooks/useAccountCreators";
-import { UploadedPlanFile } from "@/models/PlanAnalyzerShared";
+import {
+  SCOPE_TRADE_LABELS,
+  TRADE_KEYS,
+  TradeKey,
+  UploadedPlanFile,
+} from "@/models/PlanAnalyzerShared";
 import { PlanProjectRecord } from "@/models/PlanProjects";
 import { PlanAnalyzerUsage, UserProfile } from "@/models/UserProfile";
 
@@ -31,6 +36,24 @@ type FirestoreTimestampLike = {
 type AnalysisToggleKey = "verification" | "safety" | "conflicts" | "rfi";
 
 type AnalysisToggleState = Record<AnalysisToggleKey, boolean>;
+
+type TradeToggleState = Record<TradeKey, boolean>;
+
+const ANALYSIS_TOGGLE_KEYS: AnalysisToggleKey[] = ["verification", "safety", "conflicts", "rfi"];
+
+const buildAnalysisToggleState = (value: boolean): AnalysisToggleState =>
+  ANALYSIS_TOGGLE_KEYS.reduce((acc, key) => {
+    acc[key] = value;
+    return acc;
+  }, {} as AnalysisToggleState);
+
+const EMPTY_ANALYSIS_TOGGLES: AnalysisToggleState = buildAnalysisToggleState(false);
+
+const buildTradeToggleState = (value: boolean): TradeToggleState =>
+  TRADE_KEYS.reduce((acc, key) => {
+    acc[key] = value;
+    return acc;
+  }, {} as TradeToggleState);
 
 const DEFAULT_PLAN_ANALYSIS_MONTHLY_LIMIT = 3;
 const TRIAL_PLAN_ANALYSIS_MONTHLY_LIMIT = 1;
@@ -282,6 +305,7 @@ export default function PlanAnalyzer() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const titleFieldRef = useRef<HTMLDivElement | null>(null);
+  const tradeFieldRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [projects, setProjects] = useState<PlanProjectRecord[]>([]);
@@ -294,12 +318,12 @@ export default function PlanAnalyzer() {
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const [showMissingTitleDialog, setShowMissingTitleDialog] = useState(false);
   const [showUploadDisclaimerDialog, setShowUploadDisclaimerDialog] = useState(false);
-  const [analysisToggles, setAnalysisToggles] = useState<AnalysisToggleState>({
-    verification: false,
-    safety: false,
-    conflicts: false,
-    rfi: false,
-  });
+  const [analysisToggles, setAnalysisToggles] = useState<AnalysisToggleState>(
+    EMPTY_ANALYSIS_TOGGLES
+  );
+  const [tradeToggles, setTradeToggles] = useState<TradeToggleState>(() =>
+    buildTradeToggleState(false)
+  );
 
   useEffect(() => {
     const scope = getListScope(profile);
@@ -442,6 +466,10 @@ export default function PlanAnalyzer() {
     if (isUploading) return;
     setSelectedFile(null);
     setUploadProgress(0);
+    setProjectTitle("");
+    setProjectNotes("");
+    setAnalysisToggles(EMPTY_ANALYSIS_TOGGLES);
+    setTradeToggles(buildTradeToggleState(false));
   };
 
   const confirmDeleteProject = (project: PlanProjectRecord) => {
@@ -487,15 +515,31 @@ export default function PlanAnalyzer() {
     }));
   };
 
-  const enableFullAnalysis = () => {
+  const allAnalysisModulesSelected = ANALYSIS_TOGGLE_KEYS.every((key) => analysisToggles[key]);
+
+  const toggleFullAnalysis = () => {
     if (isUploading || !canUploadPlanAnalysis) return;
 
-    setAnalysisToggles({
-      verification: true,
-      safety: true,
-      conflicts: true,
-      rfi: true,
-    });
+    setAnalysisToggles(buildAnalysisToggleState(!allAnalysisModulesSelected));
+  };
+
+  const toggleTradeOption = (key: TradeKey) => {
+    if (isUploading || !canUploadPlanAnalysis) return;
+
+    setTradeToggles((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const allTradesSelected = TRADE_KEYS.every((key) => tradeToggles[key]);
+
+  const selectedTradeKeys = TRADE_KEYS.filter((key) => tradeToggles[key]);
+
+  const toggleAllTrades = () => {
+    if (isUploading || !canUploadPlanAnalysis) return;
+
+    setTradeToggles(buildTradeToggleState(!allTradesSelected));
   };
 
   const focusProjectTitleField = () => {
@@ -615,6 +659,7 @@ export default function PlanAnalyzer() {
         title: trimmedProjectTitle,
         uploadedFile: uploadedResult,
         analysisOptions: analysisToggles,
+        selectedTrades: selectedTradeKeys,
         userNotes: projectNotes.trim(),
       });
 
@@ -627,6 +672,8 @@ export default function PlanAnalyzer() {
       setSelectedFile(null);
       setProjectTitle("");
       setProjectNotes("");
+      setAnalysisToggles(EMPTY_ANALYSIS_TOGGLES);
+      setTradeToggles(buildTradeToggleState(false));
       setUploadProgress(0);
       navigate(`/plan-analyzer/${projectId}`);
     } catch (error) {
@@ -700,6 +747,16 @@ export default function PlanAnalyzer() {
         description: "Select one PDF or image file to create a plan upload.",
         variant: "destructive",
       });
+      return;
+    }
+
+    if (!selectedTradeKeys.length) {
+      toast({
+        title: "No trade scopes selected",
+        description: "Select at least one trade scope to analyze.",
+        variant: "destructive",
+      });
+      tradeFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
@@ -904,6 +961,57 @@ export default function PlanAnalyzer() {
 
           <hr className="plan-section-divider" />
 
+          <div ref={tradeFieldRef} className="plan-analysis-options">
+            <div className="plan-analysis-options-header">
+              <span className="plan-summary-label">Trade Scopes (Required)</span>
+              <p className="plan-section-subtitle">
+                Pick the trades you want analyzed. Every analysis below is limited to the trades you
+                select here, so the results stay focused on the work you actually bid (analysis
+                time varies depending on the number of trades selected).
+              </p>
+            </div>
+
+            <div className="plan-analysis-options-grid plan-analysis-options-grid-trades">
+              <button
+                type="button"
+                className={`plan-analysis-toggle plan-analysis-toggle-compact${
+                  allTradesSelected ? " plan-analysis-toggle-active" : ""
+                }`}
+                onClick={toggleAllTrades}
+                disabled={isUploading || !canUploadPlanAnalysis}
+              >
+                <span className="plan-analysis-toggle-title">All Trades</span>
+                <span className="plan-analysis-toggle-state">
+                  {allTradesSelected ? "Clear All" : "Select All"}
+                </span>
+              </button>
+
+              {SCOPE_TRADE_LABELS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`plan-analysis-toggle${tradeToggles[key] ? " plan-analysis-toggle-active" : ""}`}
+                  onClick={() => toggleTradeOption(key)}
+                  disabled={isUploading || !canUploadPlanAnalysis}
+                  aria-pressed={tradeToggles[key]}
+                >
+                  <span className="plan-analysis-toggle-title">{label}</span>
+                  <span className="plan-analysis-toggle-state">
+                    {tradeToggles[key] ? "On" : "Off"}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p className="plan-title-note">
+              {selectedTradeKeys.length
+                ? `${selectedTradeKeys.length} of ${TRADE_KEYS.length} trades selected.`
+                : "Select at least one trade scope before uploading."}
+            </p>
+          </div>
+
+          <hr className="plan-section-divider" />
+
           <div className="plan-analysis-options">
             <div className="plan-analysis-options-header">
               <span className="plan-summary-label">Analysis Modules (Optional)</span>
@@ -916,14 +1024,14 @@ export default function PlanAnalyzer() {
               <button
                 type="button"
                 className={`plan-analysis-toggle plan-analysis-toggle-compact${
-                  Object.values(analysisToggles).every(Boolean) ? " plan-analysis-toggle-active" : ""
+                  allAnalysisModulesSelected ? " plan-analysis-toggle-active" : ""
                 }`}
-                onClick={enableFullAnalysis}
+                onClick={toggleFullAnalysis}
                 disabled={isUploading || !canUploadPlanAnalysis}
               >
                 <span className="plan-analysis-toggle-title">Full Analysis</span>
                 <span className="plan-analysis-toggle-state">
-                  {Object.values(analysisToggles).every(Boolean) ? "On" : "Turn On"}
+                  {allAnalysisModulesSelected ? "Clear All" : "Select All"}
                 </span>
               </button>
 

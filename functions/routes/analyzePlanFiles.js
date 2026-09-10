@@ -6,6 +6,7 @@ const { PDFDocument } = require("pdf-lib");
 const path = require("path");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
+const { formatTradeLabelList, isFullTradeSelection } = require("./lib/tradeScopes");
 const { AI_MODELS } = require("./lib/aiModels");
 const {
   buildPlanModuleSummaryData,
@@ -994,10 +995,22 @@ const writeAnalyzedFiles = async ({
   }
 };
 
-const summarizeProjectFromPlans = async (files, openAiApiKey, userNotes = "") => {
+const summarizeProjectFromPlans = async (
+  files,
+  openAiApiKey,
+  userNotes = "",
+  selectedTrades = null
+) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
+
+  // The overview still has to describe the whole project, so a partial selection only
+  // steers emphasis here. It does not drop work the way the other modules do.
+  const tradeFocusRule =
+    selectedTrades == null || isFullTradeSelection(selectedTrades)
+      ? ""
+      : `\n- The contractor limited this analysis to these trades: ${formatTradeLabelList(selectedTrades)}. Keep projectType and affectedAreas accurate for the whole project, but weight the summary toward work owned by those trades.`;
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
   const contextChunks = createPlanContextChunks(files, MAX_SUMMARY_CHUNK_LENGTH);
@@ -1122,7 +1135,7 @@ Additional task rules:
 - Weigh repeated signals more heavily than one-off hints.
 - Do not describe anything as confirmed unless supported by the provided chunk summaries.
 - Write summary as a direct project description for a contractor or estimator. Do not mention chunks,
-  chunk summaries, extracted text, OCR, visual analysis, page records, or the analyzer process.
+  chunk summaries, extracted text, OCR, visual analysis, page records, or the analyzer process.${tradeFocusRule}
 
 Return exactly:
 {
@@ -1343,7 +1356,12 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey, 
       throw new Error("No uploaded files could be analyzed.");
     }
 
-    const projectSummary = await summarizeProjectFromPlans(analyzedFiles, openAiApiKey, projectData?.userNotes);
+    const projectSummary = await summarizeProjectFromPlans(
+      analyzedFiles,
+      openAiApiKey,
+      projectData?.userNotes,
+      projectData?.selectedTrades
+    );
 
     const latestProjectSnap = await firestore.doc(`planProjects/${projectId}`).get();
     assertPlanAnalysisCanProcess(latestProjectSnap.data() || {});

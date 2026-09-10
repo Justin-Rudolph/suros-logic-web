@@ -16,6 +16,7 @@ const {
   sumUsage,
   uniqueStrings,
 } = require("./lib/planAnalyzerContext");
+const { isFullTradeSelection, normalizeSelectedTrades } = require("./lib/tradeScopes");
 const {
   assertPlanAnalysisCanProcess,
   markPlanAnalysisCompleted,
@@ -30,23 +31,6 @@ if (!admin.apps.length) {
 }
 
 const firestore = admin.firestore();
-
-const TRADE_KEYS = [
-  "demo",
-  "structural",
-  "framing",
-  "exterior_envelope",
-  "doors_windows",
-  "roofing",
-  "concrete_masonry",
-  "drywall_insulation",
-  "flooring_tile",
-  "paint_finishes",
-  "millwork_cabinets",
-  "plumbing",
-  "electrical",
-  "HVAC",
-];
 
 const TRADE_SCOPE_CLASSIFICATION_GUIDANCE = `
 Trade scope classification definitions:
@@ -104,13 +88,14 @@ const sanitizeScopeItem = (item) => {
   };
 };
 
-const getTradeScopeTemplate = () =>
-  TRADE_KEYS.reduce((acc, trade) => {
+const getTradeScopeTemplate = (selectedTrades) =>
+  normalizeSelectedTrades(selectedTrades).reduce((acc, trade) => {
     acc[trade] = [];
     return acc;
   }, {});
 
-const getScopeResponseFormat = () => {
+const getScopeResponseFormat = (selectedTrades) => {
+  const trades = normalizeSelectedTrades(selectedTrades);
   const scopeItemSchema = {
     type: "object",
     additionalProperties: false,
@@ -135,7 +120,7 @@ const getScopeResponseFormat = () => {
     required: ["title", "description", "materialCategories", "classification"],
   };
 
-  const properties = TRADE_KEYS.reduce((acc, trade) => {
+  const properties = trades.reduce((acc, trade) => {
     acc[trade] = {
       type: "array",
       items: scopeItemSchema,
@@ -152,16 +137,16 @@ const getScopeResponseFormat = () => {
         type: "object",
         additionalProperties: false,
         properties,
-        required: TRADE_KEYS,
+        required: trades,
       },
     },
   };
 };
 
-const parseScopePayload = (parsed) => {
-  const scopes = getTradeScopeTemplate();
+const parseScopePayload = (parsed, selectedTrades) => {
+  const scopes = getTradeScopeTemplate(selectedTrades);
 
-  TRADE_KEYS.forEach((trade) => {
+  Object.keys(scopes).forEach((trade) => {
     const items = Array.isArray(parsed?.[trade]) ? parsed[trade] : [];
     scopes[trade] = items.map(sanitizeScopeItem).filter(Boolean);
   });
@@ -169,11 +154,34 @@ const parseScopePayload = (parsed) => {
   return scopes;
 };
 
-const generateTradeScopesFromPlans = async (files, openAiApiKey, userNotes = "") => {
+const formatTradeKeyList = (trades) => trades.map((trade) => `  "${trade}"`).join("\n");
+
+const formatTradeShapeExample = (trades) =>
+  `{\n${trades.map((trade) => `  "${trade}": []`).join(",\n")}\n}`;
+
+const generateTradeScopesFromPlans = async (
+  files,
+  openAiApiKey,
+  userNotes = "",
+  selectedTrades = null
+) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
 
+  const trades = normalizeSelectedTrades(selectedTrades);
+  const tradeKeyList = formatTradeKeyList(trades);
+  const tradeShapeExample = formatTradeShapeExample(trades);
+  // With every trade available, unassigned work is a gap worth closing. With a subset,
+  // the same instruction would push out-of-scope work into the nearest selected trade.
+  const unassignedWorkRules = isFullTradeSelection(trades)
+    ? `- If an item is not explicitly named as a trade scope but is supported by the plans, infer the closest responsible trade and place it there.
+- Do not leave supported work unassigned just because it is indirect, note-based, or coordination-driven.`
+    : `- Drop supported work whose most responsible trade is not one of the keys above. Do not reassign it to the closest listed trade.
+- Only infer a trade for an unlabeled item when the responsible trade is genuinely one of the keys above.`;
+  const aggregationFallbackRule = isFullTradeSelection(trades)
+    ? "- If a supported item does not map perfectly to one label, assign it to the closest responsible trade instead of omitting it."
+    : "- If a supported item does not belong to one of the keys above, omit it. Do not force it into the closest listed trade.";
   const contextChunks = createPlanContextChunks(files, MAX_PROJECT_CONTEXT_LENGTH);
   if (!contextChunks.length) {
     throw new Error("No extracted plan text is available for this project");
@@ -188,7 +196,7 @@ const generateTradeScopesFromPlans = async (files, openAiApiKey, userNotes = "")
         openai,
         model: AI_MODELS.STANDARD,
         reasoningEffort: "medium",
-        responseFormat: getScopeResponseFormat(),
+        responseFormat: getScopeResponseFormat(trades),
         systemPrompt: buildEstimatorSystemPrompt(`
 Review one chunk of construction plan context and generate trade scopes. The context may include
 OCR-extracted image text, PDF text extraction, and visual PDF/page summaries,
@@ -196,20 +204,7 @@ written the way a contractor would prepare bid scope notes.
 
 Additional task rules:
 - Use these exact top-level trade keys only:
-  "demo"
-  "structural"
-  "framing"
-  "exterior_envelope"
-  "doors_windows"
-  "roofing"
-  "concrete_masonry"
-  "drywall_insulation"
-  "flooring_tile"
-  "paint_finishes"
-  "millwork_cabinets"
-  "plumbing"
-  "electrical"
-  "HVAC"
+${tradeKeyList}
 ${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
 - Each trade value must be an array.
 - If a trade has no meaningful supported scope in this chunk, return an empty array for that trade.
@@ -217,8 +212,7 @@ ${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
 - Do not include pricing, labor hours, markup, schedule duration, or unsupported means and methods.
 - Do not duplicate the same work as primary scope under multiple trades.
 - Assign each scope item to the most responsible primary trade.
-- If an item is not explicitly named as a trade scope but is supported by the plans, infer the closest responsible trade and place it there.
-- Do not leave supported work unassigned just because it is indirect, note-based, or coordination-driven.
+${unassignedWorkRules}
 - Include materials only as broad material categories, not exact quantities.
 - Use classification carefully:
   confirmed = directly supported by extracted text or a visual page summary.
@@ -233,29 +227,14 @@ ${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
   }
 
 Return exactly this shape:
-{
-  "demo": [],
-  "structural": [],
-  "framing": [],
-  "exterior_envelope": [],
-  "doors_windows": [],
-  "roofing": [],
-  "concrete_masonry": [],
-  "drywall_insulation": [],
-  "flooring_tile": [],
-  "paint_finishes": [],
-  "millwork_cabinets": [],
-  "plumbing": [],
-  "electrical": [],
-  "HVAC": []
-}
-      `, { userNotes }),
+${tradeShapeExample}
+      `, { userNotes, selectedTrades: trades }),
         userContent: chunk.text,
       });
       chunkUsages[index] = usage;
 
       return {
-        data: parseScopePayload(parsed),
+        data: parseScopePayload(parsed, trades),
         usage,
       };
     },
@@ -266,32 +245,19 @@ Return exactly this shape:
     openai,
     model: AI_MODELS.STANDARD,
     reasoningEffort: "medium",
-    responseFormat: getScopeResponseFormat(),
+    responseFormat: getScopeResponseFormat(trades),
     systemPrompt: buildEstimatorSystemPrompt(`
 Combine chunk-level trade scopes from a full construction plan set into one final bid-style scope package.
 
 Additional task rules:
 - Use these exact top-level trade keys only:
-  "demo"
-  "structural"
-  "framing"
-  "exterior_envelope"
-  "doors_windows"
-  "roofing"
-  "concrete_masonry"
-  "drywall_insulation"
-  "flooring_tile"
-  "paint_finishes"
-  "millwork_cabinets"
-  "plumbing"
-  "electrical"
-  "HVAC"
+${tradeKeyList}
 ${TRADE_SCOPE_AGGREGATION_GUIDANCE}
 - Deduplicate materially similar scope items across chunks.
 - Preserve the most specific, best-supported wording.
 - Do not create scope items unsupported by the chunk summaries.
 - Keep descriptions concise and contractor-style.
-- If a supported item does not map perfectly to one label, assign it to the closest responsible trade instead of omitting it.
+${aggregationFallbackRule}
 - Return empty arrays for trades with no meaningful supported scope.
 - Each item must be:
   {
@@ -302,23 +268,8 @@ ${TRADE_SCOPE_AGGREGATION_GUIDANCE}
   }
 
 Return exactly this shape:
-{
-  "demo": [],
-  "structural": [],
-  "framing": [],
-  "exterior_envelope": [],
-  "doors_windows": [],
-  "roofing": [],
-  "concrete_masonry": [],
-  "drywall_insulation": [],
-  "flooring_tile": [],
-  "paint_finishes": [],
-  "millwork_cabinets": [],
-  "plumbing": [],
-  "electrical": [],
-  "HVAC": []
-}
-    `, { userNotes }),
+${tradeShapeExample}
+    `, { userNotes, selectedTrades: trades }),
     userContent: serializeChunkResults(contextChunks, chunkScopes, "SCOPE CHUNK"),
   });
 
@@ -328,10 +279,10 @@ Return exactly this shape:
     { title: "overall", usage: sumUsage([...chunkUsages, aggregationUsage]) },
   ]);
 
-  return parseScopePayload(aggregated);
+  return parseScopePayload(aggregated, trades);
 };
 
-module.exports = async function generateScopesHandler(req, res, openAiApiKey, adminContext = null) {
+async function generateScopesHandler(req, res, openAiApiKey, adminContext = null) {
   const projectId = String(req.body?.projectId || "").trim();
 
   try {
@@ -379,7 +330,12 @@ module.exports = async function generateScopesHandler(req, res, openAiApiKey, ad
       throw missingFilesError;
     }
 
-    const scopes = await generateTradeScopesFromPlans(files, openAiApiKey, projectData?.userNotes);
+    const scopes = await generateTradeScopesFromPlans(
+      files,
+      openAiApiKey,
+      projectData?.userNotes,
+      projectData?.selectedTrades
+    );
 
     const completedAt = FieldValue.serverTimestamp();
 
@@ -469,4 +425,11 @@ module.exports = async function generateScopesHandler(req, res, openAiApiKey, ad
       details: error instanceof Error ? error.message : "Unknown error",
     });
   }
-};
+}
+
+// index.js and the pipeline runner require this module and call it directly, so the
+// handler stays the export itself. The builders hang off it for tests.
+module.exports = generateScopesHandler;
+module.exports.getScopeResponseFormat = getScopeResponseFormat;
+module.exports.getTradeScopeTemplate = getTradeScopeTemplate;
+module.exports.parseScopePayload = parseScopePayload;

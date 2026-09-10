@@ -1,3 +1,5 @@
+const { getTradeLabel, isFullTradeSelection, normalizeSelectedTrades } = require("./tradeScopes");
+
 const buildContractorNotesBlock = (userNotes) => {
   const notes = String(userNotes == null ? "" : userNotes).trim();
   if (!notes) {
@@ -10,6 +12,25 @@ const buildContractorNotesBlock = (userNotes) => {
 - Still do not fabricate quantities, dimensions, assemblies, products, locations, or code conclusions beyond what these notes or the plans actually support.
 
 ${notes}
+
+`;
+};
+
+// Emitted only for a partial selection. A full selection is the historical behavior,
+// so it stays prompt-identical to what shipped before trade selection existed.
+const buildSelectedTradesBlock = (selectedTrades) => {
+  if (selectedTrades == null || isFullTradeSelection(selectedTrades)) {
+    return "";
+  }
+
+  const labels = normalizeSelectedTrades(selectedTrades).map(getTradeLabel);
+
+  return `SELECTED TRADE SCOPES:
+- The contractor limited this analysis to the following trades: ${labels.join(", ")}.
+- Only report work whose primary responsibility falls to one of those trades.
+- Omit findings, items, questions, and observations owned primarily by any other trade, even when the plans clearly support them.
+- You may still mention another trade inside a selected trade's item when it is coordination the selected trade has to account for, but never make the other trade the subject of its own item.
+- Narrowing the trades does not lower the evidence standard. Do not pad results to fill out the selected trades.
 
 `;
 };
@@ -62,7 +83,7 @@ Output rules:
 - Do not prepend schema labels inside prose fields. Do not write values like "confirmed: ...", "inferred: ...", "needs_verification: ...", "needs_clarification: ...", "risk: ...", "assumption: ...", "RFI: ...", or "MEP_conflict: ..." inside title, text, detail, description, reason, issue, item, or similar content fields.
 - Put status, category, classification, confidence, and type information only in the dedicated schema fields provided for them.
 
-${buildContractorNotesBlock(options.userNotes)}Task:
+${buildContractorNotesBlock(options.userNotes)}${buildSelectedTradesBlock(options.selectedTrades)}Task:
 ${String(taskInstructions || "").trim()}
 `.trim();
 

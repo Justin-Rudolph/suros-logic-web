@@ -14,7 +14,12 @@ import { PlanAnalysisResult, PlanOverviewModuleRecord } from "@/models/PlanAnaly
 import { PlanRfiModuleRecord, RfiPackage } from "@/models/PlanAnalyzerRfi";
 import { PlanSafetyModuleRecord, SafetyItem } from "@/models/PlanAnalyzerSafety";
 import { ScopeItem, ScopeResult, PlanScopesModuleRecord } from "@/models/PlanAnalyzerScopes";
-import { PlanModuleStatus, PlanModuleType } from "@/models/PlanAnalyzerShared";
+import {
+  PlanModuleStatus,
+  PlanModuleType,
+  SCOPE_TRADE_LABELS,
+  getSelectedTradeKeys,
+} from "@/models/PlanAnalyzerShared";
 import { PlanVerificationModuleRecord, VerificationItem } from "@/models/PlanAnalyzerVerification";
 import { PlanProjectRecord } from "@/models/PlanProjects";
 
@@ -90,23 +95,6 @@ type FormattedBidLineItem = {
   trade: string;
   scope_lines: string[];
 };
-
-const SCOPE_TRADE_LABELS: Array<{ key: string; label: string }> = [
-  { key: "demo", label: "Demo" },
-  { key: "structural", label: "Structural" },
-  { key: "framing", label: "Framing" },
-  { key: "exterior_envelope", label: "Exterior Envelope" },
-  { key: "doors_windows", label: "Doors/Windows" },
-  { key: "roofing", label: "Roofing" },
-  { key: "plumbing", label: "Plumbing" },
-  { key: "electrical", label: "Electrical" },
-  { key: "concrete_masonry", label: "Concrete/Masonry" },
-  { key: "drywall_insulation", label: "Drywall/Insulation" },
-  { key: "flooring_tile", label: "Flooring/Tile" },
-  { key: "paint_finishes", label: "Paint/Finishes" },
-  { key: "millwork_cabinets", label: "Millwork/Cabinets" },
-  { key: "HVAC", label: "HVAC" },
-];
 
 const VERIFICATION_CATEGORY_ORDER: VerificationItem["category"][] = [
   "dimensions",
@@ -580,8 +568,15 @@ export default function PlanAnalyzerRun() {
     });
   }, [project]);
 
+  // Only the trades the contractor picked at upload were analyzed. Older projects have
+  // no selection stored and fall back to the full list.
+  const analyzedTrades = useMemo(() => {
+    const analyzedKeys = new Set<string>(getSelectedTradeKeys(project?.selectedTrades));
+    return SCOPE_TRADE_LABELS.filter(({ key }) => analyzedKeys.has(key));
+  }, [project?.selectedTrades]);
+
   const allSelectableScopeItems = useMemo(() => {
-    return SCOPE_TRADE_LABELS.flatMap(({ key, label }) =>
+    return analyzedTrades.flatMap(({ key, label }) =>
       Array.isArray(scopeResult?.[key])
         ? scopeResult[key].map((item, index) => ({
             id: buildScopeSelectionId(key, index),
@@ -591,7 +586,7 @@ export default function PlanAnalyzerRun() {
           }))
         : []
     );
-  }, [scopeResult]);
+  }, [analyzedTrades, scopeResult]);
 
   const allSelectableVerificationItems = useMemo(
     () =>
@@ -1285,7 +1280,7 @@ export default function PlanAnalyzerRun() {
           { key: "class", label: "Class", width: "minmax(0, 148px)" },
           { key: "materials", label: "Materials", width: "minmax(0, 1.1fr)" },
         ],
-        groups: SCOPE_TRADE_LABELS.map(({ key, label }) => ({
+        groups: analyzedTrades.map(({ key, label }) => ({
           key,
           label,
           rows: (Array.isArray(scopeResult[key]) ? scopeResult[key] : []).map((item, index) => ({

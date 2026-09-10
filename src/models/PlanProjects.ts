@@ -27,6 +27,7 @@ export interface PlanProjectDocument {
   updatedAt?: Timestamp;
   uploadedFiles?: UploadedPlanFile[];
   analysisOptions?: PlanAnalysisOptions;
+  selectedTrades?: string[];
   modules: PlanProjectModulesSummary;
 }
 

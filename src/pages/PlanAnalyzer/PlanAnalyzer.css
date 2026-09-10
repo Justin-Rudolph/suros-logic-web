@@ -462,6 +462,20 @@
   gap: 10px;
 }
 
+/* 15 tiles with longer labels than the module row, so they reflow on their own
+   rather than being pinned to five columns. The track fits "Drywall/Insulation"
+   plus its state pill; the title truncates below that instead of pushing the
+   pill outside the tile. */
+.plan-analysis-options-grid-trades {
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+}
+
+.plan-analysis-options-grid-trades .plan-analysis-toggle-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .plan-analysis-options-notes {
   margin: 14px 0 0;
   padding-left: 18px;

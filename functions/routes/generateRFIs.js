@@ -71,7 +71,7 @@ const parseRfiPayload = (parsed) => ({
   contingencyNotes: uniqueStrings(parsed?.contingencyNotes),
 });
 
-const generateRfiPackage = async (files, openAiApiKey, userNotes = "") => {
+const generateRfiPackage = async (files, openAiApiKey, userNotes = "", selectedTrades = null) => {
   if (!openAiApiKey) {
     throw new Error("OPENAI_API_KEY not found in environment");
   }
@@ -112,7 +112,7 @@ Return exactly this JSON shape:
   "estimatorQuestions": [],
   "contingencyNotes": []
 }
-      `, { userNotes }),
+      `, { userNotes, selectedTrades }),
         userContent: chunk.text,
       });
       chunkUsages[index] = usage;
@@ -146,7 +146,7 @@ Return exactly this JSON shape:
   "estimatorQuestions": [],
   "contingencyNotes": []
 }
-    `, { userNotes }),
+    `, { userNotes, selectedTrades }),
     userContent: serializeChunkResults(contextChunks, chunkPackages, "RFI CHUNK"),
   });
 
@@ -207,7 +207,12 @@ module.exports = async function generateRFIsHandler(req, res, openAiApiKey, admi
       throw missingFilesError;
     }
 
-    const rfiPackage = await generateRfiPackage(files, openAiApiKey, projectData?.userNotes);
+    const rfiPackage = await generateRfiPackage(
+      files,
+      openAiApiKey,
+      projectData?.userNotes,
+      projectData?.selectedTrades
+    );
 
     const completedAt = FieldValue.serverTimestamp();
 

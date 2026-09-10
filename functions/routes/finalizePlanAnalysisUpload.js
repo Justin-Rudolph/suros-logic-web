@@ -8,6 +8,7 @@ const {
   buildPlanModuleSummaryData,
   getPlanModuleDocPath,
 } = require("./lib/planAnalyzerContext");
+const { TRADE_KEYS, selectValidTrades } = require("./lib/tradeScopes");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -110,6 +111,21 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
     });
 
     const analysisOptions = normalizeAnalysisOptions(req.body?.analysisOptions || {});
+    // An omitted field means an older client, which analyzed every trade. A field that
+    // is present but names no known trade is a client error — falling back to all 14
+    // there would silently run a far larger analysis than asked for and burn the
+    // caller's monthly quota on results they never requested.
+    const hasRequestedTrades = req.body?.selectedTrades != null;
+    const selectedTrades = hasRequestedTrades
+      ? selectValidTrades(req.body.selectedTrades)
+      : [...TRADE_KEYS];
+
+    if (hasRequestedTrades && !selectedTrades.length) {
+      const tradeError = new Error("selectedTrades must name at least one known trade scope.");
+      tradeError.statusCode = 400;
+      throw tradeError;
+    }
+
     const title = String(req.body?.title || "").trim();
     const userNotes = sanitizeUserNotes(req.body?.userNotes);
     const modules = {
@@ -151,6 +167,7 @@ module.exports = async function finalizePlanAnalysisUploadHandler(req, res) {
         status: "uploaded",
         uploadedFiles: [uploadedFile],
         analysisOptions,
+        selectedTrades,
         userNotes,
         modules,
       },
