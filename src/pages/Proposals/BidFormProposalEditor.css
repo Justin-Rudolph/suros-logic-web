@@ -427,6 +427,33 @@
   width: 40px;
 }
 
+/* Same red-tinted trash button as the bid form's line-item delete, sized down
+   to fit the narrow # column. Editor-only — the PDF template has no button. */
+.bid-editor-line-delete-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 6px;
+  padding: 0;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.bid-editor-line-delete-button:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.bid-editor-line-delete-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.22);
+}
+
 .bid-editor-trade-input {
   font-weight: 700;
   font-size: 18px;

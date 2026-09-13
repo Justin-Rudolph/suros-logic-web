@@ -17,6 +17,7 @@ import {
   where,
 } from "firebase/firestore";
 import { useNavigate, useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 import { canEditRecord, getAccountId, getListScope, getScopeQueryField, getScopeQueryValue } from "@/lib/account";
@@ -103,6 +104,21 @@ const toEditableCurrency = (value: string | number) => {
 const splitScopeDraft = (value: string) => {
   const lines = value.split(/\r?\n/);
   return lines.some((line) => line.trim()) ? lines : [];
+};
+
+// Line-item drafts are keyed by position, so removing an item has to shift every
+// later draft down one slot — otherwise the next item would inherit the deleted
+// item's unsaved text.
+const removeDraftAtIndex = (drafts: Record<number, string>, indexToRemove: number) => {
+  const next: Record<number, string> = {};
+
+  Object.entries(drafts).forEach(([key, value]) => {
+    const draftIndex = Number(key);
+    if (draftIndex < indexToRemove) next[draftIndex] = value;
+    if (draftIndex > indexToRemove) next[draftIndex - 1] = value;
+  });
+
+  return next;
 };
 
 const EditableField = ({
@@ -234,6 +250,7 @@ export default function BidFormProposalEditor() {
   const [downloadError, setDownloadError] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showBackConfirm, setShowBackConfirm] = useState(false);
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
   const [lineTotalDrafts, setLineTotalDrafts] = useState<Record<number, string>>({});
   const [scopeDrafts, setScopeDrafts] = useState<Record<number, string>>({});
   // A view_all_edit_own/own member can view but not edit/save a proposal in a
@@ -489,6 +506,24 @@ export default function BidFormProposalEditor() {
     }));
   };
 
+  // Removes the item locally only; it stays in the saved proposal until Save
+  // Changes, and leaving without saving brings it back.
+  const handleDeleteLineItem = (indexToDelete: number) => {
+    if (isReadOnly) return;
+
+    setHasUnsavedChanges(true);
+    setLineTotalDrafts((current) => removeDraftAtIndex(current, indexToDelete));
+    setScopeDrafts((current) => removeDraftAtIndex(current, indexToDelete));
+    setDocumentData((current) =>
+      current
+        ? {
+            ...current,
+            line_items: current.line_items.filter((_, index) => index !== indexToDelete),
+          }
+        : current
+    );
+  };
+
   const persistProposalChanges = async () => {
     if (!record?.id || !effectiveDocumentData || !user) return null;
 
@@ -677,6 +712,9 @@ export default function BidFormProposalEditor() {
       ? [{ key: "customer_email" as const, value: documentData.customer_email }]
       : []),
   ];
+
+  const pendingDeleteItem =
+    pendingDeleteIndex === null ? null : documentData.line_items[pendingDeleteIndex] ?? null;
 
   return (
     <div className="dashboard-wrapper bid-editor-shell">
@@ -921,7 +959,20 @@ export default function BidFormProposalEditor() {
               <tbody>
                 {documentData.line_items.map((item, index) => (
                   <tr key={index} style={{ pageBreakInside: "auto", breakInside: "auto" }}>
-                    <td className="bid-editor-line-cell bid-editor-line-index">{index + 1}</td>
+                    <td className="bid-editor-line-cell bid-editor-line-index">
+                      {index + 1}
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          className="bid-editor-line-delete-button"
+                          onClick={() => setPendingDeleteIndex(index)}
+                          aria-label={`Delete line item ${index + 1}`}
+                          title="Delete line item"
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      )}
+                    </td>
                     <td className="bid-editor-line-cell">
                       <EditableField
                         value={item.trade}
@@ -1160,6 +1211,39 @@ export default function BidFormProposalEditor() {
                 onClick={() => setShowBackConfirm(false)}
               >
                 Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteIndex !== null && pendingDeleteItem && (
+        <div className="bid-editor-back-modal-overlay">
+          <div className="bid-editor-back-modal">
+            <h2>Delete line item?</h2>
+            <p>
+              Line item {pendingDeleteIndex + 1}
+              {pendingDeleteItem.trade.trim() ? ` (${pendingDeleteItem.trade.trim()})` : ""} will
+              be removed and the remaining items renumbered. The proposal isn't changed until you
+              click Save Changes.
+            </p>
+            <div className="bid-editor-back-modal-actions">
+              <button
+                type="button"
+                className="bid-editor-back-modal-back"
+                onClick={() => {
+                  handleDeleteLineItem(pendingDeleteIndex);
+                  setPendingDeleteIndex(null);
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="bid-editor-back-modal-return"
+                onClick={() => setPendingDeleteIndex(null)}
+              >
+                Cancel
               </button>
             </div>
           </div>
