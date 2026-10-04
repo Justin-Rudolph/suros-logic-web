@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
-import { Loader2 } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Progress } from "@/components/ui/progress";
@@ -13,7 +13,13 @@ import { ConflictItem, PlanConflictsModuleRecord } from "@/models/PlanAnalyzerCo
 import { PlanAnalysisResult, PlanOverviewModuleRecord } from "@/models/PlanAnalyzerOverview";
 import { PlanRfiModuleRecord, RfiPackage } from "@/models/PlanAnalyzerRfi";
 import { PlanSafetyModuleRecord, SafetyItem } from "@/models/PlanAnalyzerSafety";
-import { ScopeItem, ScopeResult, PlanScopesModuleRecord } from "@/models/PlanAnalyzerScopes";
+import {
+  ScopeItem,
+  ScopeMaterial,
+  ScopeResult,
+  PlanScopesModuleRecord,
+  getScopeMaterials,
+} from "@/models/PlanAnalyzerScopes";
 import {
   PlanModuleStatus,
   PlanModuleType,
@@ -138,6 +144,87 @@ const RFI_SECTION_TONES: Record<keyof RfiPackage, LedgerTone> = {
   assumptions: "inferred",
   estimatorQuestions: "clarify",
   contingencyNotes: "risk",
+};
+
+const MATERIAL_TOTAL_SUFFIX = /\s*\((?:total run|total area|total volume)\)\s*$/i;
+
+/** Units that measure a material rather than count what you buy. */
+const RUNNING_TOTAL_UNITS = new Set(["LF", "SF", "SY", "CY", "CF", "BF", "SQ"]);
+
+const materialBaseName = (name: string) => name.replace(MATERIAL_TOTAL_SUFFIX, "").trim();
+
+const materialTokens = (name: string) =>
+  materialBaseName(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9./]+/g, " ")
+    .split(" ")
+    .filter(Boolean);
+
+/** A stock size extends its material's token with a length, as 2x12x16 does 2x12. */
+const tokensMatch = (totalToken: string, pieceToken: string) =>
+  totalToken === pieceToken || pieceToken.startsWith(`${totalToken}x`);
+
+const isSubsequence = (shorter: string[], longer: string[]) => {
+  let matched = 0;
+  longer.forEach((token) => {
+    if (matched < shorter.length && tokensMatch(shorter[matched], token)) {
+      matched += 1;
+    }
+  });
+  return matched === shorter.length;
+};
+
+/**
+ * Totals follow the stock sizes they add up. A total is recognized either by its
+ * "(total run)" name or by measuring the same material a piece row buys — its words run
+ * through that row's name in order, as "1.75 in. x 11.875 in. LVL beam" does through
+ * "1.75 in. x 11.875 in. x 18 ft. LVL beam". A material sold only by the total, such as
+ * poured concrete, matches nothing and still reads as something to buy.
+ */
+const orderMaterials = (materials: ScopeMaterial[]) => {
+  const entries = materials.map((material, index) => ({
+    material,
+    index,
+    tokens: materialTokens(material.name),
+    hasTotalSuffix: MATERIAL_TOTAL_SUFFIX.test(material.name),
+    isPiece: !RUNNING_TOTAL_UNITS.has(String(material.unit || "").toUpperCase()),
+  }));
+
+  return entries
+    .map((entry) => {
+      const covering = entries.filter(
+        (candidate) =>
+          candidate !== entry &&
+          candidate.isPiece &&
+          entry.tokens.length >= 3 &&
+          isSubsequence(entry.tokens, candidate.tokens)
+      );
+      const coveredTotal = covering.length > 0 && (entry.hasTotalSuffix || !entry.isPiece);
+      const groupIndex = coveredTotal
+        ? Math.max(...covering.map((candidate) => candidate.index))
+        : entry.index;
+
+      return { material: entry.material, index: entry.index, coveredTotal, groupIndex };
+    })
+    .sort(
+      (left, right) =>
+        left.groupIndex - right.groupIndex ||
+        Number(left.coveredTotal) - Number(right.coveredTotal) ||
+        left.index - right.index
+    );
+};
+
+const QUANTITY_BASIS_LABELS: Record<string, string> = {
+  stated: "Stated on the plans",
+  calculated: "Calculated from plan numbers",
+  measured: "Measured from the drawing",
+  inferred: "Inferred from a standard allowance",
+};
+
+const CONFIDENCE_REASONS: Record<string, string> = {
+  high: "Explicitly shown, scheduled, or dimensioned on the plans.",
+  medium: "Needed a calculation or a reasonable interpretation.",
+  low: "Needed an estimating allowance or a significant assumption.",
 };
 
 const buildScopeSelectionId = (tradeKey: string, index: number) => `${tradeKey}::${index}`;
@@ -1266,19 +1353,118 @@ export default function PlanAnalyzerRun() {
       <span className="plan-ledger-blank">Not specified</span>
     );
 
+  /** Plain confidence label with an info icon explaining how the quantity was reached. */
+  const renderQuantityConfidence = (material: ScopeMaterial) => {
+    const basisLabel = QUANTITY_BASIS_LABELS[material.quantityBasis] || "How this was reached";
+    const confidenceReason = CONFIDENCE_REASONS[material.confidence] || "";
+    const explanation = [
+      basisLabel,
+      material.calculation,
+      material.planReference ? `Source: ${material.planReference}` : "",
+      confidenceReason,
+    ]
+      .filter(Boolean)
+      .join(" — ");
+
+    return (
+      <span className={`plan-material-confidence plan-material-confidence-${material.confidence}`}>
+        {material.confidence} confidence
+        <span className="plan-material-info" tabIndex={0} aria-label={explanation}>
+          <Info size={11} aria-hidden="true" />
+          <span className="plan-material-info-bubble" aria-hidden="true">
+            <span className="plan-material-info-title">{basisLabel}</span>
+            {material.calculation ? <span>{material.calculation}</span> : null}
+            {material.planReference ? (
+              <span className="plan-material-info-source">Source: {material.planReference}</span>
+            ) : null}
+            {confidenceReason ? (
+              <span className="plan-material-info-source">
+                {material.confidence} confidence: {confidenceReason}
+              </span>
+            ) : null}
+          </span>
+        </span>
+      </span>
+    );
+  };
+
+  /** One Material | Qty | Home Depot line per material. */
+  const renderMaterialLines = (item: ScopeItem) => {
+    const materials = orderMaterials(getScopeMaterials(item));
+
+    if (!materials.length) {
+      return <span className="plan-ledger-blank">Not specified</span>;
+    }
+
+    return materials.map(({ material, coveredTotal }, index) => (
+      <div
+        key={`${material.name}-${index}`}
+        className={`plan-material-line${coveredTotal ? " plan-material-line-total" : ""}`}
+      >
+        <div className="plan-material-name">
+          <span>
+            {materialBaseName(material.name)}
+            {coveredTotal ? (
+              <span className="plan-material-total-tag">total of the rows above</span>
+            ) : null}
+          </span>
+          {material.planReference ? (
+            <span className="plan-material-source">{material.planReference}</span>
+          ) : null}
+        </div>
+        <div className="plan-material-qty">
+          {material.quantity == null ? (
+            <span
+              className="plan-ledger-blank"
+              title={material.calculation || "No quantity supported by the plans"}
+            >
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">
+                {material.calculation || "No quantity supported by the plans"}
+              </span>
+            </span>
+          ) : (
+            <>
+              <span className="plan-material-amount">
+                {material.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+                {material.unit}
+              </span>
+              {material.confidence ? renderQuantityConfidence(material) : null}
+            </>
+          )}
+        </div>
+        {coveredTotal ? (
+          <span className="plan-ledger-blank">Reference only</span>
+        ) : (
+          <a
+            className="plan-material-link"
+            href={`https://www.homedepot.com/s/${encodeURIComponent(material.searchQuery)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Search Home Depot for ${material.name}`}
+          >
+            View <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </div>
+    ));
+  };
+
   const renderTradeScopesTab = () =>
     scopeResult ? (
       renderLedgerSection({
         field: "scopes",
         title: "Trade scopes",
         subtitle:
-          "Bid-ready scope items grouped by trade. Favorite the ones you want, then send them to a new bid.",
+          "Bid-ready scope items grouped by trade, with the materials each one needs, quantities labeled by how they were reached, the plan sheet behind each one, and a Home Depot search link. Favorite the ones you want, then send them to a new bid.",
         groupNoun: "trades",
         filteredEmptyMessage: "No scope items are favorites yet.",
         columns: [
-          { key: "item", label: "Scope item", width: "minmax(0, 2.2fr)" },
+          { key: "item", label: "Scope item", width: "minmax(0, 2fr)" },
           { key: "class", label: "Class", width: "minmax(0, 148px)" },
-          { key: "materials", label: "Materials", width: "minmax(0, 1.1fr)" },
+          { key: "material", label: "Material", width: "minmax(0, 1.3fr)" },
+          { key: "qty", label: "Qty", width: "minmax(0, 150px)" },
+          { key: "homeDepot", label: "Home Depot", width: "minmax(0, 104px)" },
         ],
         groups: analyzedTrades.map(({ key, label }) => ({
           key,
@@ -1291,7 +1477,7 @@ export default function PlanAnalyzerRun() {
               <span className={`plan-ledger-tag plan-ledger-tag-${item.classification}`}>
                 {item.classification.replace("_", " ")}
               </span>,
-              renderListCell(item.materialCategories),
+              { span: 3, label: "Materials", content: renderMaterialLines(item) },
             ],
           })),
         })),

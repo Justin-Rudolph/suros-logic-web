@@ -34,11 +34,21 @@ export type LedgerColumn = {
   width: string;
 };
 
+/** A cell spanning several adjacent columns; its children align on those columns. */
+export type LedgerSpanCell = {
+  span: number;
+  /** Heading shown in the stacked narrow layout. */
+  label: string;
+  content: ReactNode;
+};
+
+export type LedgerCell = ReactNode | LedgerSpanCell;
+
 export type LedgerRow = {
   id: string;
   /** Plain-text name for the row, used by the mark button's screen reader label. */
   label: string;
-  cells: ReactNode[];
+  cells: LedgerCell[];
 };
 
 export type LedgerGroup = {
@@ -64,6 +74,26 @@ type PlanLedgerProps = {
 
 const padNumber = (value: number) => String(value).padStart(2, "0");
 const formatMark = (index: number) => padNumber(index + 1);
+
+const isSpanCell = (cell: LedgerCell): cell is LedgerSpanCell =>
+  typeof cell === "object" && cell !== null && "span" in cell;
+
+/** Pairs each cell with the column it starts in. */
+const layoutCells = (cells: LedgerCell[], columns: LedgerColumn[]) => {
+  let columnIndex = 0;
+
+  return cells.map((cell) => {
+    const column = columns[columnIndex];
+    const span = isSpanCell(cell) ? cell.span : 1;
+    const key = column?.key || String(columnIndex);
+    const label = isSpanCell(cell) ? cell.label : column?.label;
+    const content = isSpanCell(cell) ? cell.content : cell;
+
+    columnIndex += span;
+
+    return { key, label, span, content };
+  });
+};
 
 export default function PlanLedger({
   columns,
@@ -240,13 +270,20 @@ export default function PlanLedger({
                         </span>
                       </button>
 
-                      {row.cells.map((cell, cellIndex) => (
+                      {layoutCells(row.cells, columns).map((cell) => (
                         <div
-                          key={columns[cellIndex]?.key || cellIndex}
-                          className="plan-ledger-cell"
-                          data-label={columns[cellIndex]?.label}
+                          key={cell.key}
+                          className={`plan-ledger-cell${
+                            cell.span > 1 ? " plan-ledger-cell-span" : ""
+                          }`}
+                          style={
+                            cell.span > 1
+                              ? ({ "--ledger-cell-span": cell.span } as React.CSSProperties)
+                              : undefined
+                          }
+                          data-label={cell.label}
                         >
-                          {cell}
+                          {cell.content}
                         </div>
                       ))}
                     </div>

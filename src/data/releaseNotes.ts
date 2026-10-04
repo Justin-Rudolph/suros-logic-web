@@ -2,6 +2,18 @@ export const RELEASE_NOTES_STORAGE_KEY = "suros-logic-last-seen-release";
 
 export const releases = [
   {
+    version: "v3.8.0",
+    date: "September 16, 2026",
+    highlights: [
+      "Added a material takeoff to Plan Analyzer trade scopes. Each scope item now lists the specific materials it needs in its own Material column.",
+      "Quantities appear in a new Qty column, each labeled with how it was reached \u2014 stated on the plans, calculated from dimensions the plans give, measured from the drawing against its printed scale bar, or inferred using a standard estimating allowance \u2014 along with a high, medium, or low confidence. Hover a quantity to see the math or assumption behind it.",
+      "Every material now shows the sheet, detail, schedule, or keynote it came from, whether or not it carries a quantity.",
+      "Every page of an uploaded plan set is now read visually as well as by text extraction, so counts and dimensions that only appear in the drawings can become quantities. Analyses take longer as a result, and the time scales with how many pages the set has.",
+      "Added a Home Depot column with a link for every material that opens Home Depot's search results for it in a new tab.",
+      "Projects analyzed before this update still show their materials, with Home Depot links, without needing to be run again.",
+    ],
+  },
+  {
     version: "v3.7.0",
     date: "September 8, 2026",
     highlights: [

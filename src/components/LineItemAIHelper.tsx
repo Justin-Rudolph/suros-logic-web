@@ -808,7 +808,7 @@ export default function LineItemAIHelper({
           }}>
             {/* Warning band */}
             <div style={{
-              background: "#D97706",
+              background: "#FF4A3D",
               padding: "14px 18px",
               display: "flex",
               alignItems: "center",
@@ -838,7 +838,7 @@ export default function LineItemAIHelper({
                 Without the clarifying details, the AI will estimate using <strong>industry averages and assumptions</strong> based only on what's currently entered.
               </p>
               <p style={{ margin: "0 0 20px", color: "#374151", fontSize: "13px", lineHeight: 1.6 }}>
-                This is best used for <strong>rough ballpark pricing</strong>. For a more accurate estimate, go back and answer the questions.
+                This is best used for <strong>rough pricing</strong>. For a more accurate estimate, go back and answer the questions.
               </p>
 
               <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -873,7 +873,7 @@ export default function LineItemAIHelper({
                   }}
                   disabled={loading || !canEdit}
                   style={{
-                    background: loading || !canEdit ? "#D97706" : "#B45309",
+                    background: loading || !canEdit ? "#FF8F86" : "#FF4A3D",
                     color: "#fff",
                     border: "none",
                     padding: "8px 16px",

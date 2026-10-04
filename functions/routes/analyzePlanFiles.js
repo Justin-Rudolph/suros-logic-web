@@ -2,7 +2,6 @@ const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const pdfParse = require("pdf-parse");
-const { PDFDocument } = require("pdf-lib");
 const path = require("path");
 const Tesseract = require("tesseract.js");
 const { buildEstimatorSystemPrompt } = require("./lib/estimatorPrompt");
@@ -20,6 +19,7 @@ const {
   serializeChunkResults,
   sumUsage,
   uniqueStrings,
+  readPageTextField,
 } = require("./lib/planAnalyzerContext");
 const {
   assertPlanAnalysisCanProcess,
@@ -43,9 +43,9 @@ const MIN_IMAGE_TEXT_LENGTH = 800;
 const PDF_VISION_FALLBACK_MIN_TEXT_LENGTH = 5000;
 const PDF_VISION_FALLBACK_MIN_AVG_PAGE_TEXT_LENGTH = 800;
 const PDF_VISION_FALLBACK_MIN_USEFUL_PAGE_RATIO = 0.85;
-const PDF_FULL_HYBRID_MAX_STRONG_TEXT_PAGES = 25;
-const PDF_SAMPLED_VISUAL_MAX_PAGES = 15;
-const PDF_WEAK_VISUAL_BATCH_CONCURRENCY = 6;
+// Each page renders up to 18 megapixels and is held again as PNG and base64; 8 in
+// flight is what 2GiB allows.
+const VISUAL_PAGE_CONCURRENCY = 8;
 const PDF_PAGE_RENDER_BASE_SCALE = 4;
 const PDF_PAGE_RENDER_MAX_DIMENSION = 4096;
 const PDF_PAGE_RENDER_MAX_PIXELS = 18000000;
@@ -89,6 +89,10 @@ const detectFileKind = (fileName, contentType) => {
 
   return "unknown";
 };
+
+// Labels this file writes into page text. They are never sheet content.
+const GENERATED_HEADER_PATTERN =
+  /^(HYBRID (PLAN|PDF) ANALYSIS|LOCAL (PDF )?TEXT EXTRACTION|VISUAL (PDF |DOCUMENT )?ANALYSIS|SOURCE KIND|VISIBLE (SHEET NUMBER|TITLE|DISCIPLINE|TEXT)|VISUAL SUMMARY|NOTABLE WORK ITEMS|COUNTED ITEMS|STATED DIMENSIONS|MEASURED DIMENSIONS):/;
 
 const extractLines = (rawText) =>
   normalizeWhitespace(rawText)
@@ -416,29 +420,6 @@ const loadPdfForRendering = async (buffer) => {
   }).promise;
 };
 
-const createPdfSubsetBuffer = async (sourcePdf, selectedPageNumbers) => {
-  const pageCount = sourcePdf.getPageCount();
-  const sourcePageIndexes = uniqueStrings(selectedPageNumbers)
-    .map((pageNumber) => Number(pageNumber))
-    .filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= pageCount)
-    .map((pageNumber) => pageNumber - 1);
-
-  if (!sourcePageIndexes.length) {
-    throw new Error("No valid PDF pages were selected for sampled visual analysis.");
-  }
-
-  const sampledPdf = await PDFDocument.create();
-  const copiedPages = await sampledPdf.copyPages(sourcePdf, sourcePageIndexes);
-  copiedPages.forEach((page) => sampledPdf.addPage(page));
-
-  return Buffer.from(await sampledPdf.save());
-};
-
-const createSampledPdfBuffer = async (buffer, selectedPageNumbers) => {
-  const sourcePdf = await PDFDocument.load(buffer);
-  return createPdfSubsetBuffer(sourcePdf, selectedPageNumbers);
-};
-
 const createVisionAnalysisError = (fileName, error) => {
   const detail = error instanceof Error ? error.message : "Unknown vision analysis error";
   return new Error(`Vision analysis failed for ${fileName || "PDF file"}: ${detail}`);
@@ -482,82 +463,88 @@ const formatPdfTextQualityReason = (metrics) =>
     `useful_page_ratio=${metrics.usefulPageRatio.toFixed(2)}`,
   ].join(" ");
 
-const selectPdfVisualSamplePages = (extracted, maxPages = PDF_SAMPLED_VISUAL_MAX_PAGES) => {
-  const metrics = getPdfTextExtractionMetrics(extracted);
-  const pageCount = metrics.pageCount;
-  const limit = Math.max(1, Math.min(Number(maxPages) || PDF_SAMPLED_VISUAL_MAX_PAGES, pageCount));
-  if (pageCount <= limit) {
-    return Array.from({ length: pageCount }, (_, index) => index + 1);
-  }
+const MIN_SCALE_BAR_PIXELS = 20;
 
-  const pages = Array.isArray(extracted?.pages) ? extracted.pages : [];
-  const selected = new Set([1, pageCount]);
-  const addPage = (pageNumber) => {
-    const normalized = Number(pageNumber);
-    if (Number.isFinite(normalized) && normalized >= 1 && normalized <= pageCount) {
-      selected.add(normalized);
-    }
-  };
+const pixelDistance = (from, to) =>
+  Math.hypot(Number(to.x) - Number(from.x), Number(to.y) - Number(from.y));
 
-  pages
-    .map((page, index) => ({
-      pageNumber: Number(page?.pageNumber || index + 1),
-      textLength: normalizeWhitespace(page?.rawText || "").length,
-    }))
-    .filter(
-      (page) =>
-        page.textLength < MIN_PDF_TEXT_LENGTH ||
-        page.textLength < metrics.averagePageTextLength * 0.25
-    )
-    .sort((left, right) => left.textLength - right.textLength)
-    .slice(0, Math.max(2, Math.floor(limit / 3)))
-    .forEach((page) => addPage(page.pageNumber));
+const polygonPixelArea = (points) =>
+  Math.abs(
+    points.reduce((sum, point, index) => {
+      const next = points[(index + 1) % points.length];
+      return sum + Number(point.x) * Number(next.y) - Number(next.x) * Number(point.y);
+    }, 0)
+  ) / 2;
 
-  for (let index = 1; selected.size < limit && index <= limit; index += 1) {
-    const pageNumber = Math.round(1 + ((pageCount - 1) * index) / limit);
-    addPage(pageNumber);
-  }
+const formatMeasuredValue = (value) => String(Number(value.toFixed(1)));
 
-  for (let pageNumber = 1; selected.size < limit && pageNumber <= pageCount; pageNumber += 1) {
-    addPage(pageNumber);
-  }
+/**
+ * Lengths and areas the vision pass traced on the drawing, converted to feet with the
+ * graphic scale bar of the same view. A page with a single scale bar uses it for every
+ * trace; traces with no usable scale bar are dropped.
+ */
+const computeMeasuredDimensions = (page) => {
+  const scaleBars = (Array.isArray(page?.scaleBars) ? page.scaleBars : [])
+    .map((bar) => {
+      const lengthFeet = Number(bar?.lengthFeet);
+      const pixels = pixelDistance({ x: bar?.startX, y: bar?.startY }, { x: bar?.endX, y: bar?.endY });
 
-  return Array.from(selected).sort((left, right) => left - right).slice(0, limit);
+      return {
+        view: String(bar?.view || "").trim().toLowerCase(),
+        lengthFeet,
+        feetPerPixel: lengthFeet / pixels,
+        usable: Number.isFinite(lengthFeet) && lengthFeet > 0 && Number.isFinite(pixels) && pixels >= MIN_SCALE_BAR_PIXELS,
+      };
+    })
+    .filter((bar) => bar.usable);
+
+  if (!scaleBars.length) return [];
+
+  return (Array.isArray(page?.measurements) ? page.measurements : [])
+    .map((measurement) => {
+      const item = String(measurement?.item || "").trim();
+      const view = String(measurement?.view || "").trim();
+      const scaleBar =
+        scaleBars.find((bar) => bar.view && bar.view === view.toLowerCase()) ||
+        (scaleBars.length === 1 ? scaleBars[0] : null);
+      const points = (Array.isArray(measurement?.points) ? measurement.points : []).filter(
+        (point) => Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y))
+      );
+      const isArea = measurement?.kind === "area";
+
+      if (!item || !scaleBar || points.length < (isArea ? 3 : 2)) return "";
+
+      const value = isArea
+        ? polygonPixelArea(points) * scaleBar.feetPerPixel ** 2
+        : points.slice(1).reduce((sum, point, index) => sum + pixelDistance(points[index], point), 0) *
+          scaleBar.feetPerPixel;
+
+      if (!(value > 0)) return "";
+
+      const note = String(measurement?.note || "").trim();
+      return `${item}${view ? ` (${view})` : ""}: ${formatMeasuredValue(value)} ${isArea ? "SF" : "LF"}, measured against the ${formatMeasuredValue(scaleBar.lengthFeet)} FT scale bar${note ? `; ${note}` : ""}`;
+    })
+    .filter(Boolean);
 };
 
-const choosePdfAnalysisMode = (extracted) => {
-  const metrics = getPdfTextExtractionMetrics(extracted);
-  if (metrics.isWeak) {
-    return {
-      method: "pdf_hybrid_full",
-      metrics,
-      selectedPageNumbers: null,
-      reason: formatPdfTextQualityReason(metrics),
-    };
-  }
-
-  if (metrics.pageCount <= PDF_FULL_HYBRID_MAX_STRONG_TEXT_PAGES) {
-    return {
-      method: "pdf_hybrid_full",
-      metrics,
-      selectedPageNumbers: null,
-      reason: `${formatPdfTextQualityReason(metrics)} page_count_within_full_hybrid_limit`,
-    };
-  }
-
-  const selectedPageNumbers = selectPdfVisualSamplePages(extracted);
-  return {
-    method: "pdf_hybrid_sampled",
-    metrics,
-    selectedPageNumbers,
-    reason: `${formatPdfTextQualityReason(metrics)} large_text_rich_pdf sampled_pages=${selectedPageNumbers.join(",")}`,
-  };
-};
+const formatCountedItems = (countedItems) =>
+  (Array.isArray(countedItems) ? countedItems : [])
+    .map((entry) => {
+      const item = String(entry?.item || "").trim();
+      const count = Number(entry?.count);
+      if (!item || !Number.isFinite(count)) return "";
+      const note = String(entry?.note || "").trim();
+      return `- ${item}: ${count}${note ? ` (${note})` : ""}`;
+    })
+    .filter(Boolean);
 
 const buildVisualPageRawText = (page, fileName, sourceKind) => {
   const visibleText = normalizeWhitespace(page?.visibleText || "");
   const visualSummary = normalizeWhitespace(page?.visualSummary || "");
   const notableWorkItems = uniqueStrings(page?.notableWorkItems);
+  const countedItems = formatCountedItems(page?.countedItems);
+  const statedDimensions = uniqueStrings(page?.statedDimensions);
+  const measuredDimensions = computeMeasuredDimensions(page);
   const sheetNumber = String(page?.sheetNumber || "").trim();
   const title = String(page?.title || "").trim();
   const discipline = String(page?.discipline || "").trim();
@@ -571,6 +558,13 @@ const buildVisualPageRawText = (page, fileName, sourceKind) => {
     visibleText ? `VISIBLE TEXT:\n${visibleText}` : "",
     visualSummary ? `VISUAL SUMMARY:\n${visualSummary}` : "",
     notableWorkItems.length ? `NOTABLE WORK ITEMS:\n${notableWorkItems.map((item) => `- ${item}`).join("\n")}` : "",
+    countedItems.length ? `COUNTED ITEMS:\n${countedItems.join("\n")}` : "",
+    statedDimensions.length
+      ? `STATED DIMENSIONS:\n${statedDimensions.map((entry) => `- ${entry}`).join("\n")}`
+      : "",
+    measuredDimensions.length
+      ? `MEASURED DIMENSIONS:\n${measuredDimensions.map((entry) => `- ${entry}`).join("\n")}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -600,30 +594,14 @@ const createVisualPageEntries = ({ fileName, fileUrl, fileKind, sourceKind, page
     .filter(Boolean);
 };
 
-const remapSampledVisualPages = (pages, originalPageNumbers) => {
-  if (!Array.isArray(originalPageNumbers) || !originalPageNumbers.length) {
-    return pages;
-  }
-
-  return (Array.isArray(pages) ? pages : []).map((page, index) => {
-    const sampledPageNumber = Number(page?.pageNumber || index + 1);
-    const originalPageNumber = originalPageNumbers[sampledPageNumber - 1] || originalPageNumbers[index];
-
-    return {
-      ...page,
-      pageNumber: Number(originalPageNumber || sampledPageNumber),
-    };
-  });
-};
-
 const buildHybridPageRawText = ({ fileName, extractedText, visualText }) =>
   [
-    `HYBRID PDF ANALYSIS: ${fileName}`,
+    `HYBRID PLAN ANALYSIS: ${fileName}`,
     normalizeWhitespace(extractedText)
-      ? `LOCAL PDF TEXT EXTRACTION:\n${normalizeWhitespace(extractedText)}`
+      ? `LOCAL TEXT EXTRACTION:\n${normalizeWhitespace(extractedText)}`
       : "",
     normalizeWhitespace(visualText)
-      ? `VISUAL PDF ANALYSIS:\n${normalizeWhitespace(visualText)}`
+      ? `VISUAL ANALYSIS:\n${normalizeWhitespace(visualText)}`
       : "",
   ]
     .filter(Boolean)
@@ -690,6 +668,121 @@ const createPdfHybridPageEntries = ({
     .filter(Boolean);
 };
 
+const WEAK_TEXT_VISUAL_GUIDANCE =
+  "Local text extraction was weak for this file, so visibleText is the primary source of readable plan text. Do not collapse readable note blocks, schedules, tables, callouts, or code/general notes into a short summary. Transcribe as much legible construction-relevant text as practical, preserving line breaks, labels, numbers, dimensions, sheet references, and schedule/table relationships, and report every countable item and printed dimension on the page.";
+
+const STRONG_TEXT_VISUAL_GUIDANCE =
+  "Local text extraction was strong for this file. Focus visibleText on text that is missing, poorly extracted, or visually structured, and spend the rest of the pass on what extraction cannot carry: countable symbols, fixtures, devices, doors, windows, schedule rows, and printed dimensions.";
+
+const getVisualTextGuidance = (metrics) =>
+  metrics?.isWeak ? WEAK_TEXT_VISUAL_GUIDANCE : STRONG_TEXT_VISUAL_GUIDANCE;
+
+const getVisualAnalysisResponseFormat = () => ({
+  type: "json_schema",
+  json_schema: {
+    name: "visual_plan_file_analysis",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        pages: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              pageNumber: { type: "integer" },
+              sheetNumber: { type: "string" },
+              title: { type: "string" },
+              discipline: { type: "string" },
+              visibleText: { type: "string" },
+              visualSummary: { type: "string" },
+              notableWorkItems: {
+                type: "array",
+                items: { type: "string" },
+              },
+              countedItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    item: { type: "string" },
+                    count: { type: "integer" },
+                    note: { type: "string" },
+                  },
+                  required: ["item", "count", "note"],
+                },
+              },
+              statedDimensions: {
+                type: "array",
+                items: { type: "string" },
+              },
+              scaleBars: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    view: { type: "string" },
+                    lengthFeet: { type: "number" },
+                    startX: { type: "number" },
+                    startY: { type: "number" },
+                    endX: { type: "number" },
+                    endY: { type: "number" },
+                  },
+                  required: ["view", "lengthFeet", "startX", "startY", "endX", "endY"],
+                },
+              },
+              measurements: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    item: { type: "string" },
+                    view: { type: "string" },
+                    kind: { type: "string", enum: ["length", "area"] },
+                    points: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          x: { type: "number" },
+                          y: { type: "number" },
+                        },
+                        required: ["x", "y"],
+                      },
+                    },
+                    note: { type: "string" },
+                  },
+                  required: ["item", "view", "kind", "points", "note"],
+                },
+              },
+            },
+            required: [
+              "pageNumber",
+              "sheetNumber",
+              "title",
+              "discipline",
+              "visibleText",
+              "visualSummary",
+              "notableWorkItems",
+              "countedItems",
+              "statedDimensions",
+              "scaleBars",
+              "measurements",
+            ],
+          },
+        },
+      },
+      required: ["pages"],
+    },
+  },
+});
+
 const analyzeVisualDocument = async ({
   buffer,
   contentType,
@@ -716,6 +809,7 @@ const analyzeVisualDocument = async ({
     ? {
         type: "input_image",
         image_url: buildBase64FileDataUrl(buffer, imageMimeType),
+        detail: "original",
       }
     : isPdf
     ? {
@@ -725,68 +819,28 @@ const analyzeVisualDocument = async ({
       }
     : null;
 
-  const isSampledPdf = isPdf && Array.isArray(originalPageNumbers) && originalPageNumbers.length > 0;
-  const selectedPageInstruction = isSampledPdf
-    ? useImageInput && originalPageNumbers.length === 1
-      ? `This image is a high-resolution rendering of original PDF page ${originalPageNumbers[0]}. Analyze this page carefully. Return pageNumber as 1.`
-      : `This PDF contains only sampled pages from the original PDF. Analyze every page in this sampled PDF. The sampled-page to original-page mapping is: ${originalPageNumbers.map((pageNumber, index) => `sample page ${index + 1} = original page ${pageNumber}`).join("; ")}. Return pageNumber using the sampled PDF page number.`
+  const renderedPageNumber =
+    isPdf && Array.isArray(originalPageNumbers) && originalPageNumbers.length
+      ? Number(originalPageNumbers[0])
+      : null;
+  const selectedPageInstruction = renderedPageNumber
+    ? `This image is a high-resolution rendering of original PDF page ${renderedPageNumber}. Analyze this page carefully. Return pageNumber as 1.`
     : "Create one page entry per visible page when possible.";
   const fileSpecificGuidance = String(visualTextGuidance || "").trim();
 
   const { parsed, usage } = await createResponsesJsonCompletion({
     openai,
-    model: AI_MODELS.STANDARD,
+    model: AI_MODELS.DEEP,
     reasoningEffort: "medium",
-    responseFormat: {
-      type: "json_schema",
-      json_schema: {
-        name: "visual_plan_file_analysis",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            pages: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  pageNumber: { type: "integer" },
-                  sheetNumber: { type: "string" },
-                  title: { type: "string" },
-                  discipline: { type: "string" },
-                  visibleText: { type: "string" },
-                  visualSummary: { type: "string" },
-                  notableWorkItems: {
-                    type: "array",
-                    items: { type: "string" },
-                  },
-                },
-                required: [
-                  "pageNumber",
-                  "sheetNumber",
-                  "title",
-                  "discipline",
-                  "visibleText",
-                  "visualSummary",
-                  "notableWorkItems",
-                ],
-              },
-            },
-          },
-          required: ["pages"],
-        },
-      },
-    },
+    responseFormat: getVisualAnalysisResponseFormat(),
     systemPrompt: buildEstimatorSystemPrompt(`
-Analyze uploaded construction plan files visually. This visual analysis is combined with local text extraction for
-PDFs and used as a fallback for image uploads when ordinary OCR is too weak.
+Analyze uploaded construction plan files visually. Every page of every upload is analyzed this way alongside local
+text extraction, so this pass is a primary source for material takeoff, not a fallback.
 
 Additional task rules:
 - Inspect the page image(s), including drawings, title blocks, notes, diagrams, tables, schedules, dimensions,
-  callouts, labels, and legends.
-- For PDFs, this visual analysis will be combined with local PDF text extraction. Avoid duplicating text that appears
+  callouts, labels, symbols, and legends.
+- For PDFs, this visual analysis is combined with local PDF text extraction. Avoid duplicating text that appears
   to have been captured cleanly by local extraction unless the visual version clarifies formatting, numbers,
   relationships, or table/schedule structure.
 - In visibleText, transcribe as much readable construction-relevant text as practical from the page, especially text
@@ -795,10 +849,29 @@ Additional task rules:
   block or legal text.
 - Do not only summarize readable text. Put readable text in visibleText first, then use visualSummary for visual
   context, drawings, diagrams, layout, scope implications, and meaningful information that is not plain text.
+- In countedItems, count every repeated item and symbol visible on the page: fixtures, devices such as receptacles,
+  switches, and lights, doors, windows, equipment, connectors, hangers, posts, and schedule rows. Give each a
+  contractor-style name, your count, and a note saying how and where you counted it. When symbols are dense or partly
+  unclear, give your best count and say so in the note rather than leaving the item out.
+- In statedDimensions, transcribe dimensions, areas, spacings, heights, and slopes exactly as printed, with the label
+  they belong to, for example "Bedroom 2: 12'-0\" x 14'-0\"" or "studs at 16\" O.C.". When a dimension string gives
+  the segments of a wall or building run, also report their printed total, for example
+  "North wall: 9'-8\" + 9'-8\" = 19'-4\"".
+- Pixel coordinates refer to the attached image: x from its left edge and y from its top edge, in pixels.
+- In scaleBars, report every graphic scale bar on the page: the view it belongs to (use the view title printed under
+  the drawing), the pixel coordinates of its zero mark (startX, startY) and of a labeled mark as far along the bar as
+  possible (endX, endY), and the distance in feet between those two marks (lengthFeet).
+- In measurements, trace the lengths and areas a takeoff needs that no printed dimension gives: wall runs (exterior
+  and interior separately, or by wall type), floor, room, deck, and roof areas, and runs of ledger, beam, rail, or
+  trim. Give the view name, then either kind "length" with the points along the run in order, or kind "area" with the
+  corner points of the outline in order, and a note on what you traced. Do not convert to feet yourself; the
+  conversion is done from the scale bar.
+- Only trace on views that have a graphic scale bar. Never estimate a distance by eye, and never trace on views
+  marked NOT TO SCALE.
 - Use cautious language for visual inferences. Say "appears" or "likely" when the page is unclear.
 - Do not invent quantities, code requirements, dimensions, or materials that are not visible.
 - Keep each visualSummary focused on project scope and plan-relevant information.
-- If a field is not visible, return an empty string for that field.
+- If a field is not visible, return an empty string or an empty array for that field.
 
 Return JSON exactly matching the schema.
     `),
@@ -815,8 +888,12 @@ Return JSON exactly matching the schema.
     ],
   });
 
-  const visualPages = isSampledPdf
-    ? remapSampledVisualPages(parsed?.pages, originalPageNumbers)
+  // Each page is rendered and analyzed on its own, so the reply numbers it 1.
+  const visualPages = renderedPageNumber
+    ? (Array.isArray(parsed?.pages) ? parsed.pages : []).map((page) => ({
+        ...page,
+        pageNumber: renderedPageNumber,
+      }))
     : parsed?.pages;
 
   const pages = createVisualPageEntries({
@@ -890,7 +967,7 @@ const analyzePdfVisualPageBatches = async ({
       },
       {
         label: "analyzePlanFilesVisualBatches",
-        concurrency: PDF_WEAK_VISUAL_BATCH_CONCURRENCY,
+        concurrency: VISUAL_PAGE_CONCURRENCY,
       }
     );
   } finally {
@@ -912,9 +989,11 @@ const createPageEntry = ({
   sourcePageNumber,
   sourcePageCount,
 }) => {
-  const lines = extractLines(rawText);
-  const detectedSheetNumber = detectSheetNumber(lines, rawText);
-  const detectedTitle = detectTitle(lines, detectedSheetNumber);
+  const lines = extractLines(rawText).filter((line) => !GENERATED_HEADER_PATTERN.test(line));
+  const detectedSheetNumber =
+    readPageTextField(rawText, "VISIBLE SHEET NUMBER") || detectSheetNumber(lines, rawText);
+  const detectedTitle =
+    readPageTextField(rawText, "VISIBLE TITLE") || detectTitle(lines, detectedSheetNumber);
   const discipline = detectDiscipline(detectedSheetNumber, detectedTitle, rawText);
   const revisionDate = detectRevisionDate(lines, rawText);
 
@@ -1177,62 +1256,41 @@ const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
 
   if (fileKind === "pdf") {
     const extracted = await extractPdfPages(buffer);
-    const pdfMode = choosePdfAnalysisMode(extracted);
+    const metrics = getPdfTextExtractionMetrics(extracted);
 
     logPlanAnalysisMethod({
       projectId,
       fileName,
-      method: pdfMode.method,
-      pageCount: pdfMode.metrics.pageCount,
-      reason: pdfMode.reason,
+      method: "pdf_hybrid_pages",
+      pageCount: metrics.pageCount,
+      reason: formatPdfTextQualityReason(metrics),
     });
 
     let visualAnalysis;
     try {
-      const visualTextGuidance = pdfMode.metrics.isWeak
-        ? "Local PDF text extraction was weak for this file, so visibleText is the primary source of readable plan text. Do not collapse readable note blocks, schedules, tables, callouts, or code/general notes into a short summary. Transcribe as much legible construction-relevant text as practical, preserving line breaks, labels, numbers, dimensions, sheet references, and schedule/table relationships when visible."
-        : "Local PDF text extraction was strong for this file. Focus visibleText on readable text that is missing, poorly extracted, visually structured, or needed to clarify schedules, tables, callouts, dimensions, labels, or sheet relationships.";
-
-      if (pdfMode.metrics.isWeak) {
-        visualAnalysis = await analyzePdfVisualPageBatches({
-          buffer,
-          contentType,
-          fileName,
-          fileUrl,
-          fileKind,
-          openai,
-          pageCount: pdfMode.metrics.pageCount,
-          visualTextGuidance,
-        });
-      } else {
-        const visualBuffer = pdfMode.selectedPageNumbers
-          ? await createSampledPdfBuffer(buffer, pdfMode.selectedPageNumbers)
-          : buffer;
-
-        visualAnalysis = await analyzeVisualDocument({
-          buffer: visualBuffer,
-          contentType,
-          fileName,
-          fileUrl,
-          fileKind,
-          openai,
-          originalPageNumbers: pdfMode.selectedPageNumbers,
-          visualTextGuidance,
-        });
-      }
+      visualAnalysis = await analyzePdfVisualPageBatches({
+        buffer,
+        contentType,
+        fileName,
+        fileUrl,
+        fileKind,
+        openai,
+        pageCount: metrics.pageCount,
+        visualTextGuidance: getVisualTextGuidance(metrics),
+      });
     } catch (error) {
       throw createVisionAnalysisError(fileName, error);
     }
 
     logUsageTotals("analyzePlanFilesHybrid", [
-      { title: pdfMode.method, usage: visualAnalysis.usage },
+      { title: `pdf_hybrid_pages pages=${metrics.pageCount}`, usage: visualAnalysis.usage },
     ]);
 
     return createPdfHybridPageEntries({
       fileName,
       fileUrl,
       fileKind,
-      analysisMethod: pdfMode.method,
+      analysisMethod: "pdf_hybrid_pages",
       extracted,
       visualPages: visualAnalysis.pages,
     });
@@ -1240,46 +1298,46 @@ const analyzeSingleFile = async (uploadedFile, index, openai, options = {}) => {
 
   if (fileKind === "image") {
     const rawText = await extractImageText(buffer);
-    if (rawText.length < MIN_IMAGE_TEXT_LENGTH) {
-      logPlanAnalysisMethod({
-        projectId,
-        fileName,
-        method: "image_visual_fallback",
-        pageCount: 1,
-        reason: "weak_image_ocr",
-      });
+    const isWeak = rawText.length < MIN_IMAGE_TEXT_LENGTH;
 
-      const visualAnalysis = await analyzeVisualDocument({
+    logPlanAnalysisMethod({
+      projectId,
+      fileName,
+      method: "image_hybrid",
+      pageCount: 1,
+      reason: isWeak ? "weak_image_ocr" : "image_ocr_ok",
+    });
+
+    let visualAnalysis;
+    try {
+      visualAnalysis = await analyzeVisualDocument({
         buffer,
         contentType,
         fileName,
         fileUrl,
         fileKind,
         openai,
-        visualTextGuidance: "Image OCR was weak for this file, so visibleText is the primary source of readable plan text. Transcribe as much legible construction-relevant text as practical before summarizing visual context.",
+        visualTextGuidance: getVisualTextGuidance({ isWeak }),
       });
-
-      logUsageTotals("analyzePlanFilesVisualFallback", [
-        { title: "visual_image", usage: visualAnalysis.usage },
-      ]);
-
-      return visualAnalysis.pages;
+    } catch (error) {
+      throw createVisionAnalysisError(fileName, error);
     }
 
-    logPlanAnalysisMethod({
-      projectId,
-      fileName,
-      method: "image_ocr",
-      pageCount: 1,
-    });
+    logUsageTotals("analyzePlanFilesImageHybrid", [
+      { title: "image_hybrid", usage: visualAnalysis.usage },
+    ]);
 
     return [
       createPageEntry({
         fileName,
         fileUrl,
         fileKind,
-        analysisMethod: "image_ocr",
-        rawText,
+        analysisMethod: "image_hybrid",
+        rawText: buildHybridPageRawText({
+          fileName,
+          extractedText: rawText,
+          visualText: visualAnalysis.pages.map((page) => page.rawText).join("\n\n"),
+        }),
         sourcePageNumber: 1,
         sourcePageCount: 1,
       }),
@@ -1479,13 +1537,17 @@ module.exports = async function analyzePlanFilesHandler(req, res, openAiApiKey, 
 module.exports.__test__ = {
   buildBase64FileDataUrl,
   buildHybridPageRawText,
-  choosePdfAnalysisMode,
   createSinglePageBatches,
-  createSampledPdfBuffer,
+  createPageEntry,
   createVisionAnalysisError,
+  getPdfTextExtractionMetrics,
   loadPdfForRendering,
   logPlanAnalysisMethod,
-  remapSampledVisualPages,
   renderPdfPageToPng,
-  selectPdfVisualSamplePages,
 };
+
+module.exports.VISUAL_PAGE_CONCURRENCY = VISUAL_PAGE_CONCURRENCY;
+module.exports.buildVisualPageRawText = buildVisualPageRawText;
+module.exports.computeMeasuredDimensions = computeMeasuredDimensions;
+module.exports.getVisualAnalysisResponseFormat = getVisualAnalysisResponseFormat;
+module.exports.getVisualTextGuidance = getVisualTextGuidance;

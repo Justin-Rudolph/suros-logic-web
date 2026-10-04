@@ -13,8 +13,9 @@ const {
   logUsageTotals,
   mapWithConcurrency,
   serializeChunkResults,
+  readPageTextField,
+  readPageTextSection,
   sumUsage,
-  uniqueStrings,
 } = require("./lib/planAnalyzerContext");
 const { isFullTradeSelection, normalizeSelectedTrades } = require("./lib/tradeScopes");
 const {
@@ -59,12 +60,218 @@ const TRADE_SCOPE_AGGREGATION_GUIDANCE = `
 Trade boundary reminder:
 - Keep each scope item under the most responsible primary trade.
 - Preserve cross-trade coordination notes when they are supported by the chunk summaries, especially for structural, framing, MEP, waterproofing, exterior envelope, roofing, doors/windows, and finish systems.
-- Do not duplicate the same primary scope under multiple trades.
+- Never repeat the same task under more than one trade. When two trades describe the same physical work, keep the one under the most responsible trade, fold any extra detail into it, and drop the other.
 - Use the established trade definitions from the chunk summaries when resolving ambiguous items.
 `;
 
 const ALLOWED_CLASSIFICATIONS = new Set(["confirmed", "inferred", "unknown"]);
 const MAX_PROJECT_CONTEXT_LENGTH = 75000;
+const MAX_MATERIAL_SEARCH_QUERY_LENGTH = 100;
+
+// Allowed material units, in order.
+const MATERIAL_UNIT_LABELS = {
+  EA: "each",
+  LF: "linear feet",
+  SF: "square feet",
+  SY: "square yards",
+  CF: "cubic feet",
+  CY: "cubic yards",
+  BF: "board feet",
+  SQ: "roofing squares, 100 SF",
+  SHEET: "sheets",
+  PC: "pieces",
+  BOX: "boxes",
+  ROLL: "rolls",
+  BAG: "bags",
+  GAL: "gallons",
+  LB: "pounds",
+  FIXTURE: "fixtures",
+  ASSEMBLY: "assemblies",
+  DEVICE: "devices",
+  OPENING: "openings",
+};
+
+const MATERIAL_UNITS = Object.keys(MATERIAL_UNIT_LABELS);
+const MATERIAL_UNIT_SET = new Set(MATERIAL_UNITS);
+
+const QUANTITY_BASES = ["stated", "calculated", "measured", "inferred"];
+const CONFIDENCE_LEVELS = ["high", "medium", "low"];
+const QUANTITY_BASIS_SET = new Set(QUANTITY_BASES);
+const CONFIDENCE_SET = new Set(CONFIDENCE_LEVELS);
+
+// Ranked most to least supported; a disagreement keeps the better-supported count.
+const basisRank = (basis) => {
+  const index = QUANTITY_BASES.indexOf(basis);
+  return index === -1 ? 0 : QUANTITY_BASES.length - index;
+};
+
+const SCOPE_MATERIAL_RULES = `
+Material takeoff rules:
+- List the specific materials each scope item requires in "materials", one entry per distinct material and stock size.
+- Never leave a scope item without materials, and never drop a material because it is hard to quantify. Every material the scope description names has to appear with a quantity.
+- When nothing in the plans supports a count, still list the material and quantify it with a standard estimating allowance, marked "inferred" at low confidence with the allowance named in "calculation". Gypsum board and insulation come from wall and ceiling areas, or from room dimensions when areas are not stated; footings, post bases, and hangers come from the symbols counted on the plans; fasteners come from the spacing and the run they fasten.
+- Quantify materials the way a contractor buys them, and give the running total as well. When a material comes in stock sizes - lumber, panels, trim, pipe, conduit, rebar, roll goods - write one entry per stock size with its piece count, plus one total entry for the whole material: "2x12x16 pressure-treated SYP" at 6 EA, "2x12x20 pressure-treated SYP" at 8 EA, and "2x12 pressure-treated SYP (total run)" at 460 LF.
+- Pick stock sizes that suit the spans, heights, and runs the plans show, so a piece covers its run without a splice wherever a stock length allows it.
+- Give each stock-size entry the unit the material is sold in: EA or PC for pieces, SHEET for panels, ROLL, BAG, BOX, GAL for packaged goods, CY for ready-mix concrete. Give the total entry its measuring unit: LF, SF, SY, or CY.
+- Name the total entry with "(total run)", "(total area)", or "(total volume)", and say in its "calculation" that the stock-size entries cover it, so nobody orders the material twice. A material with no stock size, such as poured concrete or bulk fill, needs only the total entry.
+- Only list physical materials a contractor buys. Do not list labor, services, engineering, design, permits, inspections, submittals, or documentation.
+- "name" is the specific material as a contractor would write it on a takeoff, including type, size, and grade when the plans give them.
+- Give a "planReference" for every material: the sheet, detail, schedule, keynote, or plan location it comes from. Use null only when nothing in the plans supports it.
+- Every material must have a "quantity", "unit", "quantityBasis", "confidence", and "calculation". Reach the quantity with the strongest method available, in this order:
+  stated = the plans give the count or amount outright, in a schedule, keynote, callout, note, or counted items.
+  calculated = arithmetic on dimensions, areas, spacings, heights, or counts the plans give, including totals of printed dimension strings, such as a building perimeter from its overall dimensions or wall area as wall length times ceiling height. Put the working in "calculation", for example "42 LF / 16 in. O.C. = 33 studs + 7 corners and openings = 40".
+  measured = a length or area from MEASURED DIMENSIONS, traced on the drawing and converted with the sheet's graphic scale bar, used when no printed dimension gives it. Put the measurement and any math on it in "calculation".
+  inferred = a standard estimating allowance, used when the plans do not give enough to calculate, such as studs and plates per linear foot of wall, sheathing sheets per wall area, one hanger per joist end, wire or pipe length per device or fixture, or a waste factor. Name the allowance in "calculation".
+- Work out the quantities other materials depend on first, such as wall lengths, wall areas, and joist counts, then derive connectors, fasteners, sheathing, and finishes from them.
+- "calculation" must show the chain from the plan numbers to the final count: the numbers used and where they came from, the arithmetic, the stock size chosen and why, and any waste factor or assumption. A contractor reading it should be able to follow the number back to the plans. For example "Deck joists at 16 in. O.C. across a 15'-8\" span (S-104): 12 joists, one 2x12x16 each; rim at 20'-5\" (S-104): 2 pieces of 2x12x20; 10% waste not added because pieces are cut to length".
+- Prefer quantities the plan text states. When the text states none, use the per-page visual analysis: its counted items, stated dimensions, and measured dimensions are evidence, the same as extracted text.
+- Use TAKEOFF EVIDENCE FROM EVERY SHEET for counts, dimensions, spacings, and heights that appear on sheets outside the plan context you are reviewing. Quantities often need numbers from several sheets, such as wall lengths from a floor plan and stud spacing from a framing detail.
+- Adding up printed dimensions is calculation. Lengths and areas in MEASURED DIMENSIONS are measured: they were traced on the drawing and converted with the sheet's graphic scale bar. Never estimate a distance by eye.
+- A calculated or inferred quantity that shows its working and names its allowance or assumptions is not a fabricated quantity.
+- When the same material is counted in more than one place, combine the counts into its single entry and list every source in "planReference", for example "E-101; E-102".
+- Set "confidence" for every quantity:
+  high = explicitly shown, scheduled, dimensioned, or specified.
+  medium = a calculation on plan numbers, a measurement against a graphic scale bar, or a reasonable interpretation was required.
+  low = a standard estimating allowance or significant assumption was required.
+- "unit" must be one of: ${MATERIAL_UNITS.map(
+  (unit) => `${unit} (${MATERIAL_UNIT_LABELS[unit]})`
+).join(", ")}.
+- "searchQuery" is a short phrase a contractor would type into Home Depot's search: material type, size, and grade. Do not include brand names or SKUs unless the plans specify them.
+`;
+
+const SCOPE_MATERIAL_AGGREGATION_RULES = `
+- Merge the materials of deduplicated scope items into one entry per material.
+- When the same source (the same schedule, note, or count) appears in more than one chunk, count it once.
+- When counts come from different sheets or areas that do not overlap, add them together and list every source in "planReference".
+- Keep separate stock sizes as separate entries. Never merge them into one running total.
+- Never drop a material a chunk reported. If its quantity is weak, quantify it with a standard estimating allowance rather than leaving the scope item empty.
+- When two counts disagree and you cannot tell which applies, keep the best-supported count, set "quantityBasis" to "inferred", set "confidence" to "low", and explain the disagreement in "calculation".
+- Before returning, make sure every material in the final output has a quantity. Recalculate any that are weak from TAKEOFF EVIDENCE FROM EVERY SHEET, combining counts, dimensions, spacings, and heights across sheets, and use a standard estimating allowance where the evidence is not enough. Show the working in "calculation".
+`;
+
+const SCOPE_ITEM_SHAPE_EXAMPLE = `{
+    "title": "short scope title",
+    "description": "contractor-style scope description",
+    "materials": [
+      {
+        "name": "specific material",
+        "searchQuery": "Home Depot search phrase",
+        "quantity": number,
+        "unit": ${MATERIAL_UNITS.map((unit) => `"${unit}"`).join(" | ")},
+        "quantityBasis": ${QUANTITY_BASES.map((basis) => `"${basis}"`).join(" | ")},
+        "calculation": "how the quantity was reached",
+        "confidence": ${CONFIDENCE_LEVELS.map((level) => `"${level}"`).join(" | ")},
+        "planReference": "sheet, detail, schedule, or keynote" | null
+      }
+    ],
+    "classification": "confirmed" | "inferred" | "unknown"
+  }`;
+
+const toPositiveQuantity = (value) =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+
+const normalizeText = (value) => String(value == null ? "" : value).trim() || null;
+
+/** Distinct plan references, in order, joined with "; ". */
+const combineReferences = (...references) => {
+  const seen = new Set();
+  const parts = references
+    .flatMap((reference) => (reference ? reference.split("; ") : []))
+    .filter((part) => {
+      const key = part.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return parts.length ? parts.join("; ") : null;
+};
+
+const sanitizeScopeMaterials = (materials) => {
+  if (!Array.isArray(materials)) {
+    return [];
+  }
+
+  const materialsByName = new Map();
+
+  materials.forEach((material) => {
+    if (!material || typeof material !== "object") {
+      return;
+    }
+
+    const name = normalizeText(material.name);
+
+    if (!name) {
+      return;
+    }
+
+    const nameKey = name.toLowerCase();
+    const unitCandidate = String(material.unit || "").trim().toUpperCase();
+    const unit = MATERIAL_UNIT_SET.has(unitCandidate) ? unitCandidate : null;
+    // A quantity is kept only with a valid unit.
+    const quantity = unit ? toPositiveQuantity(material.quantity) : null;
+    const hasQuantity = quantity !== null;
+    const basis = String(material.quantityBasis || "").trim().toLowerCase();
+    const confidence = String(material.confidence || "").trim().toLowerCase();
+    // An unrecognized basis or confidence reads as the least certain option.
+    const quantityFields = hasQuantity
+      ? {
+          quantity,
+          unit,
+          quantityBasis: QUANTITY_BASIS_SET.has(basis) ? basis : "inferred",
+          calculation: normalizeText(material.calculation),
+          confidence: CONFIDENCE_SET.has(confidence) ? confidence : "low",
+        }
+      : {
+          quantity: null,
+          unit: null,
+          quantityBasis: null,
+          calculation: normalizeText(material.calculation),
+          confidence: null,
+        };
+    const planReference = normalizeText(material.planReference);
+    const existing = materialsByName.get(nameKey);
+
+    if (!existing) {
+      const searchQuery = (normalizeText(material.searchQuery) || name)
+        .slice(0, MAX_MATERIAL_SEARCH_QUERY_LENGTH)
+        .trim();
+
+      materialsByName.set(nameKey, { name, searchQuery, ...quantityFields, planReference });
+      return;
+    }
+
+    existing.planReference = combineReferences(existing.planReference, planReference);
+
+    if (!hasQuantity) {
+      return;
+    }
+
+    // The sheet a quantity came from is listed first.
+    const adoptQuantity = () => {
+      Object.assign(existing, quantityFields);
+      existing.planReference = combineReferences(planReference, existing.planReference);
+    };
+
+    if (existing.quantity === null) {
+      adoptQuantity();
+      return;
+    }
+
+    if (existing.quantity === quantityFields.quantity && existing.unit === quantityFields.unit) {
+      return;
+    }
+
+    // Duplicates disagree: keep the better-supported count, and stop calling it certain.
+    if (basisRank(quantityFields.quantityBasis) > basisRank(existing.quantityBasis)) {
+      adoptQuantity();
+    }
+
+    existing.confidence = "low";
+  });
+
+  return [...materialsByName.values()];
+};
 
 const sanitizeScopeItem = (item) => {
   if (!item || typeof item !== "object") {
@@ -74,7 +281,6 @@ const sanitizeScopeItem = (item) => {
   const title = String(item.title || "").trim();
   const description = String(item.description || "").trim();
   const classification = String(item.classification || "").trim();
-  const materialCategories = uniqueStrings(item.materialCategories);
 
   if (!title || !description || !ALLOWED_CLASSIFICATIONS.has(classification)) {
     return null;
@@ -83,7 +289,7 @@ const sanitizeScopeItem = (item) => {
   return {
     title,
     description,
-    materialCategories,
+    materials: sanitizeScopeMaterials(item.materials),
     classification,
   };
 };
@@ -96,6 +302,50 @@ const getTradeScopeTemplate = (selectedTrades) =>
 
 const getScopeResponseFormat = (selectedTrades) => {
   const trades = normalizeSelectedTrades(selectedTrades);
+  const materialSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      name: {
+        type: "string",
+      },
+      searchQuery: {
+        type: "string",
+      },
+      quantity: {
+        type: "number",
+      },
+      unit: {
+        type: "string",
+        enum: [...MATERIAL_UNITS],
+      },
+      quantityBasis: {
+        type: "string",
+        enum: [...QUANTITY_BASES],
+      },
+      calculation: {
+        type: "string",
+      },
+      confidence: {
+        type: "string",
+        enum: [...CONFIDENCE_LEVELS],
+      },
+      planReference: {
+        type: ["string", "null"],
+      },
+    },
+    required: [
+      "name",
+      "searchQuery",
+      "quantity",
+      "unit",
+      "quantityBasis",
+      "calculation",
+      "confidence",
+      "planReference",
+    ],
+  };
+
   const scopeItemSchema = {
     type: "object",
     additionalProperties: false,
@@ -106,18 +356,16 @@ const getScopeResponseFormat = (selectedTrades) => {
       description: {
         type: "string",
       },
-      materialCategories: {
+      materials: {
         type: "array",
-        items: {
-          type: "string",
-        },
+        items: materialSchema,
       },
       classification: {
         type: "string",
         enum: ["confirmed", "inferred", "unknown"],
       },
     },
-    required: ["title", "description", "materialCategories", "classification"],
+    required: ["title", "description", "materials", "classification"],
   };
 
   const properties = trades.reduce((acc, trade) => {
@@ -159,6 +407,50 @@ const formatTradeKeyList = (trades) => trades.map((trade) => `  "${trade}"`).joi
 const formatTradeShapeExample = (trades) =>
   `{\n${trades.map((trade) => `  "${trade}": []`).join(",\n")}\n}`;
 
+const MAX_TAKEOFF_EVIDENCE_LENGTH = 150000;
+
+/** Every page's counted items, printed dimensions, and scale-bar measurements, labeled by sheet, as one block. */
+const buildTakeoffEvidence = (files) => {
+  const blocks = (Array.isArray(files) ? files : [])
+    .map((file) => {
+      const rawText = String(file?.rawText || "");
+      const counted = readPageTextSection(rawText, "COUNTED ITEMS");
+      const dimensions = readPageTextSection(rawText, "STATED DIMENSIONS");
+      const measured = readPageTextSection(rawText, "MEASURED DIMENSIONS");
+      if (!counted && !dimensions && !measured) return "";
+
+      const sheet =
+        readPageTextField(rawText, "VISIBLE SHEET NUMBER") || file?.detectedSheetNumber || "unknown";
+      const title = readPageTextField(rawText, "VISIBLE TITLE") || file?.detectedTitle || "";
+
+      return [
+        `PAGE ${file?.sourcePageNumber || "?"} | SHEET ${sheet}${title ? ` | ${title}` : ""}`,
+        counted ? `COUNTED ITEMS:\n${counted}` : "",
+        dimensions ? `STATED DIMENSIONS:\n${dimensions}` : "",
+        measured ? `MEASURED DIMENSIONS:\n${measured}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter(Boolean);
+
+  if (!blocks.length) return "";
+
+  const evidence = [
+    "TAKEOFF EVIDENCE FROM EVERY SHEET",
+    "Counts, printed dimensions, and scale-bar measurements read from each page of the plan set.",
+    ...blocks,
+  ].join("\n\n");
+
+  // ponytail: evidence past this length is dropped; split it by trade if plan sets outgrow it.
+  return evidence.length > MAX_TAKEOFF_EVIDENCE_LENGTH
+    ? `${evidence.slice(0, MAX_TAKEOFF_EVIDENCE_LENGTH)}\n[takeoff evidence truncated]`
+    : evidence;
+};
+
+const withTakeoffEvidence = (evidence, content) =>
+  evidence ? `${evidence}\n\n====================\n\n${content}` : content;
+
 const generateTradeScopesFromPlans = async (
   files,
   openAiApiKey,
@@ -188,13 +480,14 @@ const generateTradeScopesFromPlans = async (
   }
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
+  const takeoffEvidence = buildTakeoffEvidence(files);
   const chunkUsages = [];
   const chunkScopes = await mapWithConcurrency(
     contextChunks,
     async (chunk, index) => {
       const { parsed, usage } = await createJsonCompletion({
         openai,
-        model: AI_MODELS.STANDARD,
+        model: AI_MODELS.DEEP,
         reasoningEffort: "medium",
         responseFormat: getScopeResponseFormat(trades),
         systemPrompt: buildEstimatorSystemPrompt(`
@@ -210,26 +503,21 @@ ${TRADE_SCOPE_CLASSIFICATION_GUIDANCE}
 - If a trade has no meaningful supported scope in this chunk, return an empty array for that trade.
 - Keep scope descriptions concise, contractor-style, and bid-ready.
 - Do not include pricing, labor hours, markup, schedule duration, or unsupported means and methods.
-- Do not duplicate the same work as primary scope under multiple trades.
-- Assign each scope item to the most responsible primary trade.
+- Never repeat the same task under more than one trade. Whichever trade owns a task is the only one that states it; any other trade involved covers only its own separate work. For example, if Demo covers removing a wall, Demo alone states that removal, and Structural states only what it adds there, such as a new header.
+- Assign each scope item to the trade most responsible for doing that work, and mention the other trades only as coordination inside that one item.
 ${unassignedWorkRules}
-- Include materials only as broad material categories, not exact quantities.
 - Use classification carefully:
   confirmed = directly supported by extracted text or a visual page summary.
   inferred = reasonable scope implication, but not directly stated.
   unknown = scope appears possible but is not sufficiently supported.
+${SCOPE_MATERIAL_RULES}
 - Each item must be:
-  {
-    "title": "short scope title",
-    "description": "contractor-style scope description",
-    "materialCategories": ["string"],
-    "classification": "confirmed" | "inferred" | "unknown"
-  }
+  ${SCOPE_ITEM_SHAPE_EXAMPLE}
 
 Return exactly this shape:
 ${tradeShapeExample}
       `, { userNotes, selectedTrades: trades }),
-        userContent: chunk.text,
+        userContent: withTakeoffEvidence(takeoffEvidence, chunk.text),
       });
       chunkUsages[index] = usage;
 
@@ -243,8 +531,8 @@ ${tradeShapeExample}
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
-    model: AI_MODELS.STANDARD,
-    reasoningEffort: "medium",
+    model: AI_MODELS.DEEP,
+    reasoningEffort: "high",
     responseFormat: getScopeResponseFormat(trades),
     systemPrompt: buildEstimatorSystemPrompt(`
 Combine chunk-level trade scopes from a full construction plan set into one final bid-style scope package.
@@ -259,18 +547,17 @@ ${TRADE_SCOPE_AGGREGATION_GUIDANCE}
 - Keep descriptions concise and contractor-style.
 ${aggregationFallbackRule}
 - Return empty arrays for trades with no meaningful supported scope.
+${SCOPE_MATERIAL_RULES}${SCOPE_MATERIAL_AGGREGATION_RULES}
 - Each item must be:
-  {
-    "title": "short scope title",
-    "description": "contractor-style scope description",
-    "materialCategories": ["string"],
-    "classification": "confirmed" | "inferred" | "unknown"
-  }
+  ${SCOPE_ITEM_SHAPE_EXAMPLE}
 
 Return exactly this shape:
 ${tradeShapeExample}
     `, { userNotes, selectedTrades: trades }),
-    userContent: serializeChunkResults(contextChunks, chunkScopes, "SCOPE CHUNK"),
+    userContent: withTakeoffEvidence(
+      takeoffEvidence,
+      serializeChunkResults(contextChunks, chunkScopes, "SCOPE CHUNK")
+    ),
   });
 
   logUsageTotals("generateScopes", [
@@ -433,3 +720,10 @@ module.exports = generateScopesHandler;
 module.exports.getScopeResponseFormat = getScopeResponseFormat;
 module.exports.getTradeScopeTemplate = getTradeScopeTemplate;
 module.exports.parseScopePayload = parseScopePayload;
+module.exports.MATERIAL_UNITS = MATERIAL_UNITS;
+module.exports.buildTakeoffEvidence = buildTakeoffEvidence;
+module.exports.QUANTITY_BASES = QUANTITY_BASES;
+module.exports.CONFIDENCE_LEVELS = CONFIDENCE_LEVELS;
+module.exports.SCOPE_MATERIAL_RULES = SCOPE_MATERIAL_RULES;
+module.exports.SCOPE_MATERIAL_AGGREGATION_RULES = SCOPE_MATERIAL_AGGREGATION_RULES;
+module.exports.sanitizeScopeMaterials = sanitizeScopeMaterials;

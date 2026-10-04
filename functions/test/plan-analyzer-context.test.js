@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { setTimeout: delay } = require("node:timers/promises");
-const { PDFDocument } = require("pdf-lib");
 
 const {
   buildScopeContext,
@@ -167,73 +166,11 @@ test("hybrid PDF page text preserves extracted text and visual analysis", () => 
     visualText: "Visual summary of floor plan layout",
   });
 
-  assert.match(rawText, /HYBRID PDF ANALYSIS: plans\.pdf/);
-  assert.match(rawText, /LOCAL PDF TEXT EXTRACTION:\nSelectable title block text/);
-  assert.match(rawText, /VISUAL PDF ANALYSIS:\nVisual summary of floor plan layout/);
-});
-
-test("large text-rich PDFs use sampled hybrid mode", () => {
-  const analyzePlanFilesHandler = require("../routes/analyzePlanFiles");
-  const extracted = {
-    pageCount: 75,
-    rawText: "A".repeat(6000 * 75),
-    pages: Array.from({ length: 75 }, (_, index) => ({
-      pageNumber: index + 1,
-      rawText: "A".repeat(6000),
-    })),
-  };
-
-  const mode = analyzePlanFilesHandler.__test__.choosePdfAnalysisMode(extracted);
-
-  assert.equal(mode.method, "pdf_hybrid_sampled");
-  assert.ok(mode.selectedPageNumbers.length <= 15);
-  assert.ok(mode.selectedPageNumbers.includes(1));
-  assert.ok(mode.selectedPageNumbers.includes(75));
-  assert.equal(mode.selectedPageNumbers.includes(2), false);
-});
-
-test("large weak-text PDFs use full hybrid mode", () => {
-  const analyzePlanFilesHandler = require("../routes/analyzePlanFiles");
-  const extracted = {
-    pageCount: 75,
-    rawText: "",
-    pages: Array.from({ length: 75 }, (_, index) => ({
-      pageNumber: index + 1,
-      rawText: "",
-    })),
-  };
-
-  const mode = analyzePlanFilesHandler.__test__.choosePdfAnalysisMode(extracted);
-
-  assert.equal(mode.method, "pdf_hybrid_full");
-  assert.equal(mode.selectedPageNumbers, null);
-});
-
-test("createSampledPdfBuffer copies only selected PDF pages", async () => {
-  const analyzePlanFilesHandler = require("../routes/analyzePlanFiles");
-  const sourcePdf = await PDFDocument.create();
-  Array.from({ length: 5 }).forEach(() => sourcePdf.addPage());
-  const sampledBuffer = await analyzePlanFilesHandler.__test__.createSampledPdfBuffer(
-    Buffer.from(await sourcePdf.save()),
-    [1, 3, 5]
-  );
-  const sampledPdf = await PDFDocument.load(sampledBuffer);
-
-  assert.equal(sampledPdf.getPageCount(), 3);
-});
-
-test("sampled visual pages are remapped to original PDF page numbers", () => {
-  const analyzePlanFilesHandler = require("../routes/analyzePlanFiles");
-  const pages = analyzePlanFilesHandler.__test__.remapSampledVisualPages(
-    [
-      { pageNumber: 1, visualSummary: "First sampled page" },
-      { pageNumber: 2, visualSummary: "Second sampled page" },
-    ],
-    [4, 20]
-  );
-
-  assert.equal(pages[0].pageNumber, 4);
-  assert.equal(pages[1].pageNumber, 20);
+  assert.match(rawText, /HYBRID PLAN ANALYSIS: plans\.pdf/);
+  assert.match(rawText, /LOCAL TEXT EXTRACTION:\nSelectable title block text/);
+  assert.match(rawText, /VISUAL ANALYSIS:\nVisual summary of floor plan layout/);
+  // Images use this too, so the headers must not claim a PDF source.
+  assert.doesNotMatch(rawText, /PDF (TEXT|ANALYSIS)/);
 });
 
 test("PDF vision analysis errors include vision failure context", () => {
@@ -244,4 +181,67 @@ test("PDF vision analysis errors include vision failure context", () => {
   );
 
   assert.equal(error.message, "Vision analysis failed for plans.pdf: Invalid PDF input");
+});
+
+const { readPageTextField, readPageTextSection } = require("../routes/lib/planAnalyzerContext");
+
+const detailSheetText = [
+  "HYBRID PLAN ANALYSIS: plans.pdf",
+  "LOCAL TEXT EXTRACTION:\nLUS26 HANGER\nNOTE:NOTE:",
+  "VISUAL ANALYSIS:\nVISUAL DOCUMENT ANALYSIS: plans.pdf",
+  "VISIBLE SHEET NUMBER: S-106",
+  "VISIBLE TITLE: ADDITION DETAILS",
+  "COUNTED ITEMS:\n- Detail views: 3 (Details 1, 2, and 4)",
+  "STATED DIMENSIONS:\n- 2X6 STUD @ 16 O.C.\n- 2X8 STUDS @ 16 O.C.",
+].join("\n\n");
+
+test("readPageTextField reads a labeled line from page text", () => {
+  assert.equal(readPageTextField(detailSheetText, "VISIBLE SHEET NUMBER"), "S-106");
+  assert.equal(readPageTextField(detailSheetText, "VISIBLE TITLE"), "ADDITION DETAILS");
+  assert.equal(readPageTextField(detailSheetText, "VISIBLE DISCIPLINE"), "");
+});
+
+test("readPageTextSection reads a section up to the next header", () => {
+  assert.equal(
+    readPageTextSection(detailSheetText, "COUNTED ITEMS"),
+    "- Detail views: 3 (Details 1, 2, and 4)"
+  );
+  assert.equal(
+    readPageTextSection(detailSheetText, "STATED DIMENSIONS"),
+    "- 2X6 STUD @ 16 O.C.\n- 2X8 STUDS @ 16 O.C."
+  );
+  assert.equal(readPageTextSection(detailSheetText, "NOTABLE WORK ITEMS"), "");
+});
+
+test("page entries take the sheet number and title the vision pass read", () => {
+  const { createPageEntry } = require("../routes/analyzePlanFiles").__test__;
+  const entry = createPageEntry({
+    fileName: "plans.pdf",
+    fileUrl: "",
+    fileKind: "pdf",
+    analysisMethod: "pdf_hybrid_pages",
+    rawText: detailSheetText,
+    sourcePageNumber: 10,
+    sourcePageCount: 12,
+  });
+
+  assert.equal(entry.detectedSheetNumber, "S-106");
+  assert.equal(entry.detectedTitle, "ADDITION DETAILS");
+  assert.equal(entry.discipline, "S");
+});
+
+test("page entries never take generated section headers as the title", () => {
+  const { createPageEntry } = require("../routes/analyzePlanFiles").__test__;
+  const entry = createPageEntry({
+    fileName: "plans.pdf",
+    fileUrl: "",
+    fileKind: "pdf",
+    analysisMethod: "pdf_hybrid_pages",
+    rawText: "HYBRID PLAN ANALYSIS: plans.pdf\n\nLOCAL TEXT EXTRACTION:\nFOUNDATION PLAN\nS-101",
+    sourcePageNumber: 1,
+    sourcePageCount: 1,
+  });
+
+  assert.equal(entry.detectedSheetNumber, "S-101");
+  assert.equal(entry.detectedTitle, "FOUNDATION PLAN");
 });

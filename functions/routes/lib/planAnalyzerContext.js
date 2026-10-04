@@ -548,7 +548,29 @@ const getProjectStatusAfterModuleUpdate = (projectData, moduleType, nextStatus) 
   return allModulesDone ? "completed" : "processing";
 };
 
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A single labeled line from page text, e.g. "VISIBLE SHEET NUMBER: S-106". */
+const readPageTextField = (rawText, label) => {
+  const match = String(rawText || "").match(new RegExp(`^${escapeRegExp(label)}: (.+)$`, "m"));
+  return match ? match[1].trim() : "";
+};
+
+/** A page text section's body, up to the next "\n\nLABEL:" header. */
+const readPageTextSection = (rawText, header) => {
+  const text = String(rawText || "");
+  const marker = `${header}:\n`;
+  const start = text.indexOf(marker);
+  if (start === -1) return "";
+
+  const rest = text.slice(start + marker.length);
+  const end = rest.search(/\n\n[A-Z][A-Z ]+:/);
+  return (end === -1 ? rest : rest.slice(0, end)).trim();
+};
+
 module.exports = {
+  readPageTextField,
+  readPageTextSection,
   DEFAULT_CHUNK_CHAR_LIMIT,
   DEFAULT_CHUNK_CONCURRENCY,
   DEFAULT_SECTION_SEPARATOR,

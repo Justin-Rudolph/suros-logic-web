@@ -1671,6 +1671,179 @@
   color: rgba(255, 255, 255, 0.86);
 }
 
+/* Spans --ledger-cell-span columns; children align on those columns via subgrid. */
+.plan-ledger-cell-span {
+  grid-column: span var(--ledger-cell-span, 1);
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+  row-gap: 10px;
+}
+
+/* -- Material takeoff lines (Trade scopes) ---------------------------------- */
+
+.plan-material-line {
+  display: contents;
+}
+
+.plan-material-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-material-source {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.44);
+}
+
+/* A total repeats what the stock-size rows above it add up to, so it reads as a
+   subtotal rather than another thing to buy. */
+.plan-material-line-total .plan-material-name,
+.plan-material-line-total .plan-material-qty {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.plan-material-line-total .plan-material-name {
+  padding-left: 10px;
+  border-left: 2px solid var(--ledger-rule-strong);
+}
+
+.plan-material-total-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--ledger-rule-strong);
+  border-radius: 3px;
+  font-family: var(--ledger-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.plan-material-qty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-family: var(--ledger-mono);
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.plan-material-amount {
+  white-space: nowrap;
+}
+
+.plan-material-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+
+.plan-material-confidence-high {
+  color: rgba(127, 216, 173, 0.88);
+}
+
+.plan-material-confidence-medium {
+  color: rgba(242, 207, 107, 0.88);
+}
+
+.plan-material-confidence-low {
+  color: rgba(255, 164, 89, 0.88);
+}
+
+.plan-material-info {
+  position: relative;
+  display: inline-flex;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: help;
+}
+
+.plan-material-info:hover,
+.plan-material-info:focus,
+.plan-material-info:focus-visible {
+  color: var(--ledger-accent);
+  outline: none;
+}
+
+/* Sits above the row it explains, and above the sticky column header. */
+.plan-material-info-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 6;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  width: 270px;
+  transform: translateX(-50%);
+  padding: 10px 12px;
+  border: 1px solid var(--ledger-rule-strong);
+  border-radius: 8px;
+  background: rgba(10, 15, 24, 0.98);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.82);
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+}
+
+.plan-material-info:hover .plan-material-info-bubble,
+.plan-material-info:focus .plan-material-info-bubble,
+.plan-material-info:focus-visible .plan-material-info-bubble {
+  display: flex;
+}
+
+.plan-material-info-title {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.plan-material-info-source {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+@media (max-width: 900px) {
+  .plan-material-info-bubble {
+    left: auto;
+    right: 0;
+    width: min(270px, 70vw);
+    transform: none;
+  }
+}
+
+.plan-material-link {
+  justify-self: start;
+  font-family: var(--ledger-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--ledger-accent);
+  text-decoration: none;
+}
+
+.plan-material-link:hover {
+  text-decoration: underline;
+}
+
+.plan-material-link:focus-visible {
+  outline: 2px solid var(--ledger-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .plan-ledger-primary {
   display: flex;
   flex-direction: column;
@@ -1949,6 +2122,17 @@
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.34);
+  }
+
+  .plan-ledger-cell-span {
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    column-gap: 12px;
+  }
+
+  /* Stacked heading spans the full width. */
+  .plan-ledger-cell-span::before {
+    grid-column: 1 / -1;
   }
 
   .plan-ledger-band {

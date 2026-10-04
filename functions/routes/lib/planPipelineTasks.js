@@ -43,6 +43,12 @@ const enqueuePipelineStep = async (projectId) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId }),
     }).catch((err) => {
+      // fetch stops waiting for headers after 5 minutes, but the emulator keeps
+      // running the step and it still enqueues the next one — not a failure.
+      if (err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT") {
+        console.log(`[pipeline] step for ${projectId} still running past fetch's 5 min wait`);
+        return;
+      }
       console.error(`[pipeline] local dispatch failed for ${projectId}:`, err);
     });
 
@@ -64,6 +70,9 @@ const enqueuePipelineStep = async (projectId) => {
         body: Buffer.from(JSON.stringify({ projectId })).toString("base64"),
         oidcToken: { serviceAccountEmail },
       },
+      // Cloud Tasks defaults to 10 min, then retries while the step is still
+      // running. Match runPlanPipelineStep's timeoutSeconds in index.js.
+      dispatchDeadline: { seconds: 1200 },
     },
   });
 };
