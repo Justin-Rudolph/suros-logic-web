@@ -45,7 +45,7 @@ const PDF_VISION_FALLBACK_MIN_AVG_PAGE_TEXT_LENGTH = 800;
 const PDF_VISION_FALLBACK_MIN_USEFUL_PAGE_RATIO = 0.85;
 // Each page renders up to 18 megapixels and is held again as PNG and base64; 8 in
 // flight is what 2GiB allows.
-const VISUAL_PAGE_CONCURRENCY = 8;
+const VISUAL_PAGE_CONCURRENCY = 12;
 const PDF_PAGE_RENDER_BASE_SCALE = 4;
 const PDF_PAGE_RENDER_MAX_DIMENSION = 4096;
 const PDF_PAGE_RENDER_MAX_PIXELS = 18000000;
@@ -830,7 +830,7 @@ const analyzeVisualDocument = async ({
 
   const { parsed, usage } = await createResponsesJsonCompletion({
     openai,
-    model: AI_MODELS.DEEP,
+    model: AI_MODELS.VISION,
     reasoningEffort: "medium",
     responseFormat: getVisualAnalysisResponseFormat(),
     systemPrompt: buildEstimatorSystemPrompt(`

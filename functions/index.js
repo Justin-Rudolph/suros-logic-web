@@ -243,7 +243,7 @@ exports.runPlanPipelineStep = onRequest(
   {
     secrets: [OPENAI_API_KEY],
     timeoutSeconds: 1200,
-    memory: "2GiB",
+    memory: "4GiB",
     invoker: [`plan-pipeline-invoker@${process.env.GCLOUD_PROJECT || "suros-logic"}.iam.gserviceaccount.com`],
   },
   async (req, res) => {
@@ -328,7 +328,7 @@ exports.analyzePlanFiles = onRequest(
   {
     secrets: [OPENAI_API_KEY],
     timeoutSeconds: 1200,
-    memory: "2GiB",
+    memory: "4GiB",
   },
   async (req, res) => {
     cors({ origin: true })(req, res, async () => {

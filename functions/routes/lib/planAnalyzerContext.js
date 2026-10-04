@@ -430,9 +430,6 @@ const getResponseOutputText = (response) => {
     .trim();
 };
 
-const modelSupportsResponsesReasoningEffort = (model) =>
-  /^gpt-5\b/i.test(String(model || "")) || /^o\d/i.test(String(model || ""));
-
 const createResponsesJsonCompletion = async ({
   openai,
   model,
@@ -462,7 +459,7 @@ const createResponsesJsonCompletion = async ({
     };
   }
 
-  if (reasoningEffort && modelSupportsResponsesReasoningEffort(model)) {
+  if (reasoningEffort) {
     payload.reasoning = {
       effort: reasoningEffort,
     };

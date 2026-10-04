@@ -32,6 +32,20 @@ const AI_MODELS = {
 
   // Highest-stakes single-shot generation where quality outweighs cost.
   DEEP: "gpt-5.6-sol",
+
+  // Reading the rendered plan pages. Only the per-page vision pass uses this.
+  // gpt-6.1-sol leads 5.6-sol on every Roboflow Vision Evals task this pass
+  // depends on, by more than the error bars: counting 78.8% vs 74.3%, data
+  // extraction 88.0% vs 84.9%, object detection 80.8% vs 68.4%.
+  //
+  // It is deliberately NOT used for generateScopes. It emits output ~2.1x
+  // slower (~47 vs ~101 tokens/sec), which pushed the takeoff chunks and merge
+  // past the OpenAI SDK's 600s per-request timeout and failed the step three
+  // runs straight. Its advantage is measured on vision tasks; on the takeoff's
+  // arithmetic it publishes no mathematics score at all, while 5.6-sol scores
+  // 96.8%. Not in OpenAI's public model list — ID confirmed by the account
+  // owner; fall back to gpt-5.6-sol if it stops resolving.
+  VISION: "gpt-6.1-sol",
 };
 
 module.exports = { AI_MODELS };

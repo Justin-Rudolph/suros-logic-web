@@ -30,10 +30,13 @@ test("every page is rendered and read, so the sampling path is gone", () => {
   assert.doesNotMatch(source, /choosePdfAnalysisMode/);
 });
 
-test("page vision runs 8 at a time", () => {
-  // Raising this further risks running 2GiB out of memory: each page renders up to
-  // 18 megapixels and is held again as PNG and base64.
-  assert.equal(VISUAL_PAGE_CONCURRENCY, 8);
+test("page vision runs 12 at a time", () => {
+  // Each page renders up to 18 megapixels and is held again as PNG and base64,
+  // so roughly 100-150MB is in flight per page. 12 fits the 4GiB that
+  // runPlanPipelineStep requests in index.js; raising either of these two
+  // numbers without the other risks an OOM, which kills the step without
+  // marking the project failed.
+  assert.equal(VISUAL_PAGE_CONCURRENCY, 12);
 });
 
 test("weak extraction asks vision to transcribe, strong extraction asks it to fill gaps", () => {

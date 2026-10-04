@@ -526,7 +526,7 @@ ${tradeShapeExample}
         usage,
       };
     },
-    { label: "generateScopes", concurrency: 4 }
+    { label: "generateScopes", concurrency: 8 }
   );
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
