@@ -4,6 +4,7 @@ const { setTimeout: delay } = require("node:timers/promises");
 
 const {
   buildScopeContext,
+  createJsonCompletion,
   createResponsesJsonCompletion,
   createPlanContextChunks,
   formatUsageMetrics,
@@ -102,14 +103,15 @@ test("createResponsesJsonCompletion maps structured output and responses token u
     responses: {
       create: async (payload) => {
         createPayload = payload;
-        return {
-          output_text: JSON.stringify({ value: "visual fallback" }),
-          usage: {
-            input_tokens: 12,
-            output_tokens: 4,
-            total_tokens: 16,
-          },
-        };
+        const text = JSON.stringify({ value: "visual fallback" });
+        return (async function* () {
+          yield { type: "response.output_text.delta", delta: text.slice(0, 9) };
+          yield { type: "response.output_text.delta", delta: text.slice(9) };
+          yield {
+            type: "response.completed",
+            response: { usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 } },
+          };
+        })();
       },
     },
   };
@@ -145,6 +147,7 @@ test("createResponsesJsonCompletion maps structured output and responses token u
   assert.deepEqual(result.parsed, { value: "visual fallback" });
   assert.equal(createPayload.text.format.name, "test_schema");
   assert.deepEqual(createPayload.reasoning, { effort: "low" });
+  assert.equal(createPayload.stream, true);
   assert.equal(formatUsageMetrics(result.usage), "input 12 | output 4 | total 16");
 });
 
@@ -244,4 +247,155 @@ test("page entries never take generated section headers as the title", () => {
 
   assert.equal(entry.detectedSheetNumber, "S-101");
   assert.equal(entry.detectedTitle, "FOUNDATION PLAN");
+});
+
+/* ------------------------------------------------------------------
+   Streaming, so undici's 300s headersTimeout never applies, plus the
+   diagnostics that tell a truncated answer apart from a malformed one.
+   ------------------------------------------------------------------ */
+
+const streamingChatOpenai = (chunks) => {
+  const captured = {};
+  return {
+    captured,
+    openai: {
+      chat: {
+        completions: {
+          create: async (payload) => {
+            captured.payload = payload;
+            return (async function* () {
+              for (const chunk of chunks) yield chunk;
+            })();
+          },
+        },
+      },
+    },
+  };
+};
+
+test("createJsonCompletion streams, reassembles the JSON, and keeps the usage totals", async () => {
+  const { openai, captured } = streamingChatOpenai([
+    { choices: [{ delta: { content: '{"trade":' } }] },
+    { choices: [{ delta: { content: '"framing"}' } }] },
+    { choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } },
+  ]);
+
+  const result = await createJsonCompletion({
+    openai,
+    model: "gpt-5.6-sol",
+    systemPrompt: "Return JSON.",
+    userContent: "Summarize.",
+  });
+
+  assert.deepEqual(result.parsed, { trade: "framing" });
+  assert.equal(captured.payload.stream, true);
+  assert.deepEqual(captured.payload.stream_options, { include_usage: true });
+  // Every "Token totals" log line in the pipeline reads this, so a dropped
+  // usage chunk would silently blank the cost record.
+  assert.equal(formatUsageMetrics(result.usage), "input 100 | output 20 | total 120");
+});
+
+test("a truncated answer is reported as the token cap, with the token split", async () => {
+  // Project WjUaLpIFLNuMDQF3s7pQ hit this and surfaced as "Invalid JSON" with
+  // the whole 46KB partial takeoff inlined across ~870 log lines.
+  const { openai } = streamingChatOpenai([
+    { choices: [{ delta: { content: '{"framing":[{"searchQuery":"' } }] },
+    { choices: [{ delta: {}, finish_reason: "length" }] },
+    {
+      choices: [],
+      usage: {
+        prompt_tokens: 82000,
+        completion_tokens: 41800,
+        completion_tokens_details: { reasoning_tokens: 30100 },
+      },
+    },
+  ]);
+
+  await assert.rejects(
+    () => createJsonCompletion({ openai, model: "gpt-5.6-sol", systemPrompt: "s", userContent: "u" }),
+    (error) => {
+      assert.match(error.message, /token cap/);
+      assert.match(error.message, /82,000 in \/ 41,800 out \(of which 30,100 reasoning\)/);
+      assert.doesNotMatch(error.message, /searchQuery/);
+      return true;
+    }
+  );
+});
+
+test("the token cap error degrades when no usage chunk arrives", async () => {
+  const { openai } = streamingChatOpenai([
+    { choices: [{ delta: { content: "{" } }] },
+    { choices: [{ delta: {}, finish_reason: "length" }] },
+  ]);
+
+  await assert.rejects(
+    () => createJsonCompletion({ openai, model: "gpt-5.6-sol", systemPrompt: "s", userContent: "u" }),
+    /token counts unavailable/
+  );
+});
+
+test("a malformed answer keeps its error short instead of inlining the payload", async () => {
+  const { openai } = streamingChatOpenai([
+    { choices: [{ delta: { content: `{"a":"${"x".repeat(5000)}` } }] },
+  ]);
+
+  await assert.rejects(
+    () => createJsonCompletion({ openai, model: "gpt-5.6-sol", systemPrompt: "s", userContent: "u" }),
+    (error) => {
+      assert.match(error.message, /5006 characters total/);
+      assert.ok(error.message.length < 1200, `error was ${error.message.length} chars`);
+      return true;
+    }
+  );
+});
+
+test("createResponsesJsonCompletion surfaces a failed response instead of an empty parse error", async () => {
+  const openai = {
+    responses: {
+      create: async () =>
+        (async function* () {
+          yield { type: "response.failed", response: { error: { message: "model overloaded" } } };
+        })(),
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      createResponsesJsonCompletion({
+        openai,
+        model: "gpt-6.1-sol",
+        systemPrompt: "s",
+        userContent: [{ type: "input_text", text: "u" }],
+      }),
+    /model overloaded/
+  );
+});
+
+test("createResponsesJsonCompletion reports an incomplete vision response with its reason", async () => {
+  const openai = {
+    responses: {
+      create: async () =>
+        (async function* () {
+          yield { type: "response.output_text.delta", delta: '{"page":' };
+          yield {
+            type: "response.incomplete",
+            response: {
+              incomplete_details: { reason: "max_output_tokens" },
+              usage: { input_tokens: 15306, output_tokens: 9000 },
+            },
+          };
+        })(),
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      createResponsesJsonCompletion({
+        openai,
+        model: "gpt-6.1-sol",
+        systemPrompt: "s",
+        userContent: [{ type: "input_text", text: "u" }],
+      }),
+    /stopped early \(max_output_tokens\).*15,306 in \/ 9,000 out/s
+  );
 });

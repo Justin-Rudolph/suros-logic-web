@@ -11,11 +11,13 @@ const {
   selectValidTrades,
 } = require("../routes/lib/tradeScopes");
 const { buildEstimatorSystemPrompt } = require("../routes/lib/estimatorPrompt");
+const { createPlanContextChunks } = require("../routes/lib/planAnalyzerContext");
 const generateScopesHandler = require("../routes/generateScopes");
 const {
   CONFIDENCE_LEVELS,
   MATERIAL_UNITS,
   QUANTITY_BASES,
+  MAX_PROJECT_CONTEXT_LENGTH,
   SCOPE_MATERIAL_RULES,
   getScopeResponseFormat,
   getTradeScopeTemplate,
@@ -736,4 +738,49 @@ test("the scope prompts forbid repeating a task across trades", () => {
   assert.match(source, /For example, if Demo covers removing a wall/);
   assert.match(source, /trade most responsible for doing that work/);
   assert.match(source, /keep the one under the most responsible trade, fold any extra detail into it, and drop the other/);
+});
+
+/* ------------------------------------------------------------------
+   Single-pass takeoff: a plan set that fits in one context chunk is
+   scoped in one call, with no aggregation pass to reconcile.
+   ------------------------------------------------------------------ */
+
+test("a 12-page plan set fits in a single scope chunk", () => {
+  // Mirrors the measured test file: 12 pages, ~65k chars of extracted text,
+  // plus per-page visual analysis, which is the bulk of the context.
+  const files = Array.from({ length: 12 }, (_, index) => ({
+    id: `page-${index + 1}`,
+    fileName: `Plan.pdf (Page ${index + 1})`,
+    sourcePageNumber: index + 1,
+    detectedSheetNumber: `A${index + 1}`,
+    rawText: `Sheet A${index + 1} framing and finish notes. `.repeat(400),
+  }));
+
+  const chunks = createPlanContextChunks(files, MAX_PROJECT_CONTEXT_LENGTH);
+
+  assert.equal(chunks.length, 1, "a normal plan set should no longer be split");
+});
+
+test("an oversized plan set still splits, keeping the aggregation path alive", () => {
+  const files = Array.from({ length: 12 }, (_, index) => ({
+    id: `page-${index + 1}`,
+    fileName: `Plan.pdf (Page ${index + 1})`,
+    sourcePageNumber: index + 1,
+    detectedSheetNumber: `A${index + 1}`,
+    rawText: `Sheet A${index + 1} notes. `.repeat(6000),
+  }));
+
+  const chunks = createPlanContextChunks(files, MAX_PROJECT_CONTEXT_LENGTH);
+
+  assert.ok(chunks.length > 1, "a set past the limit must still chunk");
+});
+
+test("the single-chunk pass carries the cross-sheet material aggregation rules", () => {
+  const source = readFileSync(path.join(__dirname, "..", "routes", "generateScopes.js"), "utf8");
+
+  // With one chunk there is no aggregation call, so the chunk prompt itself has
+  // to do the cross-sheet combining and the final every-material-has-a-quantity
+  // sweep that SCOPE_MATERIAL_AGGREGATION_RULES asks for.
+  assert.match(source, /isSingleChunk \? SCOPE_MATERIAL_AGGREGATION_RULES : ""/);
+  assert.match(source, /if \(isSingleChunk\)/);
 });

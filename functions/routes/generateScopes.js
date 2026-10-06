@@ -65,7 +65,15 @@ Trade boundary reminder:
 `;
 
 const ALLOWED_CLASSIFICATIONS = new Set(["confirmed", "inferred", "unknown"]);
-const MAX_PROJECT_CONTEXT_LENGTH = 75000;
+/**
+ * A 12-page set is ~240k chars of plan text plus per-page visual analysis, which
+ * at 75k used to split into three chunks and need an aggregation pass to stitch
+ * back together. One call at this limit is ~81k input tokens against a ~1M
+ * context window, so a normal set is now scoped in a single pass: nothing to
+ * deduplicate, and every sheet visible at once when quantities are derived.
+ * Sets past this still chunk and still run the aggregation pass.
+ */
+const MAX_PROJECT_CONTEXT_LENGTH = 400000;
 const MAX_MATERIAL_SEARCH_QUERY_LENGTH = 100;
 
 // Allowed material units, in order.
@@ -479,6 +487,12 @@ const generateTradeScopesFromPlans = async (
     throw new Error("No extracted plan text is available for this project");
   }
 
+  // With one chunk this pass IS the whole plan set, so it inherits the
+  // aggregation pass's cross-sheet duties: combining counts from sheets that do
+  // not overlap, and the closing sweep that recalculates weak quantities from
+  // evidence on every sheet.
+  const isSingleChunk = contextChunks.length === 1;
+
   const openai = new OpenAI({ apiKey: openAiApiKey });
   const takeoffEvidence = buildTakeoffEvidence(files);
   const chunkUsages = [];
@@ -488,7 +502,7 @@ const generateTradeScopesFromPlans = async (
       const { parsed, usage } = await createJsonCompletion({
         openai,
         model: AI_MODELS.DEEP,
-        reasoningEffort: "medium",
+        reasoningEffort: "high",
         responseFormat: getScopeResponseFormat(trades),
         systemPrompt: buildEstimatorSystemPrompt(`
 Review one chunk of construction plan context and generate trade scopes. The context may include
@@ -510,7 +524,7 @@ ${unassignedWorkRules}
   confirmed = directly supported by extracted text or a visual page summary.
   inferred = reasonable scope implication, but not directly stated.
   unknown = scope appears possible but is not sufficiently supported.
-${SCOPE_MATERIAL_RULES}
+${SCOPE_MATERIAL_RULES}${isSingleChunk ? SCOPE_MATERIAL_AGGREGATION_RULES : ""}
 - Each item must be:
   ${SCOPE_ITEM_SHAPE_EXAMPLE}
 
@@ -528,6 +542,11 @@ ${tradeShapeExample}
     },
     { label: "generateScopes", concurrency: 8 }
   );
+
+  if (isSingleChunk) {
+    logUsageTotals("generateScopes", [{ title: "single pass", usage: sumUsage(chunkUsages) }]);
+    return chunkScopes[0];
+  }
 
   const { parsed: aggregated, usage: aggregationUsage } = await createJsonCompletion({
     openai,
@@ -727,3 +746,4 @@ module.exports.CONFIDENCE_LEVELS = CONFIDENCE_LEVELS;
 module.exports.SCOPE_MATERIAL_RULES = SCOPE_MATERIAL_RULES;
 module.exports.SCOPE_MATERIAL_AGGREGATION_RULES = SCOPE_MATERIAL_AGGREGATION_RULES;
 module.exports.sanitizeScopeMaterials = sanitizeScopeMaterials;
+module.exports.MAX_PROJECT_CONTEXT_LENGTH = MAX_PROJECT_CONTEXT_LENGTH;

@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "suros-logic",
+    "default": "suros-logic-dev",
     "prod": "suros-logic",
     "dev": "suros-logic-dev"
   }

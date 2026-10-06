@@ -363,6 +363,44 @@ const serializeChunkResults = (chunks, results, label = "CHUNK") =>
     )
     .join(DEFAULT_SECTION_SEPARATOR);
 
+/**
+ * Both helpers below stream. Without streaming, OpenAI sends no response headers
+ * until the whole completion is generated, and Node's fetch aborts a request
+ * whose headers take longer than undici's 300s headersTimeout. That is what
+ * failed the takeoff step at ~906s: three attempts of ~300s each, the SDK's own
+ * 600s timeout never reached. Streaming delivers headers immediately, the SDK
+ * clears its timeout once fetch resolves, and undici's bodyTimeout only measures
+ * inactivity, which a steady token stream keeps resetting. The pipeline step's
+ * own budget becomes the only cap.
+ */
+
+/** Reasoning tokens come out of the same output budget as the visible answer, so
+ *  this split says whether lowering reasoning effort would free up room. */
+const describeTokenSpend = (usage) => {
+  const input = usage?.prompt_tokens ?? usage?.input_tokens;
+  const output = usage?.completion_tokens ?? usage?.output_tokens;
+
+  if (!Number.isFinite(input) && !Number.isFinite(output)) {
+    return "token counts unavailable";
+  }
+
+  const n = (value) => (Number.isFinite(value) ? value.toLocaleString("en-US") : "unknown");
+  const reasoning =
+    usage?.completion_tokens_details?.reasoning_tokens ?? usage?.output_tokens_details?.reasoning_tokens;
+
+  return `${n(input)} in / ${n(output)} out${
+    Number.isFinite(reasoning) ? ` (of which ${n(reasoning)} reasoning)` : ""
+  }`;
+};
+
+/** A truncated takeoff runs to tens of thousands of characters. Inlining one
+ *  whole buried a single real cause across ~870 emulator log lines. */
+const describePartialContent = (content) => {
+  const text = String(content || "");
+  if (!text) return "empty response";
+  return text.length > 400 ? `${text.slice(0, 400)}... (${text.length} characters total)` : text;
+};
+
 const createJsonCompletion = async ({
   openai,
   model,
@@ -390,16 +428,45 @@ const createJsonCompletion = async ({
     payload.response_format = responseFormat;
   }
 
-  const completion = await openai.chat.completions.create(payload);
-  const content = completion.choices[0]?.message?.content;
+  payload.stream = true;
+  payload.stream_options = { include_usage: true };
+
+  const stream = await openai.chat.completions.create(payload);
+  let content = "";
+  let usage = null;
+  let finishReason = null;
+
+  for await (const chunk of stream) {
+    const choice = chunk?.choices?.[0];
+    content += choice?.delta?.content || "";
+    if (choice?.finish_reason) finishReason = choice.finish_reason;
+    // Arrives on a final chunk that carries no choices.
+    if (chunk?.usage) usage = chunk.usage;
+  }
+
+  // The model stopped because it ran out of room, not because the JSON was bad.
+  // Saying which is the difference between a one-line cause and a 46KB mystery.
+  if (finishReason === "length") {
+    throw new Error(
+      `AI analysis hit the model's output token cap after ${content.length.toLocaleString(
+        "en-US"
+      )} characters, so its JSON is incomplete. Tokens: ${describeTokenSpend(
+        usage
+      )}. Reduce how much this pass has to emit, lower the reasoning effort to free output budget, or set max_completion_tokens to fail fast.`
+    );
+  }
+
+  if (finishReason === "content_filter") {
+    throw new Error("AI analysis was stopped by the content filter, so its JSON is incomplete.");
+  }
 
   try {
     return {
       parsed: JSON.parse(content),
-      usage: completion.usage || null,
+      usage: usage || null,
     };
   } catch (error) {
-    throw new Error(`Invalid JSON returned from AI analysis: ${content || "empty response"}`);
+    throw new Error(`Invalid JSON returned from AI analysis: ${describePartialContent(content)}`);
   }
 };
 
@@ -465,16 +532,58 @@ const createResponsesJsonCompletion = async ({
     };
   }
 
-  const response = await openai.responses.create(payload);
-  const content = getResponseOutputText(response);
+  payload.stream = true;
+
+  const stream = await openai.responses.create(payload);
+  let streamed = "";
+  let completed = null;
+  let incompleteReason = null;
+
+  for await (const event of stream) {
+    if (event?.type === "response.output_text.delta") {
+      streamed += event.delta || "";
+      continue;
+    }
+
+    if (event?.type === "response.completed") {
+      completed = event.response || null;
+      continue;
+    }
+
+    if (event?.type === "response.incomplete") {
+      completed = event.response || completed;
+      incompleteReason = event.response?.incomplete_details?.reason || "incomplete";
+      continue;
+    }
+
+    // A server-side failure carries a real reason. Without this it would fall
+    // through as an empty-response JSON parse error and hide why it failed.
+    if (event?.type === "response.failed" || event?.type === "error") {
+      const detail =
+        event.response?.error?.message || event.error?.message || event.message || "unknown error";
+      throw new Error(`Vision analysis stream failed: ${detail}`);
+    }
+  }
+
+  const content = streamed || getResponseOutputText(completed);
+
+  // The Responses API reports running out of room as an incomplete response
+  // rather than a finish reason.
+  if (incompleteReason) {
+    throw new Error(
+      `Vision analysis stopped early (${incompleteReason}) after ${content.length.toLocaleString(
+        "en-US"
+      )} characters, so its JSON is incomplete. Tokens: ${describeTokenSpend(completed?.usage)}.`
+    );
+  }
 
   try {
     return {
       parsed: JSON.parse(content),
-      usage: response.usage || null,
+      usage: completed?.usage || null,
     };
   } catch (error) {
-    throw new Error(`Invalid JSON returned from AI analysis: ${content || "empty response"}`);
+    throw new Error(`Invalid JSON returned from AI analysis: ${describePartialContent(content)}`);
   }
 };
 

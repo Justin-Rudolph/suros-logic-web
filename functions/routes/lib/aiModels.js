@@ -38,13 +38,27 @@ const AI_MODELS = {
   // depends on, by more than the error bars: counting 78.8% vs 74.3%, data
   // extraction 88.0% vs 84.9%, object detection 80.8% vs 68.4%.
   //
-  // It is deliberately NOT used for generateScopes. It emits output ~2.1x
-  // slower (~47 vs ~101 tokens/sec), which pushed the takeoff chunks and merge
-  // past the OpenAI SDK's 600s per-request timeout and failed the step three
-  // runs straight. Its advantage is measured on vision tasks; on the takeoff's
-  // arithmetic it publishes no mathematics score at all, while 5.6-sol scores
-  // 96.8%. Not in OpenAI's public model list — ID confirmed by the account
-  // owner; fall back to gpt-5.6-sol if it stops resolving.
+  // It is deliberately NOT used for generateScopes. That was tried, and the
+  // takeoff got measurably worse: across two completed runs on the same 12-page
+  // file it grounded only 14.4% and 19.4% of its quantities in the plans,
+  // against 48.7-66.1% for gpt-5.6-sol, with 86% and 81% of materials falling
+  // back to an "inferred" standard allowance. It also produced LONGER material
+  // lists (209 and 232 entries vs 114-165), so the regression reads as
+  // thoroughness unless you check quantityBasis. Those two ranges do not
+  // overlap, which no other model comparison here managed.
+  //
+  // Its advantage is measured on vision tasks. On the takeoff's arithmetic it
+  // publishes no mathematics score at all, while gpt-5.6-sol scores 96.8%.
+  //
+  // It is also slower to emit and ran close to the model's output token cap on
+  // the takeoff: 29,170 then 33,528 output tokens on runs that finished, and one
+  // run truncated mid-JSON after exceeding it. (The ~906s failures that preceded
+  // this were undici's 300s fetch headersTimeout firing three times over, NOT
+  // the SDK's 600s timeout, which streaming in planAnalyzerContext.js now avoids
+  // entirely.)
+  //
+  // Not in OpenAI's public model list — ID confirmed by the account owner; fall
+  // back to gpt-5.6-sol if it stops resolving.
   VISION: "gpt-6.1-sol",
 };
 
